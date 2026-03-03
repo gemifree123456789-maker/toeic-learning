@@ -10,6 +10,10 @@ export function setOnFinish(fn) { _onFinish = fn; }
 
 const srsState = { active: false, words: [], allWords: [], questions: [], currentQ: 0, results: {}, answered: false };
 
+function toLowerWord(word) {
+    return String(word || '').trim().toLowerCase();
+}
+
 function getDistractors(correctWord, allWords, field) {
     return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2).map(w => w[field]);
 }
@@ -58,29 +62,31 @@ function renderSrsQuestion() {
     srsState.answered = false;
     qArea.innerHTML = ''; oArea.innerHTML = '';
 
-    const safeEn = word.en.replace(/'/g, "\\'");
+    const enLower = toLowerWord(word.en);
+    const safeEn = enLower.replace(/'/g, "\\'");
 
     if (q.type === 'en2zh') {
-        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${word.en} <button class="mini-speaker" onclick="speakText('${safeEn}')">${ICONS.speaker}</button></div>`;
-        setTimeout(() => speakText(word.en), 300);
+        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${enLower} <button class="mini-speaker" onclick="speakText('${safeEn}')">${ICONS.speaker}</button></div>`;
+        setTimeout(() => speakText(enLower), 300);
         const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
         opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
     } else if (q.type === 'zh2en') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintZhToEn')}</div><div class="srs-question-word">${word.zh}</div>`;
-        const opts = shuffleArray([word.en, ...getDistractors(word, srsState.allWords, 'en')]);
-        opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.en, q.type); oArea.appendChild(b); });
+        const correctEn = toLowerWord(word.en);
+        const opts = shuffleArray([correctEn, ...getDistractors(word, srsState.allWords, 'en').map(toLowerWord)]);
+        opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, correctEn, q.type); oArea.appendChild(b); });
     } else if (q.type === 'listen') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToZh')}</div><button class="srs-listen-btn" id="srsListenBtn">${ICONS.speaker}</button><div class="srs-reveal-word hidden" id="srsRevealWord"></div>`;
-        document.getElementById('srsListenBtn').onclick = () => speakText(word.en);
-        setTimeout(() => speakText(word.en), 300);
+        document.getElementById('srsListenBtn').onclick = () => speakText(enLower);
+        setTimeout(() => speakText(enLower), 300);
         const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
         opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
     } else if (q.type === 'listen3') {
         const distractorWords = shuffleArray(srsState.allWords.filter(w => w.id !== word.id)).slice(0, 2);
         const choices = shuffleArray([
-            { en: word.en, isCorrect: true },
-            { en: distractorWords[0]?.en || 'example', isCorrect: false },
-            { en: distractorWords[1]?.en || 'sample', isCorrect: false }
+            { en: toLowerWord(word.en), isCorrect: true },
+            { en: toLowerWord(distractorWords[0]?.en || 'example'), isCorrect: false },
+            { en: toLowerWord(distractorWords[1]?.en || 'sample'), isCorrect: false }
         ]);
         const labels = ['A', 'B', 'C'];
         const correctLabel = labels[choices.findIndex(c => c.isCorrect)];
@@ -125,11 +131,11 @@ function handleSrsAnswer(btnEl, selected, correct, type) {
 
     const revealEl = document.getElementById('srsRevealWord');
     if ((type === 'listen' || type === 'listen3') && revealEl) {
-        revealEl.textContent = word.en;
+        revealEl.textContent = toLowerWord(word.en);
         revealEl.classList.remove('hidden');
     }
 
-    speakText(word.en);
+    speakText(toLowerWord(word.en));
     const delay = isCorrect ? 1200 : 2000;
     setTimeout(() => { srsState.currentQ++; if (srsState.currentQ >= srsState.questions.length) showSrsResults(); else renderSrsQuestion(); }, delay);
 }
@@ -174,7 +180,7 @@ async function showSrsResults() {
 
         const wordEl = document.createElement('div');
         wordEl.className = 'srs-result-word';
-        wordEl.textContent = wr.word.en;
+        wordEl.textContent = toLowerWord(wr.word.en);
 
         const posText = wr.word.pos?.trim();
         const posEl = document.createElement('span');
@@ -190,7 +196,7 @@ async function showSrsResults() {
         speakBtn.type = 'button';
         speakBtn.className = 'mini-speaker srs-result-speaker';
         speakBtn.innerHTML = ICONS.speaker;
-        speakBtn.dataset.speak = wr.word.en;
+        speakBtn.dataset.speak = toLowerWord(wr.word.en);
 
         const meta = document.createElement('small');
         meta.className = 'srs-result-meta';

@@ -47,12 +47,14 @@ header {
 
 h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--primary); }
 
-.settings-btn {
+.settings-btn,
+.announcement-btn {
     background: none; border: none; font-size: 22px; cursor: pointer;
     color: var(--text-sub); display: flex; align-items: center; justify-content: center;
     width: 36px; height: 36px; border-radius: 50%; transition: background 0.2s;
 }
-.settings-btn:active { background: rgba(0,0,0,0.05); }
+.settings-btn:active,
+.announcement-btn:active { background: rgba(0,0,0,0.05); }
 
 .tab-bar {
     position: fixed; bottom: 0; left: 0; width: 100%;
@@ -79,6 +81,15 @@ h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--primary); }
 .modal-card {
     background: var(--card-bg); width: 90%; max-width: 350px; padding: 24px;
     border-radius: var(--radius); box-shadow: var(--shadow); text-align: center;
+}
+.announcement-modal-card {
+    text-align: left;
+}
+.announcement-message {
+    margin: 10px 0 18px;
+    color: var(--text-main);
+    line-height: 1.6;
+    white-space: pre-line;
 }
 #keyModal .settings-section {
     text-align: left;
@@ -608,6 +619,7 @@ h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--primary); }
     margin-top: 8px;
     color: var(--text-sub);
     font-size: 14px;
+    font-style: italic;
     line-height: 1.45;
 }
 .vocab-lookup-empty {

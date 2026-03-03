@@ -140,9 +140,10 @@ function renderLookupMessage(message) {
 }
 
 export function buildSavedWordPayload(word, vocabItem = {}) {
+    const normalizedEn = normalizeWordId(vocabItem.word || word);
     return {
         id: normalizeWordId(vocabItem.word || word),
-        en: String(vocabItem.word || word || '').trim(),
+        en: normalizedEn,
         zh: vocabItem.def || '',
         pos: vocabItem.pos || '',
         ipa: vocabItem.ipa || '',
@@ -247,7 +248,7 @@ function renderLookupResultCard() {
             ${item.ipa ? `<span class="vocab-ipa">${item.ipa}</span>` : ''}
         </div>
         <div class="saved-word-zh">${item.def || ''}</div>
-        ${item.ex ? `<div class="vocab-lookup-ex">"${item.ex}" <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
+        ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
         <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
     `;
@@ -367,10 +368,11 @@ export async function renderVocabTab() {
         const card = document.createElement('div'); card.className = 'saved-word-card';
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
-        card.innerHTML = `<div class="saved-word-info"><div class="saved-word-top"><span class="saved-word-en">${w.en}</span>${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}<span class="srs-badge srs-badge-${w.level}">Lv.${w.level}</span></div><div class="saved-word-zh">${w.zh}</div><div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div></div><div class="saved-word-actions"><button class="saved-word-speak">${ICONS.speaker}</button><button class="saved-word-delete">${ICONS.close}</button></div>`;
-        card.querySelector('.saved-word-speak').onclick = () => speakText(w.en);
+        const displayEn = normalizeWordId(w.en);
+        card.innerHTML = `<div class="saved-word-info"><div class="saved-word-top"><span class="saved-word-en">${displayEn}</span>${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}<span class="srs-badge srs-badge-${w.level}">Lv.${w.level}</span></div><div class="saved-word-zh">${w.zh}</div><div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div></div><div class="saved-word-actions"><button class="saved-word-speak">${ICONS.speaker}</button><button class="saved-word-delete">${ICONS.close}</button></div>`;
+        card.querySelector('.saved-word-speak').onclick = () => speakText(displayEn);
         card.querySelector('.saved-word-delete').onclick = async () => {
-            if (confirm(t('vocabDeleteConfirm', { word: w.en }))) {
+            if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) {
                 await removeWordFromNotebook(w.id);
                 renderVocabTab();
             }

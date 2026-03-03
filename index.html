@@ -28,6 +28,7 @@
     <header>
         <h1 data-i18n="appTitle">TOEIC AI Tutor</h1>
         <div class="header-right">
+            <button class="announcement-btn" id="btnAnnouncement" aria-label="Announcement"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l12-8v18L3 13v-2Z"/><path d="M7 14v3a2 2 0 0 0 2 2h1"/><path d="M19 9a4 4 0 0 1 0 6"/></svg></button>
             <button class="settings-btn" id="btnSettings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
         </div>
     </header>
@@ -327,6 +328,14 @@
                 <button class="generate-btn settings-action-btn" id="btnSaveApiKey" data-i18n="settingsSave">儲存</button>
                 <button class="wm-btn secondary settings-action-btn" id="btnCloseKeyModal" style="display: none;" data-i18n="settingsClose">關閉</button>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="announcementModal">
+        <div class="modal-card announcement-modal-card">
+            <h3 id="announcementTitle">公告</h3>
+            <p id="announcementMessage" class="announcement-message">載入中...</p>
+            <button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button>
         </div>
     </div>
 

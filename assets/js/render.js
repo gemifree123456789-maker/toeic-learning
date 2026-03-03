@@ -101,7 +101,7 @@ export function renderContent(data, voiceName) {
                 <div><span class="vocab-pos">${v.pos}</span><span class="vocab-ipa">${v.ipa}</span><button class="vocab-save-btn">${ICONS.bookmark}</button></div>
             </div>
             <div class="vocab-def">${v.def}</div>
-            <div class="vocab-ex">"${v.ex}"<button class="mini-speaker" onclick="speakText('${safeEx}')">${ICONS.speaker}</button></div>
+            <div class="vocab-ex">${v.ex}<button class="mini-speaker" onclick="speakText('${safeEx}')">${ICONS.speaker}</button></div>
             ${v.ex_zh ? `<div class="vocab-ex-zh">${v.ex_zh}</div>` : ''}`;
         const saveBtn = card.querySelector('.vocab-save-btn');
         DB.getSavedWord(v.word.toLowerCase()).then(existing => {
@@ -129,7 +129,7 @@ export function renderContent(data, voiceName) {
         data.phrases.forEach(p => {
             const safePhrase = (p.phrase || '').replace(/'/g, "\\'");
             const safeEx = (p.example || '').replace(/'/g, "\\'");
-            phraseContainer.innerHTML += `<div class="phrase-card"><div class="phrase-header">${p.phrase}<button class="mini-speaker" onclick="speakText('${safePhrase}')" style="margin-left:6px;">${ICONS.speaker}</button></div><div class="phrase-meaning">${p.meaning}</div><div class="phrase-explanation">${p.explanation}</div><div class="phrase-example">"${p.example}"<button class="mini-speaker" onclick="speakText('${safeEx}')" style="margin-left:4px;">${ICONS.speaker}</button></div>${p.example_zh ? `<div class="phrase-example-zh">${p.example_zh}</div>` : ''}</div>`;
+            phraseContainer.innerHTML += `<div class="phrase-card"><div class="phrase-header">${p.phrase}<button class="mini-speaker" onclick="speakText('${safePhrase}')" style="margin-left:6px;">${ICONS.speaker}</button></div><div class="phrase-meaning">${p.meaning}</div><div class="phrase-explanation">${p.explanation}</div><div class="phrase-example">${p.example}<button class="mini-speaker" onclick="speakText('${safeEx}')" style="margin-left:4px;">${ICONS.speaker}</button></div>${p.example_zh ? `<div class="phrase-example-zh">${p.example_zh}</div>` : ''}</div>`;
         });
     } else if (data.grammar && data.grammar.length > 0) {
         phraseTitle.textContent = t('sectionGrammar');
