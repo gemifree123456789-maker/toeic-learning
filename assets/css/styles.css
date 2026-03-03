@@ -545,6 +545,77 @@ h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--primary); }
 .vocab-tab-header { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .vocab-tab-header .section-title { margin: 0; }
 .vocab-tab-count { color: var(--text-sub); font-size: 13px; }
+.vocab-subtab-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+.vocab-subtab-btn {
+    border: 1.5px solid #e0e0e0;
+    background: white;
+    color: var(--text-sub);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.vocab-subtab-btn.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    color: var(--primary);
+}
+.vocab-subtab-btn:active { transform: scale(0.98); }
+.vocab-lookup-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+.vocab-lookup-input {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+.vocab-lookup-btn {
+    width: auto;
+    margin: 0;
+    padding: 0 14px;
+    min-height: 44px;
+}
+.vocab-lookup-hint {
+    margin: 10px 2px 14px;
+    color: var(--text-sub);
+    font-size: 12px;
+}
+.vocab-lookup-result-card {
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    padding: 14px 16px;
+}
+.vocab-lookup-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 8px;
+}
+.vocab-lookup-ex {
+    margin-top: 8px;
+    color: var(--text-sub);
+    font-size: 14px;
+    line-height: 1.45;
+}
+.vocab-lookup-empty {
+    text-align: center;
+    color: var(--text-sub);
+    padding: 30px 0;
+    font-size: 14px;
+}
 .review-entry-card {
     background: var(--primary); color: white; padding: 20px; border-radius: var(--radius);
     text-align: center; cursor: pointer; transition: transform 0.1s; margin: 15px 0; border: none; width: 100%;

@@ -1,9 +1,9 @@
 // Article rendering, translation/English toggle, vocab cards, phrase cards.
 
-import { state, ICONS, VOICE_OPTIONS, getNextReviewTime } from './state.js';
+import { state, ICONS, VOICE_OPTIONS } from './state.js';
 import { DB } from './db.js';
 import { speakText } from './utils.js';
-import { addLongPressListener, syncVocabCardBookmark } from './vocab.js';
+import { addLongPressListener, toggleWordSaved } from './vocab.js';
 import { audioEl, playBtn, ensureAudioReady } from './audioPlayer.js';
 import { t } from './i18n.js';
 
@@ -108,14 +108,13 @@ export function renderContent(data, voiceName) {
             if (existing) { saveBtn.innerHTML = ICONS.bookmarkFill; saveBtn.classList.add('saved'); }
         });
         saveBtn.onclick = async () => {
-            if (saveBtn.classList.contains('saved')) {
-                await DB.deleteSavedWord(v.word.toLowerCase());
-                saveBtn.innerHTML = ICONS.bookmark;
-                saveBtn.classList.remove('saved');
-            } else {
-                await DB.addSavedWord({ id: v.word.toLowerCase(), en: v.word, zh: v.def, pos: v.pos, ipa: v.ipa, ex: v.ex || '', ex_zh: v.ex_zh || '', createdAt: Date.now(), nextReview: getNextReviewTime(0), level: 0 });
+            const saved = await toggleWordSaved(v.word, v);
+            if (saved) {
                 saveBtn.innerHTML = ICONS.bookmarkFill;
                 saveBtn.classList.add('saved');
+            } else {
+                saveBtn.innerHTML = ICONS.bookmark;
+                saveBtn.classList.remove('saved');
             }
         };
         vocabContainer.appendChild(card);

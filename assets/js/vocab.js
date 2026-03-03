@@ -7,8 +7,15 @@ import { speakText } from './utils.js';
 import { t } from './i18n.js';
 
 let _startSrsReview = null;
+let _vocabSubtab = 'notebook';
+let _lookupResult = null;
 
 export function setSrsTrigger(fn) { _startSrsReview = fn; }
+export function setVocabSubtab(tab) {
+    _vocabSubtab = tab === 'lookup' ? 'lookup' : 'notebook';
+    renderVocabSubtab();
+    if (_vocabSubtab === 'lookup') renderLookupResultCard();
+}
 
 /* Long Press */
 export function addLongPressListener(element, wordText) {
@@ -49,7 +56,7 @@ function showWordModal(word) {
             vocabItem = await DB.getWord(word);
         }
         if (!vocabItem) {
-            const saved = await DB.getSavedWord(word.toLowerCase());
+            const saved = await DB.getSavedWord(normalizeWordId(word));
             if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh };
         }
 
@@ -58,12 +65,7 @@ function showWordModal(word) {
         actionArea.innerHTML = '';
 
         if (vocabItem) {
-            const existingSaved = await DB.getSavedWord(word.toLowerCase());
-            if (existingSaved && vocabItem.ex && !existingSaved.ex) {
-                existingSaved.ex = vocabItem.ex;
-                existingSaved.ex_zh = vocabItem.ex_zh || '';
-                await DB.addSavedWord(existingSaved);
-            }
+            await backfillSavedWordExample(word, vocabItem);
             document.getElementById('wmPos').innerText = vocabItem.pos || '';
             document.getElementById('wmIpa').innerText = vocabItem.ipa || '';
             document.getElementById('wmDef').innerText = vocabItem.def || '';
@@ -102,12 +104,7 @@ function showWordModal(word) {
                     const exZhEl = document.getElementById('wmExZh');
                     if (info.ex_zh) { exZhEl.textContent = info.ex_zh; exZhEl.classList.remove('hidden'); }
                     else { exZhEl.classList.add('hidden'); }
-                    const existingSaved = await DB.getSavedWord(word.toLowerCase());
-                    if (existingSaved && info.ex && !existingSaved.ex) {
-                        existingSaved.ex = info.ex;
-                        existingSaved.ex_zh = info.ex_zh || '';
-                        await DB.addSavedWord(existingSaved);
-                    }
+                    await backfillSavedWordExample(word, info);
                     genBtn.remove();
                     await renderSaveButton(actionArea, word, info);
                 } catch (e) { genBtn.innerText = t('vocabGenerateFailedRetry'); genBtn.disabled = false; alert(e.message); }
@@ -118,22 +115,69 @@ function showWordModal(word) {
     })();
 }
 
-async function renderSaveButton(container, word, vocabItem) {
-    const existing = await DB.getSavedWord(word.toLowerCase());
+export function normalizeWordId(word) {
+    return String(word || '').trim().toLowerCase();
+}
+
+function normalizeLookupWord(word) {
+    return String(word || '').trim().replace(/[^a-zA-Z0-9'-]/g, '');
+}
+
+export function buildSavedWordPayload(word, vocabItem = {}) {
+    return {
+        id: normalizeWordId(vocabItem.word || word),
+        en: String(vocabItem.word || word || '').trim(),
+        zh: vocabItem.def || '',
+        pos: vocabItem.pos || '',
+        ipa: vocabItem.ipa || '',
+        ex: vocabItem.ex || '',
+        ex_zh: vocabItem.ex_zh || '',
+        createdAt: Date.now(),
+        nextReview: getNextReviewTime(0),
+        level: 0
+    };
+}
+
+async function backfillSavedWordExample(word, vocabItem = {}) {
+    const existingSaved = await DB.getSavedWord(normalizeWordId(word));
+    if (!existingSaved || !vocabItem.ex || existingSaved.ex) return;
+    existingSaved.ex = vocabItem.ex;
+    existingSaved.ex_zh = vocabItem.ex_zh || '';
+    await DB.addSavedWord(existingSaved);
+}
+
+export async function saveWordToNotebook(word, vocabItem) {
+    await DB.addSavedWord(buildSavedWordPayload(word, vocabItem));
+    syncVocabCardBookmark(word, true);
+}
+
+export async function removeWordFromNotebook(word) {
+    await DB.deleteSavedWord(normalizeWordId(word));
+    syncVocabCardBookmark(word, false);
+}
+
+export async function toggleWordSaved(word, vocabItem) {
+    const existing = await DB.getSavedWord(normalizeWordId(word));
+    if (existing) {
+        await removeWordFromNotebook(word);
+        return false;
+    }
+    await saveWordToNotebook(word, vocabItem);
+    return true;
+}
+
+async function renderSaveButton(container, word, vocabItem, options = {}) {
+    const { onToggle = null } = options;
+    const existing = await DB.getSavedWord(normalizeWordId(word));
     const btn = document.createElement('button');
     const setSaved = () => { btn.className = 'wm-btn saved-btn'; btn.innerHTML = `${ICONS.bookmarkFill} ${t('vocabSaved')}`; };
     const setUnsaved = () => { btn.className = 'wm-btn save-btn'; btn.innerHTML = `${ICONS.bookmark} ${t('vocabSaveToNotebook')}`; };
     if (existing) setSaved(); else setUnsaved();
     btn.onclick = async () => {
-        if (await DB.getSavedWord(word.toLowerCase())) {
-            await DB.deleteSavedWord(word.toLowerCase());
-            setUnsaved();
-            syncVocabCardBookmark(word, false);
-        } else {
-            await DB.addSavedWord({ id: word.toLowerCase(), en: vocabItem.word || word, zh: vocabItem.def, pos: vocabItem.pos, ipa: vocabItem.ipa, ex: vocabItem.ex || '', ex_zh: vocabItem.ex_zh || '', createdAt: Date.now(), nextReview: getNextReviewTime(0), level: 0 });
-            setSaved();
-            syncVocabCardBookmark(word, true);
-        }
+        const saved = await toggleWordSaved(word, vocabItem);
+        if (saved) setSaved();
+        else setUnsaved();
+        if (typeof onToggle === 'function') await onToggle(saved);
     };
     container.appendChild(btn);
 }
@@ -154,6 +198,85 @@ export function syncVocabCardBookmark(wordId, isSaved) {
 export function closeModal() {
     document.getElementById('wordModal').classList.remove('active');
     if (state.highlightedElement) { state.highlightedElement.classList.remove('word-highlighted'); state.highlightedElement = null; }
+}
+
+function renderVocabSubtab() {
+    const notebookPanel = document.getElementById('vocabNotebookPanel');
+    const lookupPanel = document.getElementById('vocabLookupPanel');
+    if (!notebookPanel || !lookupPanel) return;
+    notebookPanel.classList.toggle('hidden', _vocabSubtab !== 'notebook');
+    lookupPanel.classList.toggle('hidden', _vocabSubtab !== 'lookup');
+    document.querySelectorAll('#vocabSubtabSwitch .vocab-subtab-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.vocabSubtab === _vocabSubtab);
+    });
+}
+
+function renderLookupResultCard() {
+    const resultEl = document.getElementById('vocabLookupResult');
+    if (!resultEl) return;
+    if (!_lookupResult) {
+        resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('vocabLookupEmpty')}</div>`;
+        return;
+    }
+    const item = _lookupResult;
+    const card = document.createElement('div');
+    card.className = 'vocab-lookup-result-card';
+    card.innerHTML = `
+        <div class="saved-word-top">
+            <span class="saved-word-en">${item.word || ''}</span>
+            <button class="saved-word-speak" data-action="speak-word">${ICONS.speaker}</button>
+        </div>
+        <div class="vocab-lookup-meta">
+            ${item.pos ? `<span class="vocab-pos">${item.pos}</span>` : ''}
+            ${item.ipa ? `<span class="vocab-ipa">${item.ipa}</span>` : ''}
+        </div>
+        <div class="saved-word-zh">${item.def || ''}</div>
+        ${item.ex ? `<div class="vocab-lookup-ex">"${item.ex}" <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
+        ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
+        <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
+    `;
+    card.querySelector('[data-action="speak-word"]')?.addEventListener('click', () => speakText(item.word || ''));
+    card.querySelector('[data-action="speak-ex"]')?.addEventListener('click', () => speakText(item.ex || ''));
+    resultEl.innerHTML = '';
+    resultEl.appendChild(card);
+    renderSaveButton(card.querySelector('#vocabLookupActionArea'), item.word, item, {
+        onToggle: async () => {
+            await renderVocabTab();
+        }
+    }).then(() => {});
+}
+
+export async function handleLookupSearch() {
+    const inputEl = document.getElementById('vocabLookupInput');
+    const resultEl = document.getElementById('vocabLookupResult');
+    if (!inputEl || !resultEl) return;
+    const query = normalizeLookupWord(inputEl.value);
+    if (!query) {
+        _lookupResult = null;
+        resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('vocabLookupInputRequired')}</div>`;
+        return;
+    }
+    if (!state.apiKey) {
+        alert(t('alertSetApiKeyFirst'));
+        return;
+    }
+    resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('loadingGenerating')}</div>`;
+    try {
+        const info = await fetchWordDetails(query);
+        _lookupResult = {
+            word: info.word || query,
+            pos: info.pos || '',
+            ipa: info.ipa || '',
+            def: info.def || '',
+            ex: info.ex || '',
+            ex_zh: info.ex_zh || ''
+        };
+        await backfillSavedWordExample(_lookupResult.word, _lookupResult);
+        await renderVocabTab();
+    } catch (error) {
+        console.error(error);
+        resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('vocabLookupFailed', { message: error.message })}</div>`;
+    }
 }
 
 /* Vocabulary Tab */
@@ -188,8 +311,7 @@ export async function renderVocabTab() {
         clearBtn.onclick = async () => {
             if (!confirm(t('vocabClearMasteredConfirm', { count: lv5Words.length }))) return;
             for (const w of lv5Words) {
-                await DB.deleteSavedWord(w.id);
-                syncVocabCardBookmark(w.en, false);
+                await removeWordFromNotebook(w.id);
             }
             renderVocabTab();
         };
@@ -200,6 +322,8 @@ export async function renderVocabTab() {
     listEl.innerHTML = '';
     if (words.length === 0) {
         listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${t('vocabEmpty')}<br><span style="font-size:13px;">${t('vocabEmptyHint')}</span></p>`;
+        renderVocabSubtab();
+        if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
     }
     words.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
@@ -210,11 +334,12 @@ export async function renderVocabTab() {
         card.querySelector('.saved-word-speak').onclick = () => speakText(w.en);
         card.querySelector('.saved-word-delete').onclick = async () => {
             if (confirm(t('vocabDeleteConfirm', { word: w.en }))) {
-                await DB.deleteSavedWord(w.id);
-                syncVocabCardBookmark(w.en, false);
+                await removeWordFromNotebook(w.id);
                 renderVocabTab();
             }
         };
         listEl.appendChild(card);
     });
+    renderVocabSubtab();
+    if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }

@@ -7,7 +7,7 @@ import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnsw
 import { DriveSync } from './driveSync.js';
 import { setupAudio } from './audioPlayer.js';
 import { renderContent, toggleEnglish, toggleTranslation, updateToggleButtons } from './render.js';
-import { closeModal, renderVocabTab, setSrsTrigger } from './vocab.js';
+import { closeModal, renderVocabTab, setSrsTrigger, setVocabSubtab, handleLookupSearch } from './vocab.js';
 import { startSrsReview, closeSrsReview, finishSrsReview, setOnFinish } from './srs.js';
 import { saveToHistory, savePracticeRecord, renderHistory, loadSession, loadLastSession, clearHistory, setDeps as setHistoryDeps } from './history.js';
 import { initUpdater } from './updater.js';
@@ -472,6 +472,15 @@ document.getElementById('btnToggleZh').onclick = () => toggleTranslation();
 document.getElementById('btnClearHistory').onclick = () => clearHistory();
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = () => switchTab(btn.dataset.tab);
+});
+document.querySelectorAll('#vocabSubtabSwitch .vocab-subtab-btn').forEach((btn) => {
+    btn.onclick = () => setVocabSubtab(btn.dataset.vocabSubtab);
+});
+document.getElementById('btnVocabLookup').onclick = () => handleLookupSearch();
+document.getElementById('vocabLookupInput').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleLookupSearch();
 });
 document.querySelector('#wordModal .wm-btn.secondary').onclick = () => closeModal();
 document.getElementById('btnSaveApiKey').onclick = async () => saveApiKey();

@@ -142,8 +142,22 @@
             <h3 class="section-title" data-i18n="vocabNotebookTitle">單字本 Vocabulary</h3>
             <span class="vocab-tab-count" id="vocabCount">0 個單字</span>
         </div>
-        <div id="srsReviewEntry"></div>
-        <div id="savedWordsList"></div>
+        <div class="vocab-subtab-switch" id="vocabSubtabSwitch">
+            <button class="vocab-subtab-btn active" data-vocab-subtab="notebook" data-i18n="vocabSubtabNotebook">單字本</button>
+            <button class="vocab-subtab-btn" data-vocab-subtab="lookup" data-i18n="vocabSubtabLookup">查單字</button>
+        </div>
+        <div id="vocabNotebookPanel">
+            <div id="srsReviewEntry"></div>
+            <div id="savedWordsList"></div>
+        </div>
+        <div id="vocabLookupPanel" class="hidden">
+            <div class="vocab-lookup-input-wrap">
+                <input type="text" id="vocabLookupInput" class="topic-input vocab-lookup-input" data-i18n-placeholder="vocabLookupPlaceholder" placeholder="輸入英文單字，例如: negotiate">
+                <button class="generate-btn vocab-lookup-btn" id="btnVocabLookup" data-i18n="vocabLookupBtn">查詢</button>
+            </div>
+            <p class="vocab-lookup-hint" data-i18n="vocabLookupHint">可查詢單字解釋、例句，並直接加入 SRS 單字本。</p>
+            <div id="vocabLookupResult"></div>
+        </div>
     </div>
 
     <!-- TAB: History -->
