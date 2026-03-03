@@ -12,6 +12,43 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      html.app-booting body > * {
+        visibility: hidden;
+      }
+      html.app-booting #bootLoading {
+        visibility: visible;
+      }
+      #bootLoading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f2f2f7;
+        z-index: 99999;
+      }
+      #bootLoading .boot-loading-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        color: #5856d6;
+        font-weight: 600;
+      }
+      #bootLoading .boot-loading-spinner {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 3px solid rgba(88, 86, 214, 0.2);
+        border-top-color: #5856d6;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-3KMB363K29"></script>
     <script>
@@ -23,16 +60,53 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
       (function bootstrapAppAssets() {
+        document.documentElement.classList.add('app-booting');
+        var cssReady = false;
+        var appReady = false;
+        var revealed = false;
+        var revealTimer = null;
+
+        function revealApp() {
+          if (revealed) return;
+          revealed = true;
+          if (revealTimer) clearTimeout(revealTimer);
+          document.documentElement.classList.remove('app-booting');
+          var loadingEl = document.getElementById('bootLoading');
+          if (loadingEl) loadingEl.remove();
+        }
+
+        function checkReady() {
+          if (cssReady && appReady) {
+            revealApp();
+          }
+        }
+
+        window.addEventListener('toeic-app-ready', function () {
+          appReady = true;
+          checkReady();
+        }, { once: true });
+
+        revealTimer = setTimeout(revealApp, 5000);
+
         function mountAssets(version) {
           var suffix = version ? ("?v=" + encodeURIComponent(version)) : "";
           var style = document.createElement('link');
           style.rel = 'stylesheet';
           style.href = "./assets/css/styles.css" + suffix;
+          style.onload = function () {
+            cssReady = true;
+            checkReady();
+          };
+          style.onerror = function () {
+            cssReady = true;
+            checkReady();
+          };
           document.head.appendChild(style);
 
           var entry = document.createElement('script');
           entry.type = 'module';
           entry.src = "./assets/js/main.js" + suffix;
+          entry.onerror = revealApp;
           document.head.appendChild(entry);
         }
 
@@ -48,6 +122,12 @@
     </script>
 </head>
 <body>
+    <div id="bootLoading" aria-live="polite" aria-label="Loading">
+        <div class="boot-loading-card">
+            <div class="boot-loading-spinner"></div>
+            <div>Loading...</div>
+        </div>
+    </div>
 
     <header>
         <h1 data-i18n="appTitle">TOEIC AI Tutor</h1>

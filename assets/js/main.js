@@ -954,4 +954,5 @@ GENERATE_BTN.onclick = async () => {
         }
         initPostLocalePrompts();
     } catch (e) { console.error("Init failed:", e); keyModal.classList.add('active'); }
+    finally { window.dispatchEvent(new CustomEvent('toeic-app-ready')); }
 })();
