@@ -2,7 +2,7 @@
 
 import { state, ICONS, SRS_INTERVALS, SRS_MIN_WORDS, SRS_MAX_WORDS, getNextReviewTime } from './state.js';
 import { DB } from './db.js';
-import { fetchWordDetails } from './apiGemini.js';
+import { fetchWordDetails, validateWordWithLanguageTool } from './apiGemini.js';
 import { speakText } from './utils.js';
 import { t } from './i18n.js';
 
@@ -120,7 +120,23 @@ export function normalizeWordId(word) {
 }
 
 function normalizeLookupWord(word) {
-    return String(word || '').trim().replace(/[^a-zA-Z0-9'-]/g, '');
+    return String(word || '').trim();
+}
+
+function validateLookupWordInput(rawWord) {
+    const word = normalizeLookupWord(rawWord);
+    if (!word) return { ok: false, reason: 'required' };
+    if (/\s/.test(word)) return { ok: false, reason: 'single_word_only' };
+    if (/\d/.test(word)) return { ok: false, reason: 'digits_not_allowed' };
+    if (!/^[A-Za-z]+$/.test(word)) return { ok: false, reason: 'invalid_chars' };
+    if (word.length < 2 || word.length > 32) return { ok: false, reason: 'invalid_length' };
+    return { ok: true, word: word.toLowerCase() };
+}
+
+function renderLookupMessage(message) {
+    const resultEl = document.getElementById('vocabLookupResult');
+    if (!resultEl) return;
+    resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
 export function buildSavedWordPayload(word, vocabItem = {}) {
@@ -248,20 +264,39 @@ function renderLookupResultCard() {
 
 export async function handleLookupSearch() {
     const inputEl = document.getElementById('vocabLookupInput');
-    const resultEl = document.getElementById('vocabLookupResult');
-    if (!inputEl || !resultEl) return;
-    const query = normalizeLookupWord(inputEl.value);
-    if (!query) {
+    const lookupBtn = document.getElementById('btnVocabLookup');
+    if (!inputEl) return;
+    const localValidation = validateLookupWordInput(inputEl.value);
+    if (!localValidation.ok) {
         _lookupResult = null;
-        resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('vocabLookupInputRequired')}</div>`;
+        if (localValidation.reason === 'required') renderLookupMessage(t('vocabLookupInputRequired'));
+        else if (localValidation.reason === 'single_word_only') renderLookupMessage(t('vocabLookupSingleWordOnly'));
+        else if (localValidation.reason === 'digits_not_allowed') renderLookupMessage(t('vocabLookupNoDigits'));
+        else if (localValidation.reason === 'invalid_length') renderLookupMessage(t('vocabLookupLengthInvalid'));
+        else renderLookupMessage(t('vocabLookupCharsInvalid'));
         return;
     }
     if (!state.apiKey) {
         alert(t('alertSetApiKeyFirst'));
         return;
     }
-    resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('loadingGenerating')}</div>`;
+    if (lookupBtn?.disabled) return;
+    if (lookupBtn) lookupBtn.disabled = true;
     try {
+        const query = localValidation.word;
+        renderLookupMessage(t('vocabLookupValidating'));
+        const lt = await validateWordWithLanguageTool(query);
+        if (!lt.ok) {
+            _lookupResult = null;
+            if (lt.reason === 'spelling') {
+                const suggestions = (lt.suggestions || []).slice(0, 3).join(', ');
+                renderLookupMessage(t('vocabLookupSpellingInvalid', { suggestions: suggestions || '-' }));
+            } else {
+                renderLookupMessage(t('vocabLookupValidationServiceError'));
+            }
+            return;
+        }
+        renderLookupMessage(t('loadingGenerating'));
         const info = await fetchWordDetails(query);
         _lookupResult = {
             word: info.word || query,
@@ -275,7 +310,9 @@ export async function handleLookupSearch() {
         await renderVocabTab();
     } catch (error) {
         console.error(error);
-        resultEl.innerHTML = `<div class="vocab-lookup-empty">${t('vocabLookupFailed', { message: error.message })}</div>`;
+        renderLookupMessage(t('vocabLookupFailed', { message: error.message }));
+    } finally {
+        if (lookupBtn) lookupBtn.disabled = false;
     }
 }
 

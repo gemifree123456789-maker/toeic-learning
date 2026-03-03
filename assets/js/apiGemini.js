@@ -60,6 +60,56 @@ export async function fetchWordDetails(word) {
     return result;
 }
 
+export async function validateWordWithLanguageTool(word) {
+    const query = String(word || '').trim();
+    if (!query) {
+        return { ok: false, reason: 'empty', message: 'Empty word' };
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+        const body = new URLSearchParams();
+        body.set('text', query);
+        body.set('language', 'en-US');
+        const response = await fetch('https://api.languagetool.org/v2/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+            signal: controller.signal
+        });
+        if (!response.ok) {
+            return { ok: false, reason: 'service_unavailable', message: `LanguageTool HTTP ${response.status}` };
+        }
+        const data = await response.json();
+        const matches = Array.isArray(data?.matches) ? data.matches : [];
+        const typoMatches = matches.filter((item) => {
+            const ruleId = String(item?.rule?.id || '').toUpperCase();
+            return ruleId.includes('MORFOLOGIK')
+                || ruleId.includes('SPELL')
+                || ruleId.includes('TYP')
+                || ruleId.includes('MISSPELL');
+        });
+        if (!typoMatches.length) return { ok: true, reason: 'ok', suggestions: [] };
+        const suggestions = [];
+        typoMatches.forEach((item) => {
+            const replacements = Array.isArray(item?.replacements) ? item.replacements : [];
+            replacements.forEach((rep) => {
+                const v = String(rep?.value || '').trim();
+                if (!v) return;
+                if (!suggestions.includes(v)) suggestions.push(v);
+            });
+        });
+        return { ok: false, reason: 'spelling', suggestions: suggestions.slice(0, 5) };
+    } catch (error) {
+        const message = error?.name === 'AbortError'
+            ? 'LanguageTool timeout'
+            : (error?.message || 'LanguageTool request failed');
+        return { ok: false, reason: 'service_unavailable', message };
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 function normalizeExamQuestion(category, item, idx) {
     const rawOptions = Array.isArray(item.options) ? item.options.slice(0, 4) : [];
     const options = rawOptions.map((option, optionIndex) => {
