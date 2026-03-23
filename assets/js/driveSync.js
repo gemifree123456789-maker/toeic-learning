@@ -6,7 +6,7 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    CLIENT_ID: '577652285741-f97oivf3f7h2u9b02hhq9man1f807v16.apps.googleusercontent.com',
+    CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     BACKUP_FILENAME: 'toeic-tutor-backup.json',
     tokenClient: null,
