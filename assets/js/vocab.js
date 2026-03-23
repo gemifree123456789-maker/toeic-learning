@@ -126,8 +126,6 @@ function normalizeLookupWord(word) {
 function validateLookupWordInput(rawWord) {
     const word = normalizeLookupWord(rawWord);
     if (!word) return { ok: false, reason: 'required' };
-    if (/\d/.test(word)) return { ok: false, reason: 'digits_not_allowed' };
-    if (!/^[A-Za-z]+$/.test(word)) return { ok: false, reason: 'invalid_chars' };
     if (word.length < 2 || word.length > 32) return { ok: false, reason: 'invalid_length' };
     return { ok: true, word: word.toLowerCase() };
 }
