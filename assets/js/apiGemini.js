@@ -35,13 +35,15 @@ export async function fetchGeminiText(score, customTopic) {
     const topicLine = customTopic
         ? `about "${customTopic}" suitable for this level.`
         : `about one random TOEIC-friendly scenario from this range: office communication, meetings, email updates, travel arrangements, customer service, logistics and shipping, human resources, marketing campaigns, product launches, scheduling conflicts, workplace problem-solving, announcements, and professional daily-life errands.`;
+    
+    // 修改處：在 vocabulary 陣列的 JSON 結構中，強制新增 category 欄位
     const prompt = `
         You are a strict TOEIC tutor. Target Score: ${score}.
         Task: Generate a SHORT reading comprehension passage (approx 60-80 words, 30 seconds reading time) ${topicLine}
         Output JSON strictly:
         {
             "segments": [{"en": "Sentence 1 English", "zh": "Sentence 1 ${targetLang} translation"}],
-            "vocabulary": [{"word": "word", "pos": "v.", "ipa": "/ipa/", "def": "${targetLang} definition", "ex": "English example sentence ONLY (No translation, No special symbols)", "ex_zh": "${targetLang} translation of the example sentence"}],
+            "vocabulary": [{"word": "word", "pos": "v.", "ipa": "/ipa/", "category": "Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other", "def": "${targetLang} definition", "ex": "English example sentence ONLY (No translation, No special symbols)", "ex_zh": "${targetLang} translation of the example sentence"}],
             "phrases": [{"phrase": "phrase from passage", "meaning": "${targetLang} meaning", "explanation": "Brief ${targetLang} explanation", "example": "English example sentence", "example_zh": "${targetLang} translation of the example sentence"}]
         }
         For "phrases": pick 2-3 commonly used phrases from the passage. Return ONLY raw JSON.
@@ -54,7 +56,10 @@ export async function fetchWordDetails(word) {
     if (cached) return cached;
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence"}`;
+    
+    // 修改處：在字典查詢的 JSON 結構中，強制新增 category 欄位
+    const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence"}`;
+    
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     await DB.setWord(word, result);
     return result;
@@ -172,7 +177,6 @@ function normalizeExamOutput(raw) {
             passage: q.passage || ''
         }));
     } else if (Array.isArray(raw?.readingQuestions) && raw?.readingPassage) {
-        // Backward compatibility for previous schema: one passage + three questions.
         readingQuestions = raw.readingQuestions.map((q, idx) => ({
             ...q,
             passage: raw.readingPassage,

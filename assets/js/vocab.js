@@ -10,6 +10,39 @@ let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
 
+/* =========================================
+   新增：同步至 Google Sheets 的背景發送函數
+   ========================================= */
+async function syncToGoogleSheet(item) {
+    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
+    const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
+    
+    // 將開源專案的欄位，轉換成您 V10 試算表對應的欄位格式
+    const payload = {
+        action: "add",
+        data: {
+            id: item.id || Date.now(),
+            word: item.en || item.word || "",
+            kk: item.ipa || "",
+            pos: item.pos || "",
+            cat: item.cat || item.category || "Other",
+            zh: item.zh || item.def || "",
+            exEn: item.ex || "",
+            exZh: item.ex_zh || "",
+            col: item.col || "",
+            phrase: item.phrase || ""
+        }
+    };
+
+    try {
+        fetch(gasUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }).catch(e => console.error("Sheet Sync Error:", e));
+    } catch(err) {}
+}
+
+
 export function setSrsTrigger(fn) { _startSrsReview = fn; }
 export function setVocabSubtab(tab) {
     _vocabSubtab = tab === 'lookup' ? 'lookup' : 'notebook';
@@ -57,7 +90,7 @@ function showWordModal(word) {
         }
         if (!vocabItem) {
             const saved = await DB.getSavedWord(normalizeWordId(word));
-            if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh };
+            if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, category: saved.cat, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh };
         }
 
         document.getElementById('wmWord').innerText = word;
@@ -68,6 +101,14 @@ function showWordModal(word) {
             await backfillSavedWordExample(word, vocabItem);
             document.getElementById('wmPos').innerText = vocabItem.pos || '';
             document.getElementById('wmIpa').innerText = vocabItem.ipa || '';
+            
+            // 動態新增分類標籤
+            let oldCat = document.getElementById('wmCat');
+            if (oldCat) oldCat.remove();
+            if (vocabItem.category || vocabItem.cat) {
+                document.querySelector('.wm-meta').insertAdjacentHTML('beforeend', `<span id="wmCat" style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${vocabItem.category || vocabItem.cat}</span>`);
+            }
+
             document.getElementById('wmDef').innerText = vocabItem.def || '';
             if (vocabItem.ex) {
                 document.getElementById('wmExText').innerText = vocabItem.ex;
@@ -83,6 +124,8 @@ function showWordModal(word) {
         } else {
             document.getElementById('wmPos').innerText = '';
             document.getElementById('wmIpa').innerText = '';
+            let oldCat = document.getElementById('wmCat');
+            if (oldCat) oldCat.remove();
             document.getElementById('wmDef').innerText = t('vocabNoDetails');
             document.getElementById('wmEx').classList.add('hidden');
             document.getElementById('wmExZh').classList.add('hidden');
@@ -97,6 +140,12 @@ function showWordModal(word) {
                     const info = await fetchWordDetails(word);
                     document.getElementById('wmPos').innerText = info.pos;
                     document.getElementById('wmIpa').innerText = info.ipa;
+                    
+                    // 查詢後動態新增分類標籤
+                    if (info.category) {
+                        document.querySelector('.wm-meta').insertAdjacentHTML('beforeend', `<span id="wmCat" style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${info.category}</span>`);
+                    }
+
                     document.getElementById('wmDef').innerText = info.def;
                     document.getElementById('wmExText').innerText = info.ex;
                     document.getElementById('wmExSpeakBtn').onclick = () => speakText(info.ex);
@@ -136,6 +185,7 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
+// 修改：將分類 (cat)、片語 (phrase)、搭配詞 (col) 封裝進儲存物件
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.word || word);
     return {
@@ -144,8 +194,11 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
         zh: vocabItem.def || '',
         pos: vocabItem.pos || '',
         ipa: vocabItem.ipa || '',
+        cat: vocabItem.category || vocabItem.cat || 'Other',
         ex: vocabItem.ex || '',
         ex_zh: vocabItem.ex_zh || '',
+        col: vocabItem.col || '',
+        phrase: vocabItem.phrase || '',
         createdAt: Date.now(),
         nextReview: getNextReviewTime(0),
         level: 0
@@ -160,9 +213,14 @@ async function backfillSavedWordExample(word, vocabItem = {}) {
     await DB.addSavedWord(existingSaved);
 }
 
+// 修改：在此處攔截並呼叫 Google Sheets 同步函數
 export async function saveWordToNotebook(word, vocabItem) {
-    await DB.addSavedWord(buildSavedWordPayload(word, vocabItem));
+    const payload = buildSavedWordPayload(word, vocabItem);
+    await DB.addSavedWord(payload);
     syncVocabCardBookmark(word, true);
+    
+    // 觸發同步寫入試算表
+    syncToGoogleSheet(payload);
 }
 
 export async function removeWordFromNotebook(word) {
@@ -235,6 +293,8 @@ function renderLookupResultCard() {
     const item = _lookupResult;
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
+    
+    // 修改：在查單字結果面板中渲染分類標籤
     card.innerHTML = `
         <div class="saved-word-top">
             <span class="saved-word-en">${item.word || ''}</span>
@@ -243,6 +303,7 @@ function renderLookupResultCard() {
         <div class="vocab-lookup-meta">
             ${item.pos ? `<span class="vocab-pos">${item.pos}</span>` : ''}
             ${item.ipa ? `<span class="vocab-ipa">${item.ipa}</span>` : ''}
+            ${item.category ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${item.category}</span>` : ''}
         </div>
         <div class="saved-word-zh">${item.def || ''}</div>
         ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
@@ -296,10 +357,13 @@ export async function handleLookupSearch() {
         }
         renderLookupMessage(t('loadingGenerating'));
         const info = await fetchWordDetails(query);
+        
+        // 修改：承接 API 回傳的分類屬性
         _lookupResult = {
             word: info.word || query,
             pos: info.pos || '',
             ipa: info.ipa || '',
+            category: info.category || 'Other',
             def: info.def || '',
             ex: info.ex || '',
             ex_zh: info.ex_zh || ''
