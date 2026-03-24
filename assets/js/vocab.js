@@ -368,15 +368,13 @@ export async function handleLookupSearch() {
     }
 }
 
-// 綁定篩選器變更事件：一旦改變選項，就重新渲染單字本
-document.addEventListener('DOMContentLoaded', () => {
-    const filterSelect = document.getElementById('posFilterSelect');
-    if (filterSelect) {
-        filterSelect.addEventListener('change', () => {
-            renderVocabTab();
-        });
-    }
-});
+// 綁定篩選器變更事件：直接綁定，不使用 DOMContentLoaded (因為 module 載入時 DOM 已就緒)
+const filterSelect = document.getElementById('posFilterSelect');
+if (filterSelect) {
+    filterSelect.addEventListener('change', () => {
+        renderVocabTab();
+    });
+}
 
 /* Vocabulary Tab (加入篩選與自動修復邏輯) */
 export async function renderVocabTab() {
