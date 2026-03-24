@@ -246,6 +246,20 @@
         </div>
         <div id="vocabNotebookPanel">
             <div id="srsReviewEntry"></div>
+            
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 12px; padding: 0 4px;">
+                <select id="posFilterSelect" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f9fafb; font-size: 14px; color: #374151; font-weight: 500; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <option value="all">🔍 全部詞性</option>
+                    <option value="n">名詞 (n.)</option>
+                    <option value="v">動詞 (v.)</option>
+                    <option value="adj">形容詞 (adj.)</option>
+                    <option value="adv">副詞 (adv.)</option>
+                    <option value="prep">介係詞 (prep.)</option>
+                    <option value="conj">連接詞 (conj.)</option>
+                    <option value="other">其他</option>
+                </select>
+            </div>
+            
             <div id="savedWordsList"></div>
         </div>
         <div id="vocabLookupPanel" class="hidden">

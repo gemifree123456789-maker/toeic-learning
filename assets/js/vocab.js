@@ -14,10 +14,8 @@ let _lookupResult = null;
    新增：同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
-    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
     const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
     
-    // 將開源專案的欄位，轉換成您 V10 試算表對應的欄位格式
     const payload = {
         action: "add",
         data: {
@@ -102,7 +100,6 @@ function showWordModal(word) {
             document.getElementById('wmPos').innerText = vocabItem.pos || '';
             document.getElementById('wmIpa').innerText = vocabItem.ipa || '';
             
-            // 動態新增分類標籤
             let oldCat = document.getElementById('wmCat');
             if (oldCat) oldCat.remove();
             if (vocabItem.category || vocabItem.cat) {
@@ -141,7 +138,6 @@ function showWordModal(word) {
                     document.getElementById('wmPos').innerText = info.pos;
                     document.getElementById('wmIpa').innerText = info.ipa;
                     
-                    // 查詢後動態新增分類標籤
                     if (info.category) {
                         document.querySelector('.wm-meta').insertAdjacentHTML('beforeend', `<span id="wmCat" style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${info.category}</span>`);
                     }
@@ -185,7 +181,6 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
-// 修改：將分類 (cat)、片語 (phrase)、搭配詞 (col) 封裝進儲存物件
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.word || word);
     return {
@@ -213,13 +208,10 @@ async function backfillSavedWordExample(word, vocabItem = {}) {
     await DB.addSavedWord(existingSaved);
 }
 
-// 修改：在此處攔截並呼叫 Google Sheets 同步函數
 export async function saveWordToNotebook(word, vocabItem) {
     const payload = buildSavedWordPayload(word, vocabItem);
     await DB.addSavedWord(payload);
     syncVocabCardBookmark(word, true);
-    
-    // 觸發同步寫入試算表
     syncToGoogleSheet(payload);
 }
 
@@ -294,7 +286,6 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
-    // 修改：在查單字結果面板中渲染分類標籤
     card.innerHTML = `
         <div class="saved-word-top">
             <span class="saved-word-en">${item.word || ''}</span>
@@ -358,7 +349,6 @@ export async function handleLookupSearch() {
         renderLookupMessage(t('loadingGenerating'));
         const info = await fetchWordDetails(query);
         
-        // 修改：承接 API 回傳的分類屬性
         _lookupResult = {
             word: info.word || query,
             pos: info.pos || '',
@@ -378,9 +368,33 @@ export async function handleLookupSearch() {
     }
 }
 
-/* Vocabulary Tab */
+// 綁定篩選器變更事件：一旦改變選項，就重新渲染單字本
+document.addEventListener('DOMContentLoaded', () => {
+    const filterSelect = document.getElementById('posFilterSelect');
+    if (filterSelect) {
+        filterSelect.addEventListener('change', () => {
+            renderVocabTab();
+        });
+    }
+});
+
+/* Vocabulary Tab (加入篩選與自動修復邏輯) */
 export async function renderVocabTab() {
-    const words = await DB.getSavedWords();
+    let words = await DB.getSavedWords();
+    
+    // 【自動修復機制】攔截舊資料的 Lv.null 或 undefined
+    for (let w of words) {
+        if (w.level == null || w.level === undefined || isNaN(w.level)) {
+            w.level = 0;
+            w.nextReview = w.nextReview || Date.now();
+            await DB.addSavedWord(w); // 存回本地資料庫
+        }
+    }
+
+    // 取得當前的篩選條件
+    const filterSelect = document.getElementById('posFilterSelect');
+    const filterValue = filterSelect ? filterSelect.value : 'all';
+
     document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: words.length });
     const dueWords = words.filter(w => w.nextReview <= Date.now());
     const entryEl = document.getElementById('srsReviewEntry');
@@ -419,13 +433,29 @@ export async function renderVocabTab() {
 
     const listEl = document.getElementById('savedWordsList');
     listEl.innerHTML = '';
-    if (words.length === 0) {
-        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${t('vocabEmpty')}<br><span style="font-size:13px;">${t('vocabEmptyHint')}</span></p>`;
+    
+    // 【篩選核心邏輯】：依照選擇的詞性過濾陣列
+    let displayWords = words;
+    if (filterValue !== 'all') {
+        displayWords = words.filter(w => {
+            const rawPos = String(w.pos || '').toLowerCase();
+            if (filterValue === 'other') {
+                return !['n', 'v', 'adj', 'adv', 'prep', 'conj'].some(p => rawPos.includes(p));
+            }
+            return rawPos.includes(filterValue);
+        });
+    }
+
+    if (displayWords.length === 0) {
+        const emptyMsg = filterValue === 'all' ? t('vocabEmpty') : '沒有找到符合此詞性的單字';
+        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' ? t('vocabEmptyHint') : '請試著切換其他分類或加入新單字'}</span></p>`;
         renderVocabSubtab();
         if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
     }
-    words.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
+
+    // 畫出符合條件的單字
+    displayWords.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
         const card = document.createElement('div'); card.className = 'saved-word-card';
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
@@ -440,6 +470,7 @@ export async function renderVocabTab() {
         };
         listEl.appendChild(card);
     });
+    
     renderVocabSubtab();
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
