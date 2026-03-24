@@ -11,9 +11,10 @@ let _vocabSubtab = 'notebook';
 let _lookupResult = null;
 
 /* =========================================
-   新增：同步至 Google Sheets 的背景發送函數
+   同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
+    // 請將下方網址替換為您的 Google Apps Script 部署網址
     const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
     
     const payload = {
@@ -368,13 +369,13 @@ export async function handleLookupSearch() {
     }
 }
 
-// 綁定篩選器變更事件：直接綁定，不使用 DOMContentLoaded (因為 module 載入時 DOM 已就緒)
-const filterSelect = document.getElementById('posFilterSelect');
-if (filterSelect) {
-    filterSelect.addEventListener('change', () => {
+// ====== 🚀 終極修復：全局事件代理 (Event Delegation) ======
+// 不管網頁何時載入，只要 document 監聽到 posFilterSelect 的變更，就強制觸發！
+document.addEventListener('change', (event) => {
+    if (event.target && event.target.id === 'posFilterSelect') {
         renderVocabTab();
-    });
-}
+    }
+});
 
 /* Vocabulary Tab (加入篩選與自動修復邏輯) */
 export async function renderVocabTab() {
@@ -385,7 +386,7 @@ export async function renderVocabTab() {
         if (w.level == null || w.level === undefined || isNaN(w.level)) {
             w.level = 0;
             w.nextReview = w.nextReview || Date.now();
-            await DB.addSavedWord(w); // 存回本地資料庫
+            await DB.addSavedWord(w);
         }
     }
 
@@ -393,11 +394,12 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: words.length });
+    // 取得待複習的單字數量
     const dueWords = words.filter(w => w.nextReview <= Date.now());
     const entryEl = document.getElementById('srsReviewEntry');
     entryEl.innerHTML = '';
 
+    // 渲染上方 SRS 測驗區塊
     if (words.length < SRS_MIN_WORDS) {
         entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsNeedMinimum', { min: SRS_MIN_WORDS, current: words.length })}</p></div>`;
     } else if (dueWords.length < SRS_MIN_WORDS) {
@@ -432,17 +434,22 @@ export async function renderVocabTab() {
     const listEl = document.getElementById('savedWordsList');
     listEl.innerHTML = '';
     
-    // 【篩選核心邏輯】：依照選擇的詞性過濾陣列
+    // 【篩選核心邏輯】：精準匹配詞性，避免 'v' 去配到 'adv'
     let displayWords = words;
     if (filterValue !== 'all') {
         displayWords = words.filter(w => {
             const rawPos = String(w.pos || '').toLowerCase();
             if (filterValue === 'other') {
-                return !['n', 'v', 'adj', 'adv', 'prep', 'conj'].some(p => rawPos.includes(p));
+                // 如果是「其他」，排除所有主流詞性 (帶有小數點的標準格式)
+                return !['n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.'].some(p => rawPos.includes(p));
             }
-            return rawPos.includes(filterValue);
+            // 精準匹配：例如選了 'v'，就必須包含 'v.' 或是精準等於 'v' 或包含 'v,'
+            return rawPos.includes(filterValue + '.') || rawPos === filterValue || rawPos.includes(filterValue + ',');
         });
     }
+
+    // UX 優化：讓單字本右上角的總數，顯示「篩選後的結果數量」
+    document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: displayWords.length });
 
     if (displayWords.length === 0) {
         const emptyMsg = filterValue === 'all' ? t('vocabEmpty') : '沒有找到符合此詞性的單字';
