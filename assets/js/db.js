@@ -1,5 +1,34 @@
 // IndexedDB data layer: history, wordCache, settings, savedWords CRUD.
 
+// ====== 新增：背景同步 SRS 進度至 Google 試算表的函數 ======
+function syncSrsToCloud(item) {
+    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
+    const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
+    
+    // 防呆：確保網址有填寫
+    if (!gasUrl || gasUrl.includes('請在此')) return; 
+
+    // 封裝上傳的 Payload，指定 action 為 update
+    const payload = {
+        action: "update",
+        data: {
+            id: item.id,
+            word: item.en || item.word || item.id,
+            level: item.level,
+            nextReview: item.nextReview
+        }
+    };
+
+    try {
+        // 以背景模式發送 POST 請求，不阻擋使用者繼續下一個測驗
+        fetch(gasUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }).catch(e => console.error("SRS Sync Error:", e));
+    } catch (e) {}
+}
+
+
 export const DB = {
     name: 'ToeicTutorDB', version: 3, db: null,
 
@@ -152,16 +181,25 @@ export const DB = {
         return all.filter(w => w.nextReview <= now);
     },
 
+    // 修改處：攔截此函數，將更新的進度同步至雲端
     async updateWordSRS(id, level, nextReview) {
         if (!this.db) await this.init();
         const existing = await this.getSavedWord(id);
         if (!existing) return;
+        
+        // 更新本地端的進度參數
         existing.level = level;
         existing.nextReview = nextReview;
+        
         return new Promise((r, j) => {
             const tx = this.db.transaction('savedWords', 'readwrite');
             tx.objectStore('savedWords').put(existing);
-            tx.oncomplete = () => r();
+            
+            // 當本地端寫入完成時，觸發雲端同步
+            tx.oncomplete = () => {
+                syncSrsToCloud(existing);
+                r();
+            };
             tx.onerror = () => j(tx.error);
         });
     },

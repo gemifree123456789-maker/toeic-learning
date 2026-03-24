@@ -957,37 +957,31 @@ GENERATE_BTN.onclick = async () => {
     finally { window.dispatchEvent(new CustomEvent('toeic-app-ready')); }
 })();
 
-// ====== Google 試算表一鍵匯入邏輯 (直接綁定版) ======
-// 移除 DOMContentLoaded 包裝，因為 module 載入時 DOM 已經準備好了
+// ====== Google 試算表一鍵匯入邏輯 (支援 SRS 跨平台進度同步版) ======
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
         // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
-        const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
+        const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec】"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;
-        btnImport.innerText = "讀取試算表中，請稍候...";
+        btnImport.innerText = "同步最新進度中...";
 
         try {
-            // 1. 從 GAS 抓取資料
             const response = await fetch(gasUrl);
             const data = await response.json();
 
             if (!Array.isArray(data)) throw new Error("試算表回傳格式錯誤");
 
-            // 2. 取得目前 App 內的單字，避免重複匯入
-            const existingWords = await DB.getSavedWords();
-            const existingIds = new Set(existingWords.map(w => w.en.toLowerCase()));
             let importCount = 0;
+            let updateCount = 0;
 
-            // 3. 逐筆處理並寫入本地資料庫
             for (const item of data) {
                 if (!item.word) continue;
                 
                 const wordId = String(item.word).trim().toLowerCase();
-                if (existingIds.has(wordId)) continue; // 若已存在則跳過
-
+                
                 const payload = {
                     id: wordId,
                     en: String(item.word).trim(),
@@ -1000,20 +994,36 @@ if (btnImport) {
                     col: item.col || '',
                     phrase: item.phrase || '',
                     createdAt: Date.now(),
-                    nextReview: Date.now(),
-                    level: 0
+                    // 關鍵：不再強制設為 0，而是繼承雲端的進度
+                    level: item.level !== undefined ? item.level : 0,
+                    nextReview: item.nextReview !== undefined ? item.nextReview : Date.now()
                 };
                 
-                await DB.addSavedWord(payload);
-                importCount++;
+                // 檢查單字是否已存在本地端
+                const existing = await DB.getSavedWord(wordId);
+                
+                if (existing) {
+                    // 若存在，強制用雲端的進度覆寫本地端，達成各裝置一致
+                    existing.level = payload.level;
+                    existing.nextReview = payload.nextReview;
+                    // 同步其他可能修改的欄位
+                    existing.zh = payload.zh;
+                    existing.cat = payload.cat;
+                    await DB.addSavedWord(existing); 
+                    updateCount++;
+                } else {
+                    // 若不存在，以新單字加入
+                    await DB.addSavedWord(payload);
+                    importCount++;
+                }
             }
             
-            alert(`匯入成功！共新增了 ${importCount} 個單字到 App 中。`);
+            alert(`同步完成！\n新增了 ${importCount} 個單字\n更新了 ${updateCount} 個單字的 SRS 進度。`);
             location.reload();
             
         } catch (error) {
             console.error(error);
-            alert("匯入失敗，請檢查網址或試算表權限：" + error.message);
+            alert("同步失敗：" + error.message);
         } finally {
             btnImport.disabled = false;
             btnImport.innerHTML = originalText;
