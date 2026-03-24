@@ -16,8 +16,8 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-// 修改處：新增自動重試機制的 fetch 函數
-async function fetchJsonFromPrompt(model, prompt, retries = 2) {
+// 修改處：帶有「畫面倒數」的高階自動重試機制
+async function fetchJsonFromPrompt(model, prompt, retries = 3) {
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
             method: 'POST',
@@ -28,13 +28,33 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
             })
         });
 
-        // 攔截 429 API 頻率限制錯誤
         if (response.status === 429) {
             if (i === retries - 1) {
-                throw new Error("免費版 API 請求太頻繁（每分鐘上限 15 次），請稍等 15 秒後再重新查詢。");
+                throw new Error("一分鐘的免費額度已徹底用盡。請放下手機，讓眼睛休息 1 分鐘後再繼續查單字喔！");
             }
-            console.warn("觸發 API 頻率限制，自動等待 12 秒後重試...");
-            await new Promise(resolve => setTimeout(resolve, 12000));
+            
+            // 動態更新 UI，讓使用者知道系統正在等待
+            const resultEl = document.getElementById('vocabLookupResult');
+            let waitSeconds = 15; 
+            
+            if (resultEl) {
+                resultEl.innerHTML = `<div class="vocab-lookup-empty" style="color:#d97706; line-height: 1.6;">⚠️ API 請求頻繁，系統已啟動防護<br>正在自動排隊中，請勿關閉視窗<br>倒數 <span id="retryCountDown" style="font-weight:bold; font-size:18px;">${waitSeconds}</span> 秒後重試...</div>`;
+                
+                // 啟動畫面倒數計時器
+                const interval = setInterval(() => {
+                    waitSeconds--;
+                    const cdEl = document.getElementById('retryCountDown');
+                    if (cdEl) cdEl.innerText = waitSeconds;
+                    if (waitSeconds <= 0) clearInterval(interval);
+                }, 1000);
+            }
+
+            // 強制背景等待 15 秒
+            await new Promise(resolve => setTimeout(resolve, 15000));
+            
+            if (resultEl) {
+                resultEl.innerHTML = `<div class="vocab-lookup-empty">🔄 第 ${i + 2} 次重新發送請求中...</div>`;
+            }
             continue;
         }
 
@@ -253,7 +273,6 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-// 修改處：為語音請求也加上簡單的防護與友善提示
 export async function fetchGeminiTTS(text, voiceName) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
