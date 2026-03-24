@@ -16,17 +16,31 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-async function fetchJsonFromPrompt(model, prompt) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        })
-    });
-    const data = await response.json();
-    return parseJsonCandidateText(ensureCandidateText(data));
+// 修改處：新增自動重試機制的 fetch 函數
+async function fetchJsonFromPrompt(model, prompt, retries = 2) {
+    for (let i = 0; i < retries; i++) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+            })
+        });
+
+        // 攔截 429 API 頻率限制錯誤
+        if (response.status === 429) {
+            if (i === retries - 1) {
+                throw new Error("免費版 API 請求太頻繁（每分鐘上限 15 次），請稍等 15 秒後再重新查詢。");
+            }
+            console.warn("觸發 API 頻率限制，自動等待 12 秒後重試...");
+            await new Promise(resolve => setTimeout(resolve, 12000));
+            continue;
+        }
+
+        const data = await response.json();
+        return parseJsonCandidateText(ensureCandidateText(data));
+    }
 }
 
 export async function fetchGeminiText(score, customTopic) {
@@ -36,7 +50,6 @@ export async function fetchGeminiText(score, customTopic) {
         ? `about "${customTopic}" suitable for this level.`
         : `about one random TOEIC-friendly scenario from this range: office communication, meetings, email updates, travel arrangements, customer service, logistics and shipping, human resources, marketing campaigns, product launches, scheduling conflicts, workplace problem-solving, announcements, and professional daily-life errands.`;
     
-    // 修改處：在 vocabulary 陣列的 JSON 結構中，強制新增 category 欄位
     const prompt = `
         You are a strict TOEIC tutor. Target Score: ${score}.
         Task: Generate a SHORT reading comprehension passage (approx 60-80 words, 30 seconds reading time) ${topicLine}
@@ -57,7 +70,6 @@ export async function fetchWordDetails(word) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    // 修改處：在字典查詢的 JSON 結構中，強制新增 category 欄位
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence"}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
@@ -241,11 +253,17 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
+// 修改處：為語音請求也加上簡單的防護與友善提示
 export async function fetchGeminiTTS(text, voiceName) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } })
     });
+    
+    if (response.status === 429) {
+        throw new Error("語音功能請求太頻繁，請稍等幾秒後再點擊播放。");
+    }
+
     const data = await response.json();
     if (!response.ok || data?.error) {
         const message = data?.error?.message || 'TTS failed';
