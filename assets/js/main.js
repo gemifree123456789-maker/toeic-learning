@@ -1020,3 +1020,42 @@ if (btnImport) {
         }
     });
 }
+// ====== Google 帳號 UI 狀態永久保存器 ======
+document.addEventListener('DOMContentLoaded', () => {
+    const authArea = document.getElementById('cloudAuthArea');
+    const userArea = document.getElementById('cloudUserArea');
+    const avatar = document.getElementById('cloudAvatar');
+    const userName = document.getElementById('cloudUserName');
+    const userEmail = document.getElementById('cloudUserEmail');
+
+    // 1. 頁面載入時，從 LocalStorage 讀取並還原畫面
+    const savedProfile = localStorage.getItem('google_saved_profile');
+    if (savedProfile && authArea && userArea) {
+        try {
+            const profile = JSON.parse(savedProfile);
+            authArea.classList.add('hidden');
+            userArea.classList.remove('hidden');
+            if (avatar) avatar.innerText = profile.avatar;
+            if (userName) userName.innerText = profile.name;
+            if (userEmail) userEmail.innerText = profile.email;
+        } catch (e) {}
+    }
+
+    // 2. 監聽畫面變化，當使用者手動登入成功時，自動儲存資料
+    if (userArea) {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                // 當登入區域顯示，且抓到正確的使用者名稱時執行儲存
+                if (!userArea.classList.contains('hidden') && userName && userName.innerText !== 'User') {
+                    const profileToSave = {
+                        avatar: avatar ? avatar.innerText : 'G',
+                        name: userName.innerText,
+                        email: userEmail ? userEmail.innerText : ''
+                    };
+                    localStorage.setItem('google_saved_profile', JSON.stringify(profileToSave));
+                }
+            });
+        });
+        observer.observe(userArea, { attributes: true, attributeFilter: ['class'] });
+    }
+});
