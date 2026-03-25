@@ -14,7 +14,6 @@ let _lookupResult = null;
    同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
-    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
     const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
     
     const payload = {
@@ -73,7 +72,7 @@ export function addLongPressListener(element, wordText) {
     element.oncontextmenu = (e) => { e.preventDefault(); return false; };
 }
 
-/* Word Modal (長按單字時彈出的視窗) */
+/* Word Modal */
 function showWordModal(word) {
     const modal = document.getElementById('wordModal');
     const actionArea = document.getElementById('wmActionArea');
@@ -95,7 +94,6 @@ function showWordModal(word) {
         document.getElementById('btnWordAudio').onclick = () => speakText(word);
         actionArea.innerHTML = '';
 
-        // 修改處 1：清除舊的衍生字區塊
         let oldDeriv = document.getElementById('wmDeriv');
         if (oldDeriv) oldDeriv.remove();
 
@@ -112,7 +110,6 @@ function showWordModal(word) {
 
             document.getElementById('wmDef').innerText = vocabItem.def || '';
             
-            // 修改處 2：如果資料庫裡有衍生字，就動態插入一個精美的提示框
             const derivText = vocabItem.derivatives || vocabItem.deriv;
             if (derivText && derivText.trim() !== '') {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>`);
@@ -155,7 +152,6 @@ function showWordModal(word) {
 
                     document.getElementById('wmDef').innerText = info.def;
                     
-                    // 修改處 3：AI 剛查出來時，也立即顯示衍生字
                     if (info.derivatives && info.derivatives.trim() !== '') {
                         document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${info.derivatives}</div>`);
                     }
@@ -198,7 +194,6 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
-// 修改處 4：確保新查的衍生字會被存進資料庫 (新增 deriv 欄位)
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.word || word);
     return {
@@ -305,7 +300,6 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
-    // 修改處 5：在查單字面板也渲染出衍生字區塊
     const derivText = item.derivatives || item.deriv;
     const derivHtml = (derivText && derivText.trim() !== '') 
         ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>` 
@@ -375,7 +369,6 @@ export async function handleLookupSearch() {
         renderLookupMessage(t('loadingGenerating'));
         const info = await fetchWordDetails(query);
         
-        // 修改處 6：承接 API 回傳的衍生字資訊
         _lookupResult = {
             word: info.word || query,
             pos: info.pos || '',
@@ -396,14 +389,13 @@ export async function handleLookupSearch() {
     }
 }
 
-// 全局事件代理 (Event Delegation)
 document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') {
         renderVocabTab();
     }
 });
 
-/* Vocabulary Tab */
+/* ====== Vocabulary Tab (摺疊展開升級版) ====== */
 export async function renderVocabTab() {
     let words = await DB.getSavedWords();
     
@@ -477,20 +469,75 @@ export async function renderVocabTab() {
         return;
     }
 
+    // 🚀 核心渲染迴圈：加上摺疊區塊與點擊監聽
     displayWords.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
-        const card = document.createElement('div'); card.className = 'saved-word-card';
+        const card = document.createElement('div'); 
+        card.className = 'saved-word-card';
+        card.style.cursor = 'pointer'; // 滑鼠游標變成手指，提示可點擊
+
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
-        card.innerHTML = `<div class="saved-word-info"><div class="saved-word-top"><span class="saved-word-en">${displayEn}</span>${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}<span class="srs-badge srs-badge-${w.level}">Lv.${w.level}</span></div><div class="saved-word-zh">${w.zh}</div><div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div></div><div class="saved-word-actions"><button class="saved-word-speak">${ICONS.speaker}</button><button class="saved-word-delete">${ICONS.close}</button></div>`;
-        card.querySelector('.saved-word-speak').onclick = () => speakText(displayEn);
-        card.querySelector('.saved-word-delete').onclick = async () => {
+
+        // 1. 準備摺疊區塊的 HTML (如果資料庫裡有存這三項，才組裝起來)
+        const derivHtml = (w.deriv && w.deriv.trim() !== '') ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4;">💡 <b>衍生字：</b><br>${w.deriv}</div>` : '';
+        const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
+        const exZhHtml = w.ex_zh ? `<div style="font-size:12px; color:#6b7280;">${w.ex_zh}</div>` : '';
+        
+        // 判斷這張卡片是否有「額外資訊」可以展開
+        const hasExtraInfo = derivHtml || exHtml || exZhHtml;
+        
+        // 將額外資訊包進一個預設隱藏 (display:none) 的區塊裡
+        const expandedArea = hasExtraInfo 
+            ? `<div class="vocab-card-expanded" style="display:none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; width: 100%;">
+                 ${derivHtml}${exHtml}${exZhHtml}
+               </div>` 
+            : '';
+
+        // 2. 組裝整張卡片
+        card.innerHTML = `
+            <div class="saved-word-info" style="width: 100%;">
+                <div class="saved-word-top">
+                    <span class="saved-word-en">${displayEn}</span>
+                    ${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}
+                    <span class="srs-badge srs-badge-${w.level}">Lv.${w.level}</span>
+                </div>
+                <div class="saved-word-zh">${w.zh}</div>
+                <div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div>
+                ${expandedArea}
+            </div>
+            <div class="saved-word-actions">
+                <button class="saved-word-speak">${ICONS.speaker}</button>
+                <button class="saved-word-delete">${ICONS.close}</button>
+            </div>
+        `;
+
+        // 3. 攔截按鈕點擊：防止按發音時，卡片跟著亂展開
+        card.querySelector('.saved-word-speak').onclick = (e) => {
+            e.stopPropagation(); // 阻止事件向上冒泡
+            speakText(displayEn);
+        };
+
+        card.querySelector('.saved-word-delete').onclick = async (e) => {
+            e.stopPropagation(); // 阻止事件向上冒泡
             if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) {
                 await removeWordFromNotebook(w.id);
                 renderVocabTab();
             }
         };
-        // 長按呼叫 Modal
+
+        // 4. 綁定卡片的「點擊展開/收合」事件
+        if (hasExtraInfo) {
+            card.onclick = () => {
+                const expArea = card.querySelector('.vocab-card-expanded');
+                if (expArea) {
+                    // 切換顯示狀態
+                    expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
+                }
+            };
+        }
+
+        // 5. 保留長按呼叫 Modal (如果需要更完整的資訊或重新發音)
         addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
         listEl.appendChild(card);
     });
