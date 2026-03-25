@@ -16,7 +16,7 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-// 修改處：帶有「畫面倒數」的高階自動重試機制
+// 帶有「畫面倒數」的高階自動重試機制
 async function fetchJsonFromPrompt(model, prompt, retries = 3) {
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
@@ -33,14 +33,12 @@ async function fetchJsonFromPrompt(model, prompt, retries = 3) {
                 throw new Error("一分鐘的免費額度已徹底用盡。請放下手機，讓眼睛休息 1 分鐘後再繼續查單字喔！");
             }
             
-            // 動態更新 UI，讓使用者知道系統正在等待
             const resultEl = document.getElementById('vocabLookupResult');
             let waitSeconds = 15; 
             
             if (resultEl) {
                 resultEl.innerHTML = `<div class="vocab-lookup-empty" style="color:#d97706; line-height: 1.6;">⚠️ API 請求頻繁，系統已啟動防護<br>正在自動排隊中，請勿關閉視窗<br>倒數 <span id="retryCountDown" style="font-weight:bold; font-size:18px;">${waitSeconds}</span> 秒後重試...</div>`;
                 
-                // 啟動畫面倒數計時器
                 const interval = setInterval(() => {
                     waitSeconds--;
                     const cdEl = document.getElementById('retryCountDown');
@@ -49,7 +47,6 @@ async function fetchJsonFromPrompt(model, prompt, retries = 3) {
                 }, 1000);
             }
 
-            // 強制背景等待 15 秒
             await new Promise(resolve => setTimeout(resolve, 15000));
             
             if (resultEl) {
@@ -90,7 +87,8 @@ export async function fetchWordDetails(word) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence"}`;
+    // 修改處：在 Prompt 中新增 derivatives 衍生字要求
+    const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string."}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     await DB.setWord(word, result);

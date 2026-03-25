@@ -14,7 +14,7 @@ let _lookupResult = null;
    同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
-    // 請將下方網址替換為您的 Google Apps Script 部署網址
+    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
     const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
     
     const payload = {
@@ -40,7 +40,6 @@ async function syncToGoogleSheet(item) {
         }).catch(e => console.error("Sheet Sync Error:", e));
     } catch(err) {}
 }
-
 
 export function setSrsTrigger(fn) { _startSrsReview = fn; }
 export function setVocabSubtab(tab) {
@@ -74,7 +73,7 @@ export function addLongPressListener(element, wordText) {
     element.oncontextmenu = (e) => { e.preventDefault(); return false; };
 }
 
-/* Word Modal */
+/* Word Modal (長按單字時彈出的視窗) */
 function showWordModal(word) {
     const modal = document.getElementById('wordModal');
     const actionArea = document.getElementById('wmActionArea');
@@ -89,12 +88,16 @@ function showWordModal(word) {
         }
         if (!vocabItem) {
             const saved = await DB.getSavedWord(normalizeWordId(word));
-            if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, category: saved.cat, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh };
+            if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, category: saved.cat, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh, derivatives: saved.deriv || '' };
         }
 
         document.getElementById('wmWord').innerText = word;
         document.getElementById('btnWordAudio').onclick = () => speakText(word);
         actionArea.innerHTML = '';
+
+        // 修改處 1：清除舊的衍生字區塊
+        let oldDeriv = document.getElementById('wmDeriv');
+        if (oldDeriv) oldDeriv.remove();
 
         if (vocabItem) {
             await backfillSavedWordExample(word, vocabItem);
@@ -108,6 +111,13 @@ function showWordModal(word) {
             }
 
             document.getElementById('wmDef').innerText = vocabItem.def || '';
+            
+            // 修改處 2：如果資料庫裡有衍生字，就動態插入一個精美的提示框
+            const derivText = vocabItem.derivatives || vocabItem.deriv;
+            if (derivText && derivText.trim() !== '') {
+                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>`);
+            }
+
             if (vocabItem.ex) {
                 document.getElementById('wmExText').innerText = vocabItem.ex;
                 document.getElementById('wmExSpeakBtn').onclick = () => speakText(vocabItem.ex);
@@ -144,6 +154,12 @@ function showWordModal(word) {
                     }
 
                     document.getElementById('wmDef').innerText = info.def;
+                    
+                    // 修改處 3：AI 剛查出來時，也立即顯示衍生字
+                    if (info.derivatives && info.derivatives.trim() !== '') {
+                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${info.derivatives}</div>`);
+                    }
+
                     document.getElementById('wmExText').innerText = info.ex;
                     document.getElementById('wmExSpeakBtn').onclick = () => speakText(info.ex);
                     document.getElementById('wmEx').classList.remove('hidden');
@@ -182,6 +198,7 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
+// 修改處 4：確保新查的衍生字會被存進資料庫 (新增 deriv 欄位)
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.word || word);
     return {
@@ -195,6 +212,7 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
         ex_zh: vocabItem.ex_zh || '',
         col: vocabItem.col || '',
         phrase: vocabItem.phrase || '',
+        deriv: vocabItem.derivatives || vocabItem.deriv || '',
         createdAt: Date.now(),
         nextReview: getNextReviewTime(0),
         level: 0
@@ -287,6 +305,12 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
+    // 修改處 5：在查單字面板也渲染出衍生字區塊
+    const derivText = item.derivatives || item.deriv;
+    const derivHtml = (derivText && derivText.trim() !== '') 
+        ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>` 
+        : '';
+
     card.innerHTML = `
         <div class="saved-word-top">
             <span class="saved-word-en">${item.word || ''}</span>
@@ -298,6 +322,7 @@ function renderLookupResultCard() {
             ${item.category ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${item.category}</span>` : ''}
         </div>
         <div class="saved-word-zh">${item.def || ''}</div>
+        ${derivHtml}
         ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
         <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
@@ -350,6 +375,7 @@ export async function handleLookupSearch() {
         renderLookupMessage(t('loadingGenerating'));
         const info = await fetchWordDetails(query);
         
+        // 修改處 6：承接 API 回傳的衍生字資訊
         _lookupResult = {
             word: info.word || query,
             pos: info.pos || '',
@@ -357,7 +383,8 @@ export async function handleLookupSearch() {
             category: info.category || 'Other',
             def: info.def || '',
             ex: info.ex || '',
-            ex_zh: info.ex_zh || ''
+            ex_zh: info.ex_zh || '',
+            derivatives: info.derivatives || ''
         };
         await backfillSavedWordExample(_lookupResult.word, _lookupResult);
         await renderVocabTab();
@@ -369,19 +396,17 @@ export async function handleLookupSearch() {
     }
 }
 
-// ====== 🚀 終極修復：全局事件代理 (Event Delegation) ======
-// 不管網頁何時載入，只要 document 監聽到 posFilterSelect 的變更，就強制觸發！
+// 全局事件代理 (Event Delegation)
 document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') {
         renderVocabTab();
     }
 });
 
-/* Vocabulary Tab (加入篩選與自動修復邏輯) */
+/* Vocabulary Tab */
 export async function renderVocabTab() {
     let words = await DB.getSavedWords();
     
-    // 【自動修復機制】攔截舊資料的 Lv.null 或 undefined
     for (let w of words) {
         if (w.level == null || w.level === undefined || isNaN(w.level)) {
             w.level = 0;
@@ -390,16 +415,13 @@ export async function renderVocabTab() {
         }
     }
 
-    // 取得當前的篩選條件
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    // 取得待複習的單字數量
     const dueWords = words.filter(w => w.nextReview <= Date.now());
     const entryEl = document.getElementById('srsReviewEntry');
     entryEl.innerHTML = '';
 
-    // 渲染上方 SRS 測驗區塊
     if (words.length < SRS_MIN_WORDS) {
         entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsNeedMinimum', { min: SRS_MIN_WORDS, current: words.length })}</p></div>`;
     } else if (dueWords.length < SRS_MIN_WORDS) {
@@ -434,21 +456,17 @@ export async function renderVocabTab() {
     const listEl = document.getElementById('savedWordsList');
     listEl.innerHTML = '';
     
-    // 【篩選核心邏輯】：精準匹配詞性，避免 'v' 去配到 'adv'
     let displayWords = words;
     if (filterValue !== 'all') {
         displayWords = words.filter(w => {
             const rawPos = String(w.pos || '').toLowerCase();
             if (filterValue === 'other') {
-                // 如果是「其他」，排除所有主流詞性 (帶有小數點的標準格式)
                 return !['n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.'].some(p => rawPos.includes(p));
             }
-            // 精準匹配：例如選了 'v'，就必須包含 'v.' 或是精準等於 'v' 或包含 'v,'
             return rawPos.includes(filterValue + '.') || rawPos === filterValue || rawPos.includes(filterValue + ',');
         });
     }
 
-    // UX 優化：讓單字本右上角的總數，顯示「篩選後的結果數量」
     document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: displayWords.length });
 
     if (displayWords.length === 0) {
@@ -459,7 +477,6 @@ export async function renderVocabTab() {
         return;
     }
 
-    // 畫出符合條件的單字
     displayWords.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
         const card = document.createElement('div'); card.className = 'saved-word-card';
         const isOverdue = w.nextReview <= Date.now();
@@ -473,6 +490,8 @@ export async function renderVocabTab() {
                 renderVocabTab();
             }
         };
+        // 長按呼叫 Modal
+        addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
         listEl.appendChild(card);
     });
     
