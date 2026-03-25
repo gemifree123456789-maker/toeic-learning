@@ -389,8 +389,69 @@ export async function handleLookupSearch() {
     }
 }
 
+// ====== 🚀 全局事件代理 (Event Delegation) ======
+
+// 1. 處理篩選器變更
 document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') {
+        renderVocabTab();
+    }
+});
+
+// 2. 處理「批次升級舊單字」按鈕點擊
+document.addEventListener('click', async (event) => {
+    const btn = event.target.closest('#btnBatchUpgradeDeriv');
+    if (btn) {
+        if (btn.disabled) return;
+        
+        // 從資料庫抓出所有單字，過濾出沒有衍生字的目標
+        let words = await DB.getSavedWords();
+        let targets = words.filter(w => !w.deriv || w.deriv.trim() === '');
+        
+        if (targets.length === 0) {
+            alert('🎉 太棒了！所有的舊單字都已經補齊衍生字囉！');
+            return;
+        }
+
+        // 計算所需時間 (每單字 5.5 秒)
+        const minutes = Math.ceil((targets.length * 5.5) / 60);
+        const confirmMsg = `發現 ${targets.length} 個需要升級的舊單字。\n\n為了保護您的免費 API 額度（每分鐘15次），系統將以「每 5.5 秒處理一個」的安全節奏在背景執行。\n預計需要 ${minutes} 分鐘。\n\n執行期間請保持網頁開啟，確定要開始升級嗎？`;
+        if (!confirm(confirmMsg)) return;
+
+        btn.disabled = true;
+        let successCount = 0;
+
+        // 開始批次處理迴圈
+        for (let i = 0; i < targets.length; i++) {
+            const w = targets[i];
+            btn.innerHTML = `⏳ 升級中 (${i + 1}/${targets.length})...`;
+            
+            try {
+                // 關鍵參數 1：清空這個單字的舊快取，強迫系統重新呼叫 Gemini API
+                await DB.setWord(w.en, null);
+                
+                // 重新查詢單字，這次 API 會有 derivatives 欄位
+                const info = await fetchWordDetails(w.en);
+                
+                // 若成功取得衍生字，存回資料庫
+                if (info.derivatives && info.derivatives.trim() !== '') {
+                    w.deriv = info.derivatives;
+                    await DB.addSavedWord(w);
+                    successCount++;
+                }
+            } catch (e) {
+                console.error('單字升級失敗:', w.en, e);
+            }
+
+            // 關鍵參數 2：強制休眠 5.5 秒，完美避開 Google API 限制
+            if (i < targets.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 5500));
+            }
+        }
+
+        alert(`✅ 升級完成！成功補齊了 ${successCount} 個單字的衍生字。`);
+        btn.innerHTML = `🚀 升級舊單字`;
+        btn.disabled = false;
         renderVocabTab();
     }
 });
@@ -469,32 +530,27 @@ export async function renderVocabTab() {
         return;
     }
 
-    // 🚀 核心渲染迴圈：加上摺疊區塊與點擊監聽
     displayWords.sort((a, b) => a.level - b.level || a.nextReview - b.nextReview).forEach(w => {
         const card = document.createElement('div'); 
         card.className = 'saved-word-card';
-        card.style.cursor = 'pointer'; // 滑鼠游標變成手指，提示可點擊
+        card.style.cursor = 'pointer'; 
 
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
 
-        // 1. 準備摺疊區塊的 HTML (如果資料庫裡有存這三項，才組裝起來)
         const derivHtml = (w.deriv && w.deriv.trim() !== '') ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4;">💡 <b>衍生字：</b><br>${w.deriv}</div>` : '';
         const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
         const exZhHtml = w.ex_zh ? `<div style="font-size:12px; color:#6b7280;">${w.ex_zh}</div>` : '';
         
-        // 判斷這張卡片是否有「額外資訊」可以展開
         const hasExtraInfo = derivHtml || exHtml || exZhHtml;
         
-        // 將額外資訊包進一個預設隱藏 (display:none) 的區塊裡
         const expandedArea = hasExtraInfo 
             ? `<div class="vocab-card-expanded" style="display:none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; width: 100%;">
                  ${derivHtml}${exHtml}${exZhHtml}
                </div>` 
             : '';
 
-        // 2. 組裝整張卡片
         card.innerHTML = `
             <div class="saved-word-info" style="width: 100%;">
                 <div class="saved-word-top">
@@ -512,32 +568,28 @@ export async function renderVocabTab() {
             </div>
         `;
 
-        // 3. 攔截按鈕點擊：防止按發音時，卡片跟著亂展開
         card.querySelector('.saved-word-speak').onclick = (e) => {
-            e.stopPropagation(); // 阻止事件向上冒泡
+            e.stopPropagation(); 
             speakText(displayEn);
         };
 
         card.querySelector('.saved-word-delete').onclick = async (e) => {
-            e.stopPropagation(); // 阻止事件向上冒泡
+            e.stopPropagation(); 
             if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) {
                 await removeWordFromNotebook(w.id);
                 renderVocabTab();
             }
         };
 
-        // 4. 綁定卡片的「點擊展開/收合」事件
         if (hasExtraInfo) {
             card.onclick = () => {
                 const expArea = card.querySelector('.vocab-card-expanded');
                 if (expArea) {
-                    // 切換顯示狀態
                     expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
                 }
             };
         }
 
-        // 5. 保留長按呼叫 Modal (如果需要更完整的資訊或重新發音)
         addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
         listEl.appendChild(card);
     });
