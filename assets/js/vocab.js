@@ -409,14 +409,14 @@ document.addEventListener('change', (event) => {
     }
 });
 
-// 🚀 全自動清洗機 (高鐵模式 + 反向回寫)
+// 🚀 真・全自動清洗機 (平行運算多線程版 + 反向回寫)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
         
         let words = await DB.getSavedWords();
-        // 過濾出缺少衍生字，或是缺少音標的單字 (手動輸入常缺少音標)
+        // 過濾出缺少衍生字，或是缺少音標的單字
         let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
         
         if (targets.length === 0) {
@@ -424,47 +424,52 @@ document.addEventListener('click', async (event) => {
             return;
         }
 
-        const minutes = Math.ceil((targets.length * 0.1) / 60);
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「自動清洗與回寫」機制，統一詞性(POS)、音標(KK)，並補齊衍生字。\n完成後將自動覆寫至您的 Google 試算表。\n預計僅需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
+        // 預估時間改為除以 10 (因為一次處理 10 個)
+        const minutes = Math.ceil((targets.length * 3 / 10) / 60);
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「真・平行運算」機制，每次同時處理 10 個單字！\n完成後將自動覆寫至您的 Google 試算表。\n預計約需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
 
-        for (let i = 0; i < targets.length; i++) {
-            const w = targets[i];
-            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
-            
-            try {
-                await DB.setWord(w.en, null);
-                const info = await fetchWordDetails(w.en);
-                
-                // 核心覆寫邏輯：強制用 Gemini 的標準格式覆蓋舊有的凌亂資料
-                w.pos = info.pos || w.pos;
-                w.ipa = info.ipa || w.ipa;
-                w.cat = info.category || w.cat;
-                w.zh = info.def || w.zh;
-                w.ex = info.ex || w.ex;
-                w.ex_zh = info.ex_zh || w.ex_zh;
-                w.deriv = info.derivatives || w.deriv || '';
-                
-                // 儲存至本地資料庫
-                await DB.addSavedWord(w);
-                
-                // 發送背景封包，覆寫 Google 試算表對應的欄位
-                syncFullUpdateToCloud(w);
-                
-                successCount++;
-            } catch (e) {
-                console.error('單字升級失敗:', w.en, e);
-            }
+        // 核心參數：每次同時處理的數量
+        const BATCH_SIZE = 10;
 
-            if (i < targets.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        // 迴圈改為「批次跳躍」
+        for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+            // 切割出這一批要處理的 10 個單字
+            const batch = targets.slice(i, i + BATCH_SIZE);
+            const currentEnd = Math.min(i + BATCH_SIZE, targets.length);
+            btn.innerHTML = `🚀 平行清洗中 (${currentEnd}/${targets.length})...`;
+            
+            // 使用 Promise.all 讓這 10 個單字「同時」發送給 AI
+            await Promise.all(batch.map(async (w) => {
+                try {
+                    await DB.setWord(w.en, null);
+                    const info = await fetchWordDetails(w.en);
+                    
+                    w.pos = info.pos || w.pos;
+                    w.ipa = info.ipa || w.ipa;
+                    w.cat = info.category || w.cat;
+                    w.zh = info.def || w.zh;
+                    w.ex = info.ex || w.ex;
+                    w.ex_zh = info.ex_zh || w.ex_zh;
+                    w.deriv = info.derivatives || w.deriv || '';
+                    
+                    await DB.addSavedWord(w);
+                    syncFullUpdateToCloud(w); // 背景發送給 GAS
+                    
+                    successCount++;
+                } catch (e) {
+                    console.error('單字升級失敗:', w.en, e);
+                }
+            }));
+
+            // 批次與批次之間，稍作 0.3 秒休息，避免瀏覽器網路塞車
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
 
-        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
+        alert(`✅ 平行清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();
