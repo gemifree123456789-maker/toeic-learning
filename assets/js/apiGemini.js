@@ -81,13 +81,15 @@ export async function fetchGeminiText(score, customTopic) {
     return fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
 
-export async function fetchWordDetails(word) {
-    const cached = await DB.getWord(word);
-    if (cached) return cached;
+// 替換這整個函數，加入 forceFetch 參數以安全繞過舊資料
+export async function fetchWordDetails(word, forceFetch = false) {
+    if (!forceFetch) {
+        const cached = await DB.getWord(word);
+        if (cached) return cached;
+    }
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    // 修改處：在 Prompt 中新增 derivatives 衍生字要求
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string."}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);

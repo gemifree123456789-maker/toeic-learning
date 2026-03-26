@@ -409,7 +409,7 @@ document.addEventListener('change', (event) => {
     }
 });
 
-// 🚀 真・全自動清洗機 (平行運算多線程版 + 反向回寫)
+// 🚀 真・全自動清洗機 (穩定高鐵版 - 240 RPM)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -424,52 +424,45 @@ document.addEventListener('click', async (event) => {
             return;
         }
 
-        // 預估時間改為除以 10 (因為一次處理 10 個)
-        const minutes = Math.ceil((targets.length * 3 / 10) / 60);
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「真・平行運算」機制，每次同時處理 10 個單字！\n完成後將自動覆寫至您的 Google 試算表。\n預計約需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
+        // 精準預估時間 (每單字 0.25 秒)
+        const minutes = Math.ceil((targets.length * 0.25) / 60);
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n為了確保 Google 試算表不會漏接資料，系統將以「每秒 4 個單字」的最佳安全極速執行。\n預計約需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
 
-        // 核心參數：每次同時處理的數量
-        const BATCH_SIZE = 10;
-
-        // 迴圈改為「批次跳躍」
-        for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-            // 切割出這一批要處理的 10 個單字
-            const batch = targets.slice(i, i + BATCH_SIZE);
-            const currentEnd = Math.min(i + BATCH_SIZE, targets.length);
-            btn.innerHTML = `🚀 平行清洗中 (${currentEnd}/${targets.length})...`;
+        for (let i = 0; i < targets.length; i++) {
+            const w = targets[i];
+            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
             
-            // 使用 Promise.all 讓這 10 個單字「同時」發送給 AI
-            await Promise.all(batch.map(async (w) => {
-                try {
-                    await DB.setWord(w.en, null);
-                    const info = await fetchWordDetails(w.en);
-                    
-                    w.pos = info.pos || w.pos;
-                    w.ipa = info.ipa || w.ipa;
-                    w.cat = info.category || w.cat;
-                    w.zh = info.def || w.zh;
-                    w.ex = info.ex || w.ex;
-                    w.ex_zh = info.ex_zh || w.ex_zh;
-                    w.deriv = info.derivatives || w.deriv || '';
-                    
-                    await DB.addSavedWord(w);
-                    syncFullUpdateToCloud(w); // 背景發送給 GAS
-                    
-                    successCount++;
-                } catch (e) {
-                    console.error('單字升級失敗:', w.en, e);
-                }
-            }));
+            try {
+                // 核心修復：傳入 true 強迫繞過快取，絕不使用 DB.setWord 避免崩潰
+                const info = await fetchWordDetails(w.en, true);
+                
+                w.pos = info.pos || w.pos;
+                w.ipa = info.ipa || w.ipa;
+                w.cat = info.category || w.cat;
+                w.zh = info.def || w.zh;
+                w.ex = info.ex || w.ex;
+                w.ex_zh = info.ex_zh || w.ex_zh;
+                w.deriv = info.derivatives || w.deriv || '';
+                
+                await DB.addSavedWord(w);
+                syncFullUpdateToCloud(w); 
+                
+                successCount++;
+            } catch (e) {
+                console.error('單字升級失敗:', w.en, e);
+            }
 
-            // 批次與批次之間，稍作 0.3 秒休息，避免瀏覽器網路塞車
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // 完美避開 Google Sheets 300次/分鐘 速限的 250 毫秒穩定器
+            if (i < targets.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
         }
 
-        alert(`✅ 平行清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
+        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();
