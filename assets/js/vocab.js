@@ -10,12 +10,12 @@ let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
 
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
+
 /* =========================================
    同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
-    const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
-    
     const payload = {
         action: "add",
         data: {
@@ -28,16 +28,32 @@ async function syncToGoogleSheet(item) {
             exEn: item.ex || "",
             exZh: item.ex_zh || "",
             col: item.col || "",
-            phrase: item.phrase || ""
+            phrase: item.phrase || "",
+            deriv: item.deriv || ""
         }
     };
+    try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
+}
 
-    try {
-        fetch(gasUrl, {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        }).catch(e => console.error("Sheet Sync Error:", e));
-    } catch(err) {}
+/* =========================================
+   🚀 新增：全資料覆寫同步至 Google Sheets
+   ========================================= */
+async function syncFullUpdateToCloud(item) {
+    const payload = {
+        action: "update_all",
+        data: {
+            id: item.id,
+            word: item.en,
+            kk: item.ipa,
+            pos: item.pos,
+            cat: item.cat,
+            zh: item.zh,
+            exEn: item.ex,
+            exZh: item.ex_zh,
+            deriv: item.deriv
+        }
+    };
+    try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
 }
 
 export function setSrsTrigger(fn) { _startSrsReview = fn; }
@@ -47,7 +63,6 @@ export function setVocabSubtab(tab) {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
-/* Long Press */
 export function addLongPressListener(element, wordText) {
     let pressTimer;
     const start = (e) => {
@@ -72,7 +87,6 @@ export function addLongPressListener(element, wordText) {
     element.oncontextmenu = (e) => { e.preventDefault(); return false; };
 }
 
-/* Word Modal */
 function showWordModal(word) {
     const modal = document.getElementById('wordModal');
     const actionArea = document.getElementById('wmActionArea');
@@ -389,67 +403,68 @@ export async function handleLookupSearch() {
     }
 }
 
-// ====== 🚀 全局事件代理 (Event Delegation) ======
-
-// 1. 處理篩選器變更
 document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') {
         renderVocabTab();
     }
 });
 
-// 2. 處理「批次升級舊單字」按鈕點擊
+// 🚀 全自動清洗機 (高鐵模式 + 反向回寫)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
         
-        // 從資料庫抓出所有單字，過濾出沒有衍生字的目標
         let words = await DB.getSavedWords();
-        let targets = words.filter(w => !w.deriv || w.deriv.trim() === '');
+        // 過濾出缺少衍生字，或是缺少音標的單字 (手動輸入常缺少音標)
+        let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
         
         if (targets.length === 0) {
-            alert('🎉 太棒了！所有的舊單字都已經補齊衍生字囉！');
+            alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！');
             return;
         }
 
-        // 計算所需時間 (每單字 5.5 秒)
-        const minutes = Math.ceil((targets.length * 5.5) / 60);
-        const confirmMsg = `發現 ${targets.length} 個需要升級的舊單字。\n\n為了保護您的免費 API 額度（每分鐘15次），系統將以「每 5.5 秒處理一個」的安全節奏在背景執行。\n預計需要 ${minutes} 分鐘。\n\n執行期間請保持網頁開啟，確定要開始升級嗎？`;
+        const minutes = Math.ceil((targets.length * 0.1) / 60);
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「自動清洗與回寫」機制，統一詞性(POS)、音標(KK)，並補齊衍生字。\n完成後將自動覆寫至您的 Google 試算表。\n預計僅需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
 
-        // 開始批次處理迴圈
         for (let i = 0; i < targets.length; i++) {
             const w = targets[i];
-            btn.innerHTML = `⏳ 升級中 (${i + 1}/${targets.length})...`;
+            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
             
             try {
-                // 關鍵參數 1：清空這個單字的舊快取，強迫系統重新呼叫 Gemini API
                 await DB.setWord(w.en, null);
-                
-                // 重新查詢單字，這次 API 會有 derivatives 欄位
                 const info = await fetchWordDetails(w.en);
                 
-                // 若成功取得衍生字，存回資料庫
-                if (info.derivatives && info.derivatives.trim() !== '') {
-                    w.deriv = info.derivatives;
-                    await DB.addSavedWord(w);
-                    successCount++;
-                }
+                // 核心覆寫邏輯：強制用 Gemini 的標準格式覆蓋舊有的凌亂資料
+                w.pos = info.pos || w.pos;
+                w.ipa = info.ipa || w.ipa;
+                w.cat = info.category || w.cat;
+                w.zh = info.def || w.zh;
+                w.ex = info.ex || w.ex;
+                w.ex_zh = info.ex_zh || w.ex_zh;
+                w.deriv = info.derivatives || w.deriv || '';
+                
+                // 儲存至本地資料庫
+                await DB.addSavedWord(w);
+                
+                // 發送背景封包，覆寫 Google 試算表對應的欄位
+                syncFullUpdateToCloud(w);
+                
+                successCount++;
             } catch (e) {
                 console.error('單字升級失敗:', w.en, e);
             }
 
-            // 關鍵參數 2：強制休眠 5.5 秒，完美避開 Google API 限制
             if (i < targets.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 5500));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
 
-        alert(`✅ 升級完成！成功補齊了 ${successCount} 個單字的衍生字。`);
+        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();

@@ -993,8 +993,8 @@ if (btnImport) {
                     ex_zh: item.exZh || '',
                     col: item.col || '',
                     phrase: item.phrase || '',
+                    deriv: item.deriv || '', // <--- 新增這行，讓 App 匯入時能抓到 M 欄的衍生字
                     createdAt: Date.now(),
-                    // 關鍵：不再強制設為 0，而是繼承雲端的進度
                     level: item.level !== undefined ? item.level : 0,
                     nextReview: item.nextReview !== undefined ? item.nextReview : Date.now()
                 };
