@@ -409,7 +409,7 @@ document.addEventListener('change', (event) => {
     }
 });
 
-// 🚀 真・全自動清洗機 (自適應排檔引擎)
+// 🚀 真・全自動清洗機 (防死鎖自適應引擎)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -423,19 +423,16 @@ document.addEventListener('click', async (event) => {
             return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「智慧自適應引擎」：\n若您的 API 額度充足，將以極速執行；若遇限速，系統將自動降檔為安全速度，保證不當機、不漏字。\n\n確定要開始升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統已配備「防卡死保險絲」：\n若遇到 Google 伺服器持續限速，系統將自動降速；若同一單字失敗達 3 次將自動跳過，確保清洗流程順利跑完。\n\n確定要開始升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
-        
-        // 預設為高鐵速度 (0.25 秒)
-        let currentDelay = 250; 
+        let currentDelay = 250; // 預設高鐵速度
 
         for (let i = 0; i < targets.length; i++) {
             const w = targets[i];
-            // 動態顯示目前的排檔狀態
-            const speedStatus = currentDelay === 250 ? "⚡ 極速" : "🐢 穩健";
+            const speedStatus = currentDelay <= 250 ? "⚡ 極速" : "🐢 降檔";
             btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length}) [${speedStatus}]...`;
             
             try {
@@ -453,13 +450,23 @@ document.addEventListener('click', async (event) => {
                 syncFullUpdateToCloud(w); 
                 
                 successCount++;
+                
+                // 成功後，重置重試計數器，並恢復高鐵極速
+                w._retry = 0;
+                currentDelay = 250;
+
             } catch (e) {
-                // 如果撞到測速照相 (429)，自動降檔為免費版的安全間隔 (4.5 秒)
                 if (e.message === "HTTP_429" || String(e).includes("429")) {
-                    console.warn(`單字 ${w.en} 觸發限速，系統自動降檔至安全模式...`);
-                    currentDelay = 4500; 
-                    // 為了確保這個失敗的字能被處理到，我們稍微退回一步重跑
-                    i--; 
+                    w._retry = (w._retry || 0) + 1;
+                    
+                    if (w._retry <= 3) {
+                        console.warn(`單字 ${w.en} 觸發限速，降檔休息 6 秒並進行第 ${w._retry} 次重試...`);
+                        currentDelay = 6000; // 撞到限速，休息 6 秒讓額度恢復
+                        i--; // 退回一步重跑
+                    } else {
+                        console.error(`單字 ${w.en} 重試 3 次仍被擋，強制跳過，避免死鎖！`);
+                        currentDelay = 250; // 放棄此字，恢復原速準備跑下一個
+                    }
                 } else {
                     console.error('單字升級失敗:', w.en, e);
                 }
@@ -470,7 +477,7 @@ document.addEventListener('click', async (event) => {
             }
         }
 
-        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。`);
+        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。\n(若有跳過的單字，請過一段時間後再點擊一次按鈕即可補齊)`);
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();
