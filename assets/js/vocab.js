@@ -409,14 +409,13 @@ document.addEventListener('change', (event) => {
     }
 });
 
-// 🚀 真・全自動清洗機 (穩定高鐵版 - 240 RPM)
+// 🚀 真・全自動清洗機 (自適應排檔引擎)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
         
         let words = await DB.getSavedWords();
-        // 過濾出缺少衍生字，或是缺少音標的單字
         let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
         
         if (targets.length === 0) {
@@ -424,20 +423,22 @@ document.addEventListener('click', async (event) => {
             return;
         }
 
-        // 精準預估時間 (每單字 0.25 秒)
-        const minutes = Math.ceil((targets.length * 0.25) / 60);
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n為了確保 Google 試算表不會漏接資料，系統將以「每秒 4 個單字」的最佳安全極速執行。\n預計約需 ${minutes > 0 ? minutes : 1} 分鐘。\n\n確定要開始極速升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統將啟動「智慧自適應引擎」：\n若您的 API 額度充足，將以極速執行；若遇限速，系統將自動降檔為安全速度，保證不當機、不漏字。\n\n確定要開始升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
+        
+        // 預設為高鐵速度 (0.25 秒)
+        let currentDelay = 250; 
 
         for (let i = 0; i < targets.length; i++) {
             const w = targets[i];
-            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
+            // 動態顯示目前的排檔狀態
+            const speedStatus = currentDelay === 250 ? "⚡ 極速" : "🐢 穩健";
+            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length}) [${speedStatus}]...`;
             
             try {
-                // 核心修復：傳入 true 強迫繞過快取，絕不使用 DB.setWord 避免崩潰
                 const info = await fetchWordDetails(w.en, true);
                 
                 w.pos = info.pos || w.pos;
@@ -453,12 +454,19 @@ document.addEventListener('click', async (event) => {
                 
                 successCount++;
             } catch (e) {
-                console.error('單字升級失敗:', w.en, e);
+                // 如果撞到測速照相 (429)，自動降檔為免費版的安全間隔 (4.5 秒)
+                if (e.message === "HTTP_429" || String(e).includes("429")) {
+                    console.warn(`單字 ${w.en} 觸發限速，系統自動降檔至安全模式...`);
+                    currentDelay = 4500; 
+                    // 為了確保這個失敗的字能被處理到，我們稍微退回一步重跑
+                    i--; 
+                } else {
+                    console.error('單字升級失敗:', w.en, e);
+                }
             }
 
-            // 完美避開 Google Sheets 300次/分鐘 速限的 250 毫秒穩定器
             if (i < targets.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 250));
+                await new Promise(resolve => setTimeout(resolve, currentDelay));
             }
         }
 

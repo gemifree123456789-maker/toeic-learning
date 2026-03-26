@@ -16,8 +16,8 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-// 帶有「畫面倒數」的高階自動重試機制
-async function fetchJsonFromPrompt(model, prompt, retries = 3) {
+// 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
+async function fetchJsonFromPrompt(model, prompt, retries = 2) {
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
             method: 'POST',
@@ -30,28 +30,10 @@ async function fetchJsonFromPrompt(model, prompt, retries = 3) {
 
         if (response.status === 429) {
             if (i === retries - 1) {
-                throw new Error("一分鐘的免費額度已徹底用盡。請放下手機，讓眼睛休息 1 分鐘後再繼續查單字喔！");
+                throw new Error("HTTP_429"); // 快速拋出錯誤代碼給外層處理
             }
-            
-            const resultEl = document.getElementById('vocabLookupResult');
-            let waitSeconds = 15; 
-            
-            if (resultEl) {
-                resultEl.innerHTML = `<div class="vocab-lookup-empty" style="color:#d97706; line-height: 1.6;">⚠️ API 請求頻繁，系統已啟動防護<br>正在自動排隊中，請勿關閉視窗<br>倒數 <span id="retryCountDown" style="font-weight:bold; font-size:18px;">${waitSeconds}</span> 秒後重試...</div>`;
-                
-                const interval = setInterval(() => {
-                    waitSeconds--;
-                    const cdEl = document.getElementById('retryCountDown');
-                    if (cdEl) cdEl.innerText = waitSeconds;
-                    if (waitSeconds <= 0) clearInterval(interval);
-                }, 1000);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 15000));
-            
-            if (resultEl) {
-                resultEl.innerHTML = `<div class="vocab-lookup-empty">🔄 第 ${i + 2} 次重新發送請求中...</div>`;
-            }
+            // 極短暫退避：只等 2 秒就重試，不再傻等 15 秒
+            await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
         }
 
