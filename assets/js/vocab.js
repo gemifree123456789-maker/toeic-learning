@@ -9,6 +9,7 @@ import { t } from './i18n.js';
 let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
+let _filterLv0 = false; // 🌟 新增：全域狀態，記錄「待加強」按鈕是否被按下
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
@@ -18,9 +19,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2f
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
-    // 若已有換行符號 (手動排版)，直接保留
     if (tStr.includes('\n')) return tStr;
-    // 若為 AI 逗號分隔格式，自動斷行
     return tStr.replace(/\), ?/g, ')\n');
 }
 
@@ -133,7 +132,6 @@ function showWordModal(word) {
 
             document.getElementById('wmDef').innerText = vocabItem.def || '';
             
-            // 使用排版引擎與 CSS pre-wrap
             const derivText = formatDerivText(vocabItem.derivatives || vocabItem.deriv);
             if (derivText) {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`);
@@ -176,7 +174,6 @@ function showWordModal(word) {
 
                     document.getElementById('wmDef').innerText = info.def;
                     
-                    // 使用排版引擎與 CSS pre-wrap
                     const derivGenText = formatDerivText(info.derivatives);
                     if (derivGenText) {
                         document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivGenText}</div>`);
@@ -321,7 +318,6 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
-    // 使用排版引擎與 CSS pre-wrap
     const derivText = formatDerivText(item.derivatives || item.deriv);
     const derivHtml = derivText 
         ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` 
@@ -497,6 +493,42 @@ export async function renderVocabTab() {
 
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
+
+    // 🌟 動態植入「⭐ 待加強」篩選按鈕
+    if (filterSelect && !document.getElementById('btnFilterLv0')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnFilterLv0';
+        btn.innerHTML = '⭐ 待加強';
+        // 配合周圍按鈕的樣式設定，完美嵌入紅框位置
+        btn.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        
+        btn.onclick = () => {
+            _filterLv0 = !_filterLv0;
+            renderVocabTab(); // 按下後重新渲染列表
+        };
+        
+        // 插入在詞性選單的前面 (即畫面中間位置)
+        filterSelect.parentNode.insertBefore(btn, filterSelect);
+        
+        // 確保父容器排版為水平置中對齊
+        filterSelect.parentNode.style.display = 'flex';
+        filterSelect.parentNode.style.alignItems = 'center';
+    }
+
+    // 🌟 更新按鈕視覺狀態 (按下時變醒目的黃色)
+    const btnFilterLv0 = document.getElementById('btnFilterLv0');
+    if (btnFilterLv0) {
+        if (_filterLv0) {
+            btnFilterLv0.style.background = '#fef3c7';
+            btnFilterLv0.style.borderColor = '#fbbf24';
+            btnFilterLv0.style.color = '#b45309';
+        } else {
+            btnFilterLv0.style.background = '#fff';
+            btnFilterLv0.style.borderColor = '#e5e7eb';
+            btnFilterLv0.style.color = '#4b5563';
+        }
+    }
+
     const dueWords = words.filter(w => w.nextReview <= Date.now());
     const entryEl = document.getElementById('srsReviewEntry');
     entryEl.innerHTML = '';
@@ -534,8 +566,15 @@ export async function renderVocabTab() {
     listEl.innerHTML = '';
     
     let displayWords = words;
+    
+    // 🌟 執行「待加強 (Lv.0)」核心過濾邏輯
+    if (_filterLv0) {
+        // 只保留等級為 0 的單字 (包含剛匯入的新字，以及測驗後被你按下⭐標記不熟的單字)
+        displayWords = displayWords.filter(w => w.level === 0);
+    }
+
     if (filterValue !== 'all') {
-        displayWords = words.filter(w => {
+        displayWords = displayWords.filter(w => {
             const rawPos = String(w.pos || '').toLowerCase();
             if (filterValue === 'other') return !['n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.'].some(p => rawPos.includes(p));
             return rawPos.includes(filterValue + '.') || rawPos === filterValue || rawPos.includes(filterValue + ',');
@@ -545,8 +584,11 @@ export async function renderVocabTab() {
     document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: displayWords.length });
 
     if (displayWords.length === 0) {
-        const emptyMsg = filterValue === 'all' ? t('vocabEmpty') : '沒有找到符合此詞性的單字';
-        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' ? t('vocabEmptyHint') : '請試著切換其他分類或加入新單字'}</span></p>`;
+        let emptyMsg = t('vocabEmpty');
+        if (filterValue !== 'all' || _filterLv0) {
+            emptyMsg = '沒有找到符合條件的單字';
+        }
+        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' && !_filterLv0 ? t('vocabEmptyHint') : '請試著切換其他分類或取消篩選條件'}</span></p>`;
         renderVocabSubtab();
         if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
@@ -561,7 +603,6 @@ export async function renderVocabTab() {
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
 
-        // 使用排版引擎與 CSS pre-wrap
         const derivText = formatDerivText(w.deriv);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
         const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
