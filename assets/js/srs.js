@@ -10,6 +10,16 @@ export function setOnFinish(fn) { _onFinish = fn; }
 
 const srsState = { active: false, words: [], allWords: [], questions: [], currentQ: 0, results: {}, answered: false };
 
+/* =========================================
+   智慧排版引擎：處理衍生字的換行與逗號
+   ========================================= */
+function formatDerivText(text) {
+    let tStr = String(text || '').trim();
+    if (!tStr) return '';
+    if (tStr.includes('\n')) return tStr;
+    return tStr.replace(/\), ?/g, ')\n');
+}
+
 function toLowerWord(word) {
     return String(word || '').trim().toLowerCase();
 }
@@ -147,6 +157,8 @@ async function showSrsResults() {
     document.getElementById('srsPhaseBadge').textContent = t('srsResult');
     let totalCorrect = 0;
     const wordResults = [];
+    
+    // 計算成績與更新資料庫
     for (const word of srsState.words) {
         const r = srsState.results[word.id];
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
@@ -159,10 +171,13 @@ async function showSrsResults() {
         await DB.updateWordSRS(word.id, newLevel, newNext);
         wordResults.push({ word, oldLevel: word.level, newLevel, cc, nextDate: new Date(newNext).toLocaleDateString() });
     }
+    
     srsState.active = false;
     const total = srsState.words.length * 3;
     qArea.innerHTML = `<div class="srs-result-score">${totalCorrect}/${total}</div><div class="srs-result-label">${t('srsCorrectCount')}</div>`;
     oArea.innerHTML = '';
+    
+    // 渲染每一張單字成績卡
     wordResults.forEach(wr => {
         const diff = wr.newLevel - wr.oldLevel;
         let cls = 'same', txt = `Lv.${wr.oldLevel}`;
@@ -200,16 +215,20 @@ async function showSrsResults() {
 
         const meta = document.createElement('small');
         meta.className = 'srs-result-meta';
-        meta.textContent = `${wr.word.zh} · ${t('srsNextReview', { date: wr.nextDate })}`;
+        meta.innerHTML = `${wr.word.zh} <span class="review-date-meta">· ${t('srsNextReview', { date: wr.nextDate })}</span>`;
 
+        // 處理英文例句：保留欄位，若無資料則顯示提示
         const exRow = document.createElement('div');
         exRow.className = 'srs-result-ex-row';
-
+        const exText = wr.word.ex?.trim() || '';
+        
         const ex = document.createElement('div');
         ex.className = 'srs-result-ex';
-        const exText = wr.word.ex?.trim() || '';
-        ex.textContent = exText || t('srsNoExample');
+        ex.textContent = exText || '暫無英文例句';
+        if (!exText) ex.style.color = '#9ca3af'; // 沒資料時字體變淺灰色
+        exRow.appendChild(ex);
 
+        // 如果有英文例句，才產生喇叭按鈕
         if (exText) {
             const exSpeakBtn = document.createElement('button');
             exSpeakBtn.type = 'button';
@@ -219,26 +238,69 @@ async function showSrsResults() {
             exRow.appendChild(exSpeakBtn);
         }
 
+        // 處理中文例句：保留欄位，若無資料則顯示提示
+        const exZhText = wr.word.ex_zh?.trim() || '';
         const exZh = document.createElement('div');
         exZh.className = 'srs-result-ex-zh';
-        exZh.textContent = wr.word.ex_zh?.trim() || t('srsNoExampleZh');
+        exZh.textContent = exZhText || '(暫無中文翻譯)';
+        if (!exZhText) exZh.style.color = '#9ca3af'; // 沒資料時字體變淺灰色
+
+        // 處理衍生字：使用排版引擎與 CSS pre-wrap
+        const derivText = formatDerivText(wr.word.deriv || wr.word.derivatives);
+        const derivDiv = document.createElement('div');
+        if (derivText) {
+            derivDiv.style.cssText = 'font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-top:8px; line-height:1.4; white-space: pre-wrap;';
+            derivDiv.innerHTML = `💡 <b>衍生字：</b>\n${derivText}`;
+        }
 
         wordRow.appendChild(wordEl);
         if (posText) wordRow.appendChild(posEl);
         if (ipaText) wordRow.appendChild(ipaEl);
         wordRow.appendChild(speakBtn);
+        
         main.appendChild(wordRow);
         main.appendChild(meta);
-        exRow.prepend(ex);
-        main.appendChild(exRow);
-        main.appendChild(exZh);
+        main.appendChild(exRow); 
+        main.appendChild(exZh);  
+        if (derivText) main.appendChild(derivDiv);
+
+        // 狀態與星號按鈕區塊
+        const statusArea = document.createElement('div');
+        statusArea.style.display = 'flex';
+        statusArea.style.flexDirection = 'column';
+        statusArea.style.alignItems = 'flex-end';
+        statusArea.style.gap = '8px';
 
         const status = document.createElement('div');
         status.className = `srs-result-status ${cls}`;
         status.textContent = `${wr.cc}/3 ${txt}`;
 
+        // 🌟 新增：標記不熟按鈕 (一鍵降級至 Lv.0)
+        const starBtn = document.createElement('button');
+        starBtn.innerHTML = '⭐ 標記不熟';
+        starBtn.style.cssText = 'background:none; border:1px solid #d1d5db; color:#4b5563; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition: all 0.2s; white-space: nowrap;';
+        
+        starBtn.onclick = async () => {
+            const resetLevel = 0;
+            const resetNext = getNextReviewTime(resetLevel); // 設定為明天複習
+            
+            await DB.updateWordSRS(wr.word.id, resetLevel, resetNext);
+            
+            starBtn.innerHTML = '🌟 已降級';
+            starBtn.style.background = '#fef3c7';
+            starBtn.style.borderColor = '#fbbf24';
+            starBtn.style.color = '#b45309';
+            starBtn.disabled = true;
+            status.textContent = `${wr.cc}/3 Lv.${wr.oldLevel} → 0`;
+            status.className = 'srs-result-status down';
+            meta.innerHTML = `${wr.word.zh} <span class="review-date-meta">· ${t('srsNextReview', { date: new Date(resetNext).toLocaleDateString() })}</span>`;
+        };
+
+        statusArea.appendChild(status);
+        statusArea.appendChild(starBtn);
+
         item.appendChild(main);
-        item.appendChild(status);
+        item.appendChild(statusArea);
         oArea.appendChild(item);
     });
 

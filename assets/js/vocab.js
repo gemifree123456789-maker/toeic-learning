@@ -13,6 +13,18 @@ let _lookupResult = null;
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
 /* =========================================
+   智慧排版引擎：處理衍生字的換行與逗號
+   ========================================= */
+function formatDerivText(text) {
+    let tStr = String(text || '').trim();
+    if (!tStr) return '';
+    // 若已有換行符號 (手動排版)，直接保留
+    if (tStr.includes('\n')) return tStr;
+    // 若為 AI 逗號分隔格式，自動斷行
+    return tStr.replace(/\), ?/g, ')\n');
+}
+
+/* =========================================
    同步至 Google Sheets 的背景發送函數
    ========================================= */
 async function syncToGoogleSheet(item) {
@@ -35,9 +47,6 @@ async function syncToGoogleSheet(item) {
     try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
 }
 
-/* =========================================
-   🚀 新增：全資料覆寫同步至 Google Sheets
-   ========================================= */
 async function syncFullUpdateToCloud(item) {
     const payload = {
         action: "update_all",
@@ -124,9 +133,10 @@ function showWordModal(word) {
 
             document.getElementById('wmDef').innerText = vocabItem.def || '';
             
-            const derivText = vocabItem.derivatives || vocabItem.deriv;
-            if (derivText && derivText.trim() !== '') {
-                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>`);
+            // 使用排版引擎與 CSS pre-wrap
+            const derivText = formatDerivText(vocabItem.derivatives || vocabItem.deriv);
+            if (derivText) {
+                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`);
             }
 
             if (vocabItem.ex) {
@@ -166,8 +176,10 @@ function showWordModal(word) {
 
                     document.getElementById('wmDef').innerText = info.def;
                     
-                    if (info.derivatives && info.derivatives.trim() !== '') {
-                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${info.derivatives}</div>`);
+                    // 使用排版引擎與 CSS pre-wrap
+                    const derivGenText = formatDerivText(info.derivatives);
+                    if (derivGenText) {
+                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivGenText}</div>`);
                     }
 
                     document.getElementById('wmExText').innerText = info.ex;
@@ -187,13 +199,8 @@ function showWordModal(word) {
     })();
 }
 
-export function normalizeWordId(word) {
-    return String(word || '').trim().toLowerCase();
-}
-
-function normalizeLookupWord(word) {
-    return String(word || '').trim();
-}
+export function normalizeWordId(word) { return String(word || '').trim().toLowerCase(); }
+function normalizeLookupWord(word) { return String(word || '').trim(); }
 
 function validateLookupWordInput(rawWord) {
     const word = normalizeLookupWord(rawWord);
@@ -314,9 +321,10 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
-    const derivText = item.derivatives || item.deriv;
-    const derivHtml = (derivText && derivText.trim() !== '') 
-        ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5;">💡 <b>衍生字：</b><br>${derivText}</div>` 
+    // 使用排版引擎與 CSS pre-wrap
+    const derivText = formatDerivText(item.derivatives || item.deriv);
+    const derivHtml = derivText 
+        ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` 
         : '';
 
     card.innerHTML = `
@@ -340,9 +348,7 @@ function renderLookupResultCard() {
     resultEl.innerHTML = '';
     resultEl.appendChild(card);
     renderSaveButton(card.querySelector('#vocabLookupActionArea'), item.word, item, {
-        onToggle: async () => {
-            await renderVocabTab();
-        }
+        onToggle: async () => { await renderVocabTab(); }
     }).then(() => {});
 }
 
@@ -360,10 +366,7 @@ export async function handleLookupSearch() {
         else renderLookupMessage(t('vocabLookupCharsInvalid'));
         return;
     }
-    if (!state.apiKey) {
-        alert(t('alertSetApiKeyFirst'));
-        return;
-    }
+    if (!state.apiKey) { alert(t('alertSetApiKeyFirst')); return; }
     if (lookupBtn?.disabled) return;
     if (lookupBtn) lookupBtn.disabled = true;
     try {
@@ -404,31 +407,28 @@ export async function handleLookupSearch() {
 }
 
 document.addEventListener('change', (event) => {
-    if (event.target && event.target.id === 'posFilterSelect') {
-        renderVocabTab();
-    }
+    if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🚀 真・全自動清洗機 (防死鎖自適應引擎)
+// 🚀 真・全自動清洗機 (防死鎖自適應引擎 + 總電源煞車)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
-        
         let words = await DB.getSavedWords();
         let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
         
         if (targets.length === 0) {
-            alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！');
-            return;
+            alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統已配備「防卡死保險絲」：\n若遇到 Google 伺服器持續限速，系統將自動降速；若同一單字失敗達 3 次將自動跳過，確保清洗流程順利跑完。\n\n確定要開始升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統已配備「防死鎖」與「總電源煞車」：\n若連續 3 個單字皆遭到 API 伺服器拒絕，系統將自動中止任務，避免無效等待。\n\n確定要開始升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
         let successCount = 0;
-        let currentDelay = 250; // 預設高鐵速度
+        let currentDelay = 250; 
+        let consecutiveFailures = 0;
 
         for (let i = 0; i < targets.length; i++) {
             const w = targets[i];
@@ -450,55 +450,53 @@ document.addEventListener('click', async (event) => {
                 syncFullUpdateToCloud(w); 
                 
                 successCount++;
-                
-                // 成功後，重置重試計數器，並恢復高鐵極速
                 w._retry = 0;
                 currentDelay = 250;
+                consecutiveFailures = 0;
 
             } catch (e) {
                 if (e.message === "HTTP_429" || String(e).includes("429")) {
                     w._retry = (w._retry || 0) + 1;
-                    
                     if (w._retry <= 3) {
                         console.warn(`單字 ${w.en} 觸發限速，降檔休息 6 秒並進行第 ${w._retry} 次重試...`);
-                        currentDelay = 6000; // 撞到限速，休息 6 秒讓額度恢復
-                        i--; // 退回一步重跑
+                        currentDelay = 6000; i--; 
                     } else {
-                        console.error(`單字 ${w.en} 重試 3 次仍被擋，強制跳過，避免死鎖！`);
-                        currentDelay = 250; // 放棄此字，恢復原速準備跑下一個
+                        console.error(`單字 ${w.en} 重試 3 次仍被擋，強制跳過！`);
+                        currentDelay = 250; 
+                        consecutiveFailures++;
+                        
+                        if (consecutiveFailures >= 3) {
+                            alert("🚨 系統偵測到連續 3 個單字遭到完全阻擋！\n\n這代表您的 API 金鑰已徹底耗盡額度或帳單未生效。\n為保護您的設備，系統已啟動總開關中止任務。\n\n請確認您已換上綁定信用卡的全新 API Key。");
+                            break; 
+                        }
                     }
                 } else {
                     console.error('單字升級失敗:', w.en, e);
+                    consecutiveFailures++;
                 }
             }
-
-            if (i < targets.length - 1) {
+            if (i < targets.length - 1 && consecutiveFailures < 3) {
                 await new Promise(resolve => setTimeout(resolve, currentDelay));
             }
         }
-
-        alert(`✅ 清洗完成！成功標準化並回寫了 ${successCount} 個單字。\n(若有跳過的單字，請過一段時間後再點擊一次按鈕即可補齊)`);
+        alert(`✅ 清洗任務結束！成功標準化並回寫了 ${successCount} 個單字。`);
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();
     }
 });
 
-/* ====== Vocabulary Tab (摺疊展開升級版) ====== */
+/* ====== Vocabulary Tab ====== */
 export async function renderVocabTab() {
     let words = await DB.getSavedWords();
-    
     for (let w of words) {
         if (w.level == null || w.level === undefined || isNaN(w.level)) {
-            w.level = 0;
-            w.nextReview = w.nextReview || Date.now();
-            await DB.addSavedWord(w);
+            w.level = 0; w.nextReview = w.nextReview || Date.now(); await DB.addSavedWord(w);
         }
     }
 
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
-
     const dueWords = words.filter(w => w.nextReview <= Date.now());
     const entryEl = document.getElementById('srsReviewEntry');
     entryEl.innerHTML = '';
@@ -526,9 +524,7 @@ export async function renderVocabTab() {
         clearBtn.innerHTML = `<h3>${t('vocabClearMasteredTitle')}</h3><p>${t('vocabClearMasteredDesc', { count: lv5Words.length })}</p>`;
         clearBtn.onclick = async () => {
             if (!confirm(t('vocabClearMasteredConfirm', { count: lv5Words.length }))) return;
-            for (const w of lv5Words) {
-                await removeWordFromNotebook(w.id);
-            }
+            for (const w of lv5Words) { await removeWordFromNotebook(w.id); }
             renderVocabTab();
         };
         entryEl.appendChild(clearBtn);
@@ -541,9 +537,7 @@ export async function renderVocabTab() {
     if (filterValue !== 'all') {
         displayWords = words.filter(w => {
             const rawPos = String(w.pos || '').toLowerCase();
-            if (filterValue === 'other') {
-                return !['n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.'].some(p => rawPos.includes(p));
-            }
+            if (filterValue === 'other') return !['n.', 'v.', 'adj.', 'adv.', 'prep.', 'conj.'].some(p => rawPos.includes(p));
             return rawPos.includes(filterValue + '.') || rawPos === filterValue || rawPos.includes(filterValue + ',');
         });
     }
@@ -567,12 +561,13 @@ export async function renderVocabTab() {
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
 
-        const derivHtml = (w.deriv && w.deriv.trim() !== '') ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4;">💡 <b>衍生字：</b><br>${w.deriv}</div>` : '';
+        // 使用排版引擎與 CSS pre-wrap
+        const derivText = formatDerivText(w.deriv);
+        const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
         const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
         const exZhHtml = w.ex_zh ? `<div style="font-size:12px; color:#6b7280;">${w.ex_zh}</div>` : '';
         
         const hasExtraInfo = derivHtml || exHtml || exZhHtml;
-        
         const expandedArea = hasExtraInfo 
             ? `<div class="vocab-card-expanded" style="display:none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; width: 100%;">
                  ${derivHtml}${exHtml}${exZhHtml}
@@ -596,25 +591,16 @@ export async function renderVocabTab() {
             </div>
         `;
 
-        card.querySelector('.saved-word-speak').onclick = (e) => {
-            e.stopPropagation(); 
-            speakText(displayEn);
-        };
-
+        card.querySelector('.saved-word-speak').onclick = (e) => { e.stopPropagation(); speakText(displayEn); };
         card.querySelector('.saved-word-delete').onclick = async (e) => {
             e.stopPropagation(); 
-            if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) {
-                await removeWordFromNotebook(w.id);
-                renderVocabTab();
-            }
+            if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) { await removeWordFromNotebook(w.id); renderVocabTab(); }
         };
 
         if (hasExtraInfo) {
             card.onclick = () => {
                 const expArea = card.querySelector('.vocab-card-expanded');
-                if (expArea) {
-                    expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
-                }
+                if (expArea) expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
             };
         }
 
