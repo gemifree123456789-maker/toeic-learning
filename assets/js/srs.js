@@ -2,7 +2,7 @@
 
 import { ICONS, SRS_INTERVALS, SRS_MAX_WORDS, getNextReviewTime } from './state.js';
 import { DB } from './db.js';
-import { shuffleArray, speakText, speakTextPromise } from './utils.js';
+import { shuffleArray } from './utils.js';
 import { t } from './i18n.js';
 
 let _onFinish = null;
@@ -20,6 +20,47 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
+/* =========================================
+   🎧 TOEIC 隨機口音引擎 (支援美、英、澳、加等口音)
+   ========================================= */
+function getRandomToeicVoice() {
+    const voices = speechSynthesis.getVoices();
+    // 過濾出所有英文相關口音 (en-US, en-GB, en-AU, en-CA 等)
+    const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+    if (englishVoices.length > 0) {
+        // 亂數抽取一個口音
+        return englishVoices[Math.floor(Math.random() * englishVoices.length)];
+    }
+    return null;
+}
+
+function playRandomAccent(text) {
+    if (!text) return;
+    speechSynthesis.cancel(); // 停止目前正在播放的語音
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voice = getRandomToeicVoice();
+    if (voice) utterance.voice = voice;
+    speechSynthesis.speak(utterance);
+}
+// 綁定到全域供 HTML onclick 點擊事件呼叫
+window.playRandomAccent = playRandomAccent; 
+
+function playRandomAccentPromise(text) {
+    return new Promise(resolve => {
+        if (!text) return resolve();
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voice = getRandomToeicVoice();
+        if (voice) utterance.voice = voice;
+        utterance.onend = resolve;
+        utterance.onerror = resolve;
+        speechSynthesis.speak(utterance);
+    });
+}
+
+/* =========================================
+   輔助與測驗產生邏輯
+   ========================================= */
 function toLowerWord(word) {
     return String(word || '').trim().toLowerCase();
 }
@@ -76,8 +117,8 @@ function renderSrsQuestion() {
     const safeEn = enLower.replace(/'/g, "\\'");
 
     if (q.type === 'en2zh') {
-        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${enLower} <button class="mini-speaker" onclick="speakText('${safeEn}')">${ICONS.speaker}</button></div>`;
-        setTimeout(() => speakText(enLower), 300);
+        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${enLower} <button class="mini-speaker" onclick="playRandomAccent('${safeEn}')">${ICONS.speaker}</button></div>`;
+        setTimeout(() => playRandomAccent(enLower), 300);
         const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
         opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
     } else if (q.type === 'zh2en') {
@@ -87,8 +128,8 @@ function renderSrsQuestion() {
         opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, correctEn, q.type); oArea.appendChild(b); });
     } else if (q.type === 'listen') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToZh')}</div><button class="srs-listen-btn" id="srsListenBtn">${ICONS.speaker}</button><div class="srs-reveal-word hidden" id="srsRevealWord"></div>`;
-        document.getElementById('srsListenBtn').onclick = () => speakText(enLower);
-        setTimeout(() => speakText(enLower), 300);
+        document.getElementById('srsListenBtn').onclick = () => playRandomAccent(enLower);
+        setTimeout(() => playRandomAccent(enLower), 300);
         const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
         opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
     } else if (q.type === 'listen3') {
@@ -104,12 +145,12 @@ function renderSrsQuestion() {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToEn')}</div><div class="srs-question-word">${word.zh}</div><div class="srs-reveal-word hidden" id="srsRevealWord"></div><div class="srs-listen3-container">${choices.map((c, i) => `<div class="srs-listen3-item"><button class="srs-listen3-btn" data-label="${labels[i]}" data-word="${c.en.replace(/"/g, '&quot;')}">${ICONS.speaker}</button><div class="srs-listen3-label">${labels[i]}</div></div>`).join('')}</div>`;
 
         qArea.querySelectorAll('.srs-listen3-btn').forEach(btn => {
-            btn.onclick = () => speakText(btn.dataset.word);
+            btn.onclick = () => playRandomAccent(btn.dataset.word);
         });
 
         async function autoPlaySequence() {
             for (const c of choices) {
-                await speakTextPromise(c.en);
+                await playRandomAccentPromise(c.en);
                 await new Promise(r => setTimeout(r, 400));
             }
         }
@@ -145,7 +186,7 @@ function handleSrsAnswer(btnEl, selected, correct, type) {
         revealEl.classList.remove('hidden');
     }
 
-    speakText(toLowerWord(word.en));
+    playRandomAccent(toLowerWord(word.en));
     const delay = isCorrect ? 1200 : 2000;
     setTimeout(() => { srsState.currentQ++; if (srsState.currentQ >= srsState.questions.length) showSrsResults(); else renderSrsQuestion(); }, delay);
 }
@@ -158,7 +199,6 @@ async function showSrsResults() {
     let totalCorrect = 0;
     const wordResults = [];
     
-    // 計算成績與更新資料庫
     for (const word of srsState.words) {
         const r = srsState.results[word.id];
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
@@ -177,7 +217,6 @@ async function showSrsResults() {
     qArea.innerHTML = `<div class="srs-result-score">${totalCorrect}/${total}</div><div class="srs-result-label">${t('srsCorrectCount')}</div>`;
     oArea.innerHTML = '';
     
-    // 渲染每一張單字成績卡
     wordResults.forEach(wr => {
         const diff = wr.newLevel - wr.oldLevel;
         let cls = 'same', txt = `Lv.${wr.oldLevel}`;
@@ -217,7 +256,6 @@ async function showSrsResults() {
         meta.className = 'srs-result-meta';
         meta.innerHTML = `${wr.word.zh} <span class="review-date-meta">· ${t('srsNextReview', { date: wr.nextDate })}</span>`;
 
-        // 處理英文例句：保留欄位，若無資料則顯示提示
         const exRow = document.createElement('div');
         exRow.className = 'srs-result-ex-row';
         const exText = wr.word.ex?.trim() || '';
@@ -225,10 +263,9 @@ async function showSrsResults() {
         const ex = document.createElement('div');
         ex.className = 'srs-result-ex';
         ex.textContent = exText || '暫無英文例句';
-        if (!exText) ex.style.color = '#9ca3af'; // 沒資料時字體變淺灰色
+        if (!exText) ex.style.color = '#9ca3af'; 
         exRow.appendChild(ex);
 
-        // 如果有英文例句，才產生喇叭按鈕
         if (exText) {
             const exSpeakBtn = document.createElement('button');
             exSpeakBtn.type = 'button';
@@ -238,14 +275,12 @@ async function showSrsResults() {
             exRow.appendChild(exSpeakBtn);
         }
 
-        // 處理中文例句：保留欄位，若無資料則顯示提示
         const exZhText = wr.word.ex_zh?.trim() || '';
         const exZh = document.createElement('div');
         exZh.className = 'srs-result-ex-zh';
         exZh.textContent = exZhText || '(暫無中文翻譯)';
-        if (!exZhText) exZh.style.color = '#9ca3af'; // 沒資料時字體變淺灰色
+        if (!exZhText) exZh.style.color = '#9ca3af';
 
-        // 處理衍生字：使用排版引擎與 CSS pre-wrap
         const derivText = formatDerivText(wr.word.deriv || wr.word.derivatives);
         const derivDiv = document.createElement('div');
         if (derivText) {
@@ -264,7 +299,6 @@ async function showSrsResults() {
         main.appendChild(exZh);  
         if (derivText) main.appendChild(derivDiv);
 
-        // 狀態與星號按鈕區塊
         const statusArea = document.createElement('div');
         statusArea.style.display = 'flex';
         statusArea.style.flexDirection = 'column';
@@ -275,14 +309,13 @@ async function showSrsResults() {
         status.className = `srs-result-status ${cls}`;
         status.textContent = `${wr.cc}/3 ${txt}`;
 
-        // 🌟 新增：標記不熟按鈕 (一鍵降級至 Lv.0)
         const starBtn = document.createElement('button');
         starBtn.innerHTML = '⭐ 標記不熟';
         starBtn.style.cssText = 'background:none; border:1px solid #d1d5db; color:#4b5563; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition: all 0.2s; white-space: nowrap;';
         
         starBtn.onclick = async () => {
             const resetLevel = 0;
-            const resetNext = getNextReviewTime(resetLevel); // 設定為明天複習
+            const resetNext = getNextReviewTime(resetLevel); 
             
             await DB.updateWordSRS(wr.word.id, resetLevel, resetNext);
             
@@ -305,7 +338,7 @@ async function showSrsResults() {
     });
 
     oArea.querySelectorAll('.srs-result-speaker').forEach(btn => {
-        btn.onclick = () => speakText(btn.dataset.speak || '');
+        btn.onclick = () => playRandomAccent(btn.dataset.speak || '');
     });
 
     const doneBtn = document.createElement('button');
