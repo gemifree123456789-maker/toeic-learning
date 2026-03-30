@@ -211,7 +211,6 @@ async function showSrsResults() {
     const wordResults = [];
     
     for (const word of srsState.words) {
-        // 🌟 核心防護：強迫系統去資料庫重抓一次這顆單字，保證拿到最新、剛洗好的資料
         const freshWord = await DB.getSavedWord(word.id) || word;
 
         const r = srsState.results[word.id];
@@ -243,8 +242,8 @@ async function showSrsResults() {
         const item = document.createElement('div');
         item.className = 'srs-result-item';
         
-        // 🌟 100% 複製單字本的排版與 CSS 邏輯
-        item.style.cssText = 'background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative;';
+        // 🌟 核心防護：強迫設定 display: block 覆蓋原本的 flex 行為
+        item.style.cssText = 'display: block; width: 100%; box-sizing: border-box; background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative;';
 
         const displayEn = toLowerWord(freshWord.en);
         const posText = freshWord.pos?.trim() || '';
@@ -268,7 +267,6 @@ async function showSrsResults() {
         const exColor = exText ? '#374151' : '#9ca3af';
         const exZhColor = exZhText ? '#6b7280' : '#9ca3af';
 
-        // 將 HTML 結構寫死成跟 vocab.js 的 lookup card 一模一樣
         item.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                 <div class="saved-word-top" style="margin-bottom: 0;">
@@ -303,7 +301,6 @@ async function showSrsResults() {
             </div>
         `;
 
-        // 綁定按鈕事件
         const starBtn = item.querySelector('.srs-star-btn');
         starBtn.onclick = async () => {
             const resetLevel = 0;
