@@ -21,28 +21,32 @@ function formatDerivText(text) {
 }
 
 /* =========================================
-   🎧 TOEIC 隨機口音引擎 (支援美、英、澳、加等口音 - 排除搞怪音)
+   🎧 TOEIC 隨機口音引擎 (終極嚴格版 - 徹底排除外星人)
    ========================================= */
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
     
-    // 蘋果 iOS/macOS 內建的搞怪/特效語音黑名單
+    // 擴充版黑名單 (全部使用小寫以利精準比對)
     const jokeVoices = [
-        'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 
-        'Cellos', 'Deranged', 'Good News', 'Hysterical', 'Junior', 
-        'Pipe Organ', 'Princess', 'Trinoids', 'Whisper', 'Zarvox', 
-        'Fred', 'Ralph', 'Superstar'
+        'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 
+        'cellos', 'deranged', 'good news', 'hysterical', 'junior', 
+        'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 
+        'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'
     ];
 
-    // 過濾出英文系國家口音，且「不包含」在黑名單中的正常人類語音
+    // 嚴格過濾邏輯：必須是英文，且強迫轉小寫後，絕對不能包含黑名單字眼
     const englishVoices = voices.filter(v => {
-        const isEnglish = v.lang.startsWith('en');
-        const isJoke = jokeVoices.some(joke => v.name.includes(joke));
-        return isEnglish && !isJoke;
+        if (!v.lang.startsWith('en')) return false;
+        
+        const nameLower = String(v.name).toLowerCase();
+        const uriLower = String(v.voiceURI || '').toLowerCase();
+        
+        const isJoke = jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
+        return !isJoke; // 不是笑話語音才放行
     });
 
     if (englishVoices.length > 0) {
-        // 亂數抽取一個正常口音
         return englishVoices[Math.floor(Math.random() * englishVoices.length)];
     }
     return null;
@@ -50,13 +54,13 @@ function getRandomToeicVoice() {
 
 function playRandomAccent(text) {
     if (!text) return;
-    speechSynthesis.cancel(); // 停止目前正在播放的語音
+    speechSynthesis.cancel(); 
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = getRandomToeicVoice();
     if (voice) utterance.voice = voice;
     speechSynthesis.speak(utterance);
 }
-// 綁定到全域供 HTML onclick 點擊事件呼叫
+// 綁定到全域供 HTML onclick 呼叫
 window.playRandomAccent = playRandomAccent; 
 
 function playRandomAccentPromise(text) {
