@@ -21,14 +21,28 @@ function formatDerivText(text) {
 }
 
 /* =========================================
-   🎧 TOEIC 隨機口音引擎 (支援美、英、澳、加等口音)
+   🎧 TOEIC 隨機口音引擎 (支援美、英、澳、加等口音 - 排除搞怪音)
    ========================================= */
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
-    // 過濾出所有英文相關口音 (en-US, en-GB, en-AU, en-CA 等)
-    const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+    
+    // 蘋果 iOS/macOS 內建的搞怪/特效語音黑名單
+    const jokeVoices = [
+        'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 
+        'Cellos', 'Deranged', 'Good News', 'Hysterical', 'Junior', 
+        'Pipe Organ', 'Princess', 'Trinoids', 'Whisper', 'Zarvox', 
+        'Fred', 'Ralph', 'Superstar'
+    ];
+
+    // 過濾出英文系國家口音，且「不包含」在黑名單中的正常人類語音
+    const englishVoices = voices.filter(v => {
+        const isEnglish = v.lang.startsWith('en');
+        const isJoke = jokeVoices.some(joke => v.name.includes(joke));
+        return isEnglish && !isJoke;
+    });
+
     if (englishVoices.length > 0) {
-        // 亂數抽取一個口音
+        // 亂數抽取一個正常口音
         return englishVoices[Math.floor(Math.random() * englishVoices.length)];
     }
     return null;
