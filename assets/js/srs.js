@@ -11,12 +11,15 @@ export function setOnFinish(fn) { _onFinish = fn; }
 const srsState = { active: false, words: [], allWords: [], questions: [], currentQ: 0, results: {}, answered: false };
 
 /* =========================================
-   智慧排版引擎：處理衍生字的換行與逗號
+   智慧排版引擎：處理衍生字的換行與逗號 (強化版)
    ========================================= */
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
+    // 將可能殘留的 HTML 換行標籤強制轉為純文字換行符號
+    tStr = tStr.replace(/<br\s*\/?>/gi, '\n');
     if (tStr.includes('\n')) return tStr;
+    // 將 AI 產生的逗號分隔轉為斷行
     return tStr.replace(/\), ?/g, ')\n');
 }
 
@@ -27,7 +30,6 @@ function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return null;
     
-    // 擴充版黑名單 (全部使用小寫以利精準比對)
     const jokeVoices = [
         'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 
         'cellos', 'deranged', 'good news', 'hysterical', 'junior', 
@@ -35,7 +37,6 @@ function getRandomToeicVoice() {
         'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'
     ];
 
-    // 嚴格過濾邏輯：必須是英文，且強迫轉小寫後，絕對不能包含黑名單字眼
     const englishVoices = voices.filter(v => {
         if (!v.lang.startsWith('en')) return false;
         
@@ -43,7 +44,7 @@ function getRandomToeicVoice() {
         const uriLower = String(v.voiceURI || '').toLowerCase();
         
         const isJoke = jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
-        return !isJoke; // 不是笑話語音才放行
+        return !isJoke; 
     });
 
     if (englishVoices.length > 0) {
@@ -60,7 +61,6 @@ function playRandomAccent(text) {
     if (voice) utterance.voice = voice;
     speechSynthesis.speak(utterance);
 }
-// 綁定到全域供 HTML onclick 呼叫
 window.playRandomAccent = playRandomAccent; 
 
 function playRandomAccentPromise(text) {
@@ -299,11 +299,20 @@ async function showSrsResults() {
         exZh.textContent = exZhText || '(暫無中文翻譯)';
         if (!exZhText) exZh.style.color = '#9ca3af';
 
-        const derivText = formatDerivText(wr.word.deriv || wr.word.derivatives);
+        // 🌟 處理衍生字排版與渲染：強化防護，確保樣式完美套用
+        const rawDeriv = wr.word.deriv?.trim() || wr.word.derivatives?.trim() || '';
+        const derivText = formatDerivText(rawDeriv);
         const derivDiv = document.createElement('div');
+        
+        // CSS 核心：white-space: pre-wrap 確保 \n 被正確渲染為換行
+        derivDiv.style.cssText = 'font-size:12px; background:#f3f4f6; padding:6px; border-radius:4px; margin-top:8px; line-height:1.4; white-space: pre-wrap;';
+        
         if (derivText) {
-            derivDiv.style.cssText = 'font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-top:8px; line-height:1.4; white-space: pre-wrap;';
+            derivDiv.style.color = '#4b5563'; // 正常深灰色
             derivDiv.innerHTML = `💡 <b>衍生字：</b>\n${derivText}`;
+        } else {
+            derivDiv.style.color = '#9ca3af'; // 沒資料時字體變淺灰色
+            derivDiv.innerHTML = `💡 <b>衍生字：</b> (暫無資料)`;
         }
 
         wordRow.appendChild(wordEl);
@@ -315,7 +324,7 @@ async function showSrsResults() {
         main.appendChild(meta);
         main.appendChild(exRow); 
         main.appendChild(exZh);  
-        if (derivText) main.appendChild(derivDiv);
+        main.appendChild(derivDiv); 
 
         const statusArea = document.createElement('div');
         statusArea.style.display = 'flex';
