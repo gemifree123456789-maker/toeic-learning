@@ -9,7 +9,7 @@ import { t } from './i18n.js';
 let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
-let _filterLv0 = false; // 🌟 新增：全域狀態，記錄「待加強」按鈕是否被按下
+let _filterLv0 = false; // 全域狀態，記錄「待加強」按鈕是否被按下
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
@@ -494,28 +494,23 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    // 🌟 動態植入「⭐ 待加強」篩選按鈕
+    // 動態植入「⭐ 待加強」篩選按鈕
     if (filterSelect && !document.getElementById('btnFilterLv0')) {
         const btn = document.createElement('button');
         btn.id = 'btnFilterLv0';
         btn.innerHTML = '⭐ 待加強';
-        // 配合周圍按鈕的樣式設定，完美嵌入紅框位置
         btn.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         
         btn.onclick = () => {
             _filterLv0 = !_filterLv0;
-            renderVocabTab(); // 按下後重新渲染列表
+            renderVocabTab(); 
         };
         
-        // 插入在詞性選單的前面 (即畫面中間位置)
         filterSelect.parentNode.insertBefore(btn, filterSelect);
-        
-        // 確保父容器排版為水平置中對齊
         filterSelect.parentNode.style.display = 'flex';
         filterSelect.parentNode.style.alignItems = 'center';
     }
 
-    // 🌟 更新按鈕視覺狀態 (按下時變醒目的黃色)
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
     if (btnFilterLv0) {
         if (_filterLv0) {
@@ -567,9 +562,7 @@ export async function renderVocabTab() {
     
     let displayWords = words;
     
-    // 🌟 執行「待加強 (Lv.0)」核心過濾邏輯
     if (_filterLv0) {
-        // 只保留等級為 0 的單字 (包含剛匯入的新字，以及測驗後被你按下⭐標記不熟的單字)
         displayWords = displayWords.filter(w => w.level === 0);
     }
 
@@ -603,6 +596,11 @@ export async function renderVocabTab() {
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
 
+        // 🌟 核心一：轉換等級為實心與空心星星 (超過 Lv.3 亦顯示 3 顆實星)
+        const star1 = w.level >= 1 ? '★' : '☆';
+        const star2 = w.level >= 2 ? '★' : '☆';
+        const star3 = w.level >= 3 ? '★' : '☆';
+
         const derivText = formatDerivText(w.deriv);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
         const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
@@ -615,12 +613,15 @@ export async function renderVocabTab() {
                </div>` 
             : '';
 
+        // 🌟 核心二：用動態星星取代原本呆板的 srs-badge 標籤
         card.innerHTML = `
             <div class="saved-word-info" style="width: 100%;">
-                <div class="saved-word-top">
+                <div class="saved-word-top" style="display: flex; align-items: center; flex-wrap: wrap;">
                     <span class="saved-word-en">${displayEn}</span>
                     ${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}
-                    <span class="srs-badge srs-badge-${w.level}">Lv.${w.level}</span>
+                    <span class="vocab-stars" data-id="${w.id}" style="color: #fbbf24; font-size: 18px; margin-left: auto; cursor: pointer; user-select: none; letter-spacing: 2px;">
+                        <span data-target="1" style="transition: color 0.2s;">${star1}</span><span data-target="2" style="transition: color 0.2s;">${star2}</span><span data-target="3" style="transition: color 0.2s;">${star3}</span>
+                    </span>
                 </div>
                 <div class="saved-word-zh">${w.zh}</div>
                 <div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div>
@@ -631,6 +632,26 @@ export async function renderVocabTab() {
                 <button class="saved-word-delete">${ICONS.close}</button>
             </div>
         `;
+
+        // 🌟 核心三：為每顆星星綁定點擊事件 (寫入新等級並刷新畫面)
+        const starsContainer = card.querySelector('.vocab-stars');
+        starsContainer.querySelectorAll('span').forEach(starEl => {
+            starEl.onclick = async (e) => {
+                e.stopPropagation(); // 阻止卡片展開手風琴效果
+                let targetLevel = parseInt(starEl.dataset.target);
+                
+                // 如果點擊的是當前相同的星級，則重置歸零為 Lv.0
+                if (w.level === targetLevel) {
+                    targetLevel = 0;
+                }
+                
+                w.level = targetLevel;
+                w.nextReview = getNextReviewTime(targetLevel);
+                
+                await DB.addSavedWord(w); // 立即寫入資料庫
+                renderVocabTab(); // 重新渲染畫面，讓星星和複習時間立刻更新
+            };
+        });
 
         card.querySelector('.saved-word-speak').onclick = (e) => { e.stopPropagation(); speakText(displayEn); };
         card.querySelector('.saved-word-delete').onclick = async (e) => {
