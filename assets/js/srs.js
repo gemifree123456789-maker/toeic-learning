@@ -76,7 +76,6 @@ function toLowerWord(word) {
     return String(word || '').trim().toLowerCase();
 }
 
-// 🌟 核心修改：取得完整的「干擾選項」物件，而不是只有字串
 function getDistractorWords(correctWord, allWords) {
     return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2);
 }
@@ -128,7 +127,7 @@ function renderSrsQuestion() {
     const enLower = toLowerWord(word.en);
     const safeEn = enLower.replace(/'/g, "\\'");
 
-    // 🌟 選項渲染：將對應的翻譯存入 dataset.reveal 中，並標記誰是正確答案
+    // 🌟 選項渲染升級：導入 Flexbox 與 rem 自適應字體
     if (q.type === 'en2zh') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${enLower} <button class="mini-speaker" onclick="playRandomAccent('${safeEn}')">${ICONS.speaker}</button></div>`;
         setTimeout(() => playRandomAccent(enLower), 300);
@@ -137,8 +136,10 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); 
             b.className = 'srs-option'; 
-            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.style.cssText = 'display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%;';
+            b.innerHTML = `<div class="opt-text" style="flex-grow: 1; font-size: 1.1rem; line-height: 1.4;">${w.zh}</div>`; 
             b.dataset.reveal = toLowerWord(w.en);
+            b.dataset.en = toLowerWord(w.en); // 預先藏好發音用的英文單字
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
             b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
             oArea.appendChild(b); 
@@ -150,8 +151,10 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); 
             b.className = 'srs-option'; 
-            b.innerHTML = `<span>${toLowerWord(w.en)}</span>`; 
+            b.style.cssText = 'display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%;';
+            b.innerHTML = `<div class="opt-text" style="flex-grow: 1; font-size: 1.15rem; font-weight: 500; line-height: 1.4;">${toLowerWord(w.en)}</div>`; 
             b.dataset.reveal = w.zh;
+            b.dataset.en = toLowerWord(w.en);
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
             b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
             oArea.appendChild(b); 
@@ -165,8 +168,10 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); 
             b.className = 'srs-option'; 
-            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.style.cssText = 'display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%;';
+            b.innerHTML = `<div class="opt-text" style="flex-grow: 1; font-size: 1.1rem; line-height: 1.4;">${w.zh}</div>`; 
             b.dataset.reveal = toLowerWord(w.en);
+            b.dataset.en = toLowerWord(w.en);
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
             b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
             oArea.appendChild(b); 
@@ -194,8 +199,10 @@ function renderSrsQuestion() {
             const w = optsData[i];
             const b = document.createElement('button');
             b.className = 'srs-option';
-            b.innerHTML = `<span>${label}</span>`;
+            b.style.cssText = 'display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%;';
+            b.innerHTML = `<div class="opt-text" style="flex-grow: 1; font-size: 1.1rem; font-weight: 500; line-height: 1.4;">${label}</div>`;
             b.dataset.reveal = `${toLowerWord(w.en)} (${w.zh})`;
+            b.dataset.en = toLowerWord(w.en);
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
             b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type);
             oArea.appendChild(b);
@@ -203,7 +210,7 @@ function renderSrsQuestion() {
     }
 }
 
-// 🌟 核心修改：選項觸發解析、取消自動跳轉、產生下一題按鈕
+// 🌟 核心解析展開邏輯：植入動態翻譯與各選項專屬發音按鈕
 function handleSrsAnswer(btnEl, isCorrect, type) {
     if (srsState.answered) return;
     srsState.answered = true;
@@ -212,15 +219,34 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
     const resultType = (type === 'listen3') ? 'listen' : type;
     srsState.results[word.id][resultType] = isCorrect;
 
-    // 揭曉所有選項的翻譯解析
+    // 展開所有選項
     document.querySelectorAll('.srs-option').forEach(b => {
         b.classList.add('disabled');
+        // 🛡️ 關鍵防禦：解除 .disabled 的 CSS 封印，讓裡面的喇叭按鈕可以點擊
+        b.style.pointerEvents = 'auto'; 
+
         if (b.dataset.isCorrect === "true") {
             b.classList.add('correct');
         }
-        if (b.dataset.reveal) {
-            // 利用 opacity:0.8 確保文字能完美適應正確(綠)或錯誤(紅)的背景色
-            b.innerHTML += `<span style="font-size:14px; font-weight:normal; margin-left:8px; opacity:0.8;">— ${b.dataset.reveal}</span>`;
+
+        const optTextDiv = b.querySelector('.opt-text');
+        
+        // 1. 附加翻譯解析 (使用 em 確保字體比例)
+        if (b.dataset.reveal && optTextDiv) {
+            optTextDiv.innerHTML += `<span style="font-size: 0.9em; font-weight: normal; margin-left: 8px; opacity: 0.85;">— ${b.dataset.reveal}</span>`;
+        }
+
+        // 2. 附加專屬發音按鈕
+        if (b.dataset.en) {
+            const spkBtn = document.createElement('button');
+            spkBtn.className = 'mini-speaker';
+            spkBtn.innerHTML = ICONS.speaker;
+            spkBtn.style.cssText = 'margin-left: 12px; flex-shrink: 0; padding: 8px; cursor: pointer;'; // padding 放大觸控範圍
+            spkBtn.onclick = (e) => {
+                e.stopPropagation(); // 阻止事件冒泡，避免重複觸發答題邏輯
+                playRandomAccent(b.dataset.en);
+            };
+            b.appendChild(spkBtn);
         }
     });
 
@@ -236,7 +262,7 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
 
     // 🌟 新增：「下一題」按鈕，等待使用者手動切換
     const nextBtn = document.createElement('button');
-    nextBtn.className = 'srs-done-btn'; // 套用結算畫面那顆漂亮的大按鈕樣式
+    nextBtn.className = 'srs-done-btn'; 
     nextBtn.style.marginTop = '24px';
     nextBtn.textContent = '下一題 ➔';
     nextBtn.onclick = () => {
