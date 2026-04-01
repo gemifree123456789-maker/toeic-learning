@@ -22,7 +22,7 @@ function formatDerivText(text) {
 }
 
 /* =========================================
-   🎧 TOEIC 隨機口音引擎 (終極嚴格版 - 徹底排除外星人)
+   🎧 TOEIC 隨機口音引擎
    ========================================= */
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
@@ -76,8 +76,9 @@ function toLowerWord(word) {
     return String(word || '').trim().toLowerCase();
 }
 
-function getDistractors(correctWord, allWords, field) {
-    return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2).map(w => w[field]);
+// 🌟 核心修改：取得完整的「干擾選項」物件，而不是只有字串
+function getDistractorWords(correctWord, allWords) {
+    return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2);
 }
 
 export function startSrsReview(dueWords, allWords) {
@@ -127,40 +128,61 @@ function renderSrsQuestion() {
     const enLower = toLowerWord(word.en);
     const safeEn = enLower.replace(/'/g, "\\'");
 
+    // 🌟 選項渲染：將對應的翻譯存入 dataset.reveal 中，並標記誰是正確答案
     if (q.type === 'en2zh') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div><div class="srs-question-word">${enLower} <button class="mini-speaker" onclick="playRandomAccent('${safeEn}')">${ICONS.speaker}</button></div>`;
         setTimeout(() => playRandomAccent(enLower), 300);
-        const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
-        opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
+        
+        const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
+        optsData.forEach(w => { 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.dataset.reveal = toLowerWord(w.en);
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
+            oArea.appendChild(b); 
+        });
     } else if (q.type === 'zh2en') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintZhToEn')}</div><div class="srs-question-word">${word.zh}</div>`;
-        const correctEn = toLowerWord(word.en);
-        const opts = shuffleArray([correctEn, ...getDistractors(word, srsState.allWords, 'en').map(toLowerWord)]);
-        opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, correctEn, q.type); oArea.appendChild(b); });
+        
+        const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
+        optsData.forEach(w => { 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${toLowerWord(w.en)}</span>`; 
+            b.dataset.reveal = w.zh;
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
+            oArea.appendChild(b); 
+        });
     } else if (q.type === 'listen') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToZh')}</div><button class="srs-listen-btn" id="srsListenBtn">${ICONS.speaker}</button><div class="srs-reveal-word hidden" id="srsRevealWord"></div>`;
         document.getElementById('srsListenBtn').onclick = () => playRandomAccent(enLower);
         setTimeout(() => playRandomAccent(enLower), 300);
-        const opts = shuffleArray([word.zh, ...getDistractors(word, srsState.allWords, 'zh')]);
-        opts.forEach(o => { const b = document.createElement('button'); b.className = 'srs-option'; b.textContent = o; b.onclick = () => handleSrsAnswer(b, o, word.zh, q.type); oArea.appendChild(b); });
+        
+        const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
+        optsData.forEach(w => { 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.dataset.reveal = toLowerWord(w.en);
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); 
+            oArea.appendChild(b); 
+        });
     } else if (q.type === 'listen3') {
-        const distractorWords = shuffleArray(srsState.allWords.filter(w => w.id !== word.id)).slice(0, 2);
-        const choices = shuffleArray([
-            { en: toLowerWord(word.en), isCorrect: true },
-            { en: toLowerWord(distractorWords[0]?.en || 'example'), isCorrect: false },
-            { en: toLowerWord(distractorWords[1]?.en || 'sample'), isCorrect: false }
-        ]);
+        const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         const labels = ['A', 'B', 'C'];
-        const correctLabel = labels[choices.findIndex(c => c.isCorrect)];
 
-        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToEn')}</div><div class="srs-question-word">${word.zh}</div><div class="srs-reveal-word hidden" id="srsRevealWord"></div><div class="srs-listen3-container">${choices.map((c, i) => `<div class="srs-listen3-item"><button class="srs-listen3-btn" data-label="${labels[i]}" data-word="${c.en.replace(/"/g, '&quot;')}">${ICONS.speaker}</button><div class="srs-listen3-label">${labels[i]}</div></div>`).join('')}</div>`;
+        qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToEn')}</div><div class="srs-question-word">${word.zh}</div><div class="srs-reveal-word hidden" id="srsRevealWord"></div><div class="srs-listen3-container">${optsData.map((c, i) => `<div class="srs-listen3-item"><button class="srs-listen3-btn" data-label="${labels[i]}" data-word="${c.en.replace(/"/g, '&quot;')}">${ICONS.speaker}</button><div class="srs-listen3-label">${labels[i]}</div></div>`).join('')}</div>`;
 
         qArea.querySelectorAll('.srs-listen3-btn').forEach(btn => {
             btn.onclick = () => playRandomAccent(btn.dataset.word);
         });
 
         async function autoPlaySequence() {
-            for (const c of choices) {
+            for (const c of optsData) {
                 await playRandomAccentPromise(c.en);
                 await new Promise(r => setTimeout(r, 400));
             }
@@ -168,27 +190,40 @@ function renderSrsQuestion() {
         setTimeout(() => autoPlaySequence(), 400);
 
         oArea.innerHTML = '';
-        labels.forEach((label) => {
+        labels.forEach((label, i) => {
+            const w = optsData[i];
             const b = document.createElement('button');
             b.className = 'srs-option';
-            b.textContent = `${label}`;
-            b.onclick = () => handleSrsAnswer(b, label, correctLabel, q.type);
+            b.innerHTML = `<span>${label}</span>`;
+            b.dataset.reveal = `${toLowerWord(w.en)} (${w.zh})`;
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type);
             oArea.appendChild(b);
         });
-
-        srsState._listen3Choices = choices;
-        srsState._listen3CorrectLabel = correctLabel;
     }
 }
 
-function handleSrsAnswer(btnEl, selected, correct, type) {
+// 🌟 核心修改：選項觸發解析、取消自動跳轉、產生下一題按鈕
+function handleSrsAnswer(btnEl, isCorrect, type) {
     if (srsState.answered) return;
     srsState.answered = true;
+    
     const word = srsState.questions[srsState.currentQ].word;
-    const isCorrect = selected === correct;
     const resultType = (type === 'listen3') ? 'listen' : type;
     srsState.results[word.id][resultType] = isCorrect;
-    document.querySelectorAll('.srs-option').forEach(b => { b.classList.add('disabled'); if (b.textContent === correct) b.classList.add('correct'); });
+
+    // 揭曉所有選項的翻譯解析
+    document.querySelectorAll('.srs-option').forEach(b => {
+        b.classList.add('disabled');
+        if (b.dataset.isCorrect === "true") {
+            b.classList.add('correct');
+        }
+        if (b.dataset.reveal) {
+            // 利用 opacity:0.8 確保文字能完美適應正確(綠)或錯誤(紅)的背景色
+            b.innerHTML += `<span style="font-size:14px; font-weight:normal; margin-left:8px; opacity:0.8;">— ${b.dataset.reveal}</span>`;
+        }
+    });
+
     if (!isCorrect) btnEl.classList.add('wrong');
 
     const revealEl = document.getElementById('srsRevealWord');
@@ -198,8 +233,19 @@ function handleSrsAnswer(btnEl, selected, correct, type) {
     }
 
     playRandomAccent(toLowerWord(word.en));
-    const delay = isCorrect ? 1200 : 2000;
-    setTimeout(() => { srsState.currentQ++; if (srsState.currentQ >= srsState.questions.length) showSrsResults(); else renderSrsQuestion(); }, delay);
+
+    // 🌟 新增：「下一題」按鈕，等待使用者手動切換
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'srs-done-btn'; // 套用結算畫面那顆漂亮的大按鈕樣式
+    nextBtn.style.marginTop = '24px';
+    nextBtn.textContent = '下一題 ➔';
+    nextBtn.onclick = () => {
+        srsState.currentQ++;
+        if (srsState.currentQ >= srsState.questions.length) showSrsResults(); 
+        else renderSrsQuestion();
+    };
+    
+    document.getElementById('srsOptionsArea').appendChild(nextBtn);
 }
 
 async function showSrsResults() {
@@ -211,10 +257,9 @@ async function showSrsResults() {
     const wordResults = [];
     
     for (const word of srsState.words) {
-        // 🌟 核心一：資料保鮮，確保結算前去資料庫重抓一次，拿到最新的衍生字與音標
         const freshWord = await DB.getSavedWord(word.id) || word;
 
-        const r = srsState.results[freshWord.id];
+        const r = srsState.results[word.id];
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
         totalCorrect += cc;
         const allCorrect = cc === 3;
@@ -240,117 +285,71 @@ async function showSrsResults() {
         if (diff > 0) { cls = 'up'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
         else if (diff < 0) { cls = 'down'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
 
-        // 🌟 核心二：回歸最穩定的 createElement 寫法，絕不跑版
         const item = document.createElement('div');
         item.className = 'srs-result-item';
-
-        const main = document.createElement('div');
-        main.className = 'srs-result-main';
-
-        const wordRow = document.createElement('div');
-        wordRow.className = 'srs-result-word-row';
-
-        const wordEl = document.createElement('div');
-        wordEl.className = 'srs-result-word';
-        wordEl.textContent = toLowerWord(freshWord.en);
-
-        const posText = freshWord.pos?.trim();
-        const posEl = document.createElement('span');
-        posEl.className = 'vocab-pos';
-        posEl.textContent = posText || '';
-
-        const ipaText = freshWord.ipa?.trim();
-        const ipaEl = document.createElement('span');
-        ipaEl.className = 'vocab-ipa';
-        ipaEl.textContent = ipaText || '';
-
-        // 🌟 核心三：完美補上藍色分類標籤
-        let catEl = null;
-        const catText = freshWord.cat?.trim() || freshWord.category?.trim();
-        if (catText) {
-            catEl = document.createElement('span');
-            catEl.style.cssText = 'display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;';
-            catEl.textContent = catText;
-        }
-
-        const speakBtn = document.createElement('button');
-        speakBtn.type = 'button';
-        speakBtn.className = 'mini-speaker srs-result-speaker';
-        speakBtn.innerHTML = ICONS.speaker;
-        speakBtn.dataset.speak = toLowerWord(freshWord.en);
-
-        const meta = document.createElement('small');
-        meta.className = 'srs-result-meta';
-        meta.innerHTML = `${freshWord.zh} <span class="review-date-meta">· ${t('srsNextReview', { date: wr.nextDate })}</span>`;
-
-        const exRow = document.createElement('div');
-        exRow.className = 'srs-result-ex-row';
-        const exText = freshWord.ex?.trim() || '';
         
-        const ex = document.createElement('div');
-        ex.className = 'srs-result-ex';
-        ex.textContent = exText || '暫無英文例句';
-        if (!exText) ex.style.color = '#9ca3af'; 
-        exRow.appendChild(ex);
+        item.style.cssText = 'display: block; width: 100%; box-sizing: border-box; background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative;';
 
-        if (exText) {
-            const exSpeakBtn = document.createElement('button');
-            exSpeakBtn.type = 'button';
-            exSpeakBtn.className = 'mini-speaker srs-result-speaker srs-result-ex-speaker';
-            exSpeakBtn.innerHTML = ICONS.speaker;
-            exSpeakBtn.dataset.speak = exText;
-            exRow.appendChild(exSpeakBtn);
-        }
-
+        const displayEn = toLowerWord(freshWord.en);
+        const posText = freshWord.pos?.trim() || '';
+        const ipaText = freshWord.ipa?.trim() || '';
+        const catText = freshWord.cat?.trim() || freshWord.category?.trim() || '';
+        const zhText = freshWord.zh?.trim() || freshWord.def?.trim() || '';
+        
+        const exText = freshWord.ex?.trim() || '';
         const exZhText = freshWord.ex_zh?.trim() || '';
-        const exZh = document.createElement('div');
-        exZh.className = 'srs-result-ex-zh';
-        exZh.textContent = exZhText || '(暫無中文翻譯)';
-        if (!exZhText) exZh.style.color = '#9ca3af';
-
+        
         const rawDeriv = freshWord.deriv?.trim() || freshWord.derivatives?.trim() || '';
         const derivText = formatDerivText(rawDeriv);
-        const derivDiv = document.createElement('div');
-        derivDiv.style.cssText = 'font-size:12px; background:#f3f4f6; padding:6px; border-radius:4px; margin-top:8px; line-height:1.4; white-space: pre-wrap;';
         
+        let derivHtml = '';
         if (derivText) {
-            derivDiv.style.color = '#4b5563';
-            derivDiv.innerHTML = `💡 <b>衍生字：</b>\n${derivText}`;
+            derivHtml = `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:12px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`;
         } else {
-            derivDiv.style.color = '#9ca3af';
-            derivDiv.innerHTML = `💡 <b>衍生字：</b> (暫無資料)`;
+            derivHtml = `<div style="font-size:13px; color:#9ca3af; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:12px; line-height:1.5;">💡 <b>衍生字：</b> (暫無資料)</div>`;
         }
 
-        wordRow.appendChild(wordEl);
-        if (posText) wordRow.appendChild(posEl);
-        if (ipaText) wordRow.appendChild(ipaEl);
-        if (catEl) wordRow.appendChild(catEl); // 將藍色分類標籤插入排版
-        wordRow.appendChild(speakBtn);
-        
-        main.appendChild(wordRow);
-        main.appendChild(meta);
-        main.appendChild(exRow); 
-        main.appendChild(exZh);  
-        main.appendChild(derivDiv); 
+        const exColor = exText ? '#374151' : '#9ca3af';
+        const exZhColor = exZhText ? '#6b7280' : '#9ca3af';
 
-        const statusArea = document.createElement('div');
-        statusArea.style.display = 'flex';
-        statusArea.style.flexDirection = 'column';
-        statusArea.style.alignItems = 'flex-end';
-        statusArea.style.gap = '8px';
+        item.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div class="saved-word-top" style="margin-bottom: 0;">
+                    <span class="saved-word-en" style="font-size: 1.15rem; font-weight: 700; color: #111827;">${displayEn}</span>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                    <div class="srs-result-status ${cls}" style="font-size: 13px; font-weight: 600;">${wr.cc}/3 ${txt}</div>
+                    <button class="srs-star-btn" data-id="${freshWord.id}" style="background:none; border:1px solid #d1d5db; color:#4b5563; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition: all 0.2s; white-space: nowrap;">⭐ 標記不熟</button>
+                </div>
+            </div>
 
-        const status = document.createElement('div');
-        status.className = `srs-result-status ${cls}`;
-        status.textContent = `${wr.cc}/3 ${txt}`;
+            <div class="vocab-lookup-meta" style="margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                ${posText ? `<span class="vocab-pos">${posText}</span>` : ''}
+                ${ipaText ? `<span class="vocab-ipa">${ipaText}</span>` : ''}
+                ${catText ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:600;">${catText}</span>` : ''}
+            </div>
+            
+            <div class="saved-word-zh" style="font-size: 15px; color: #374151; margin-bottom: 12px; line-height: 1.5;">${zhText}</div>
+            
+            ${derivHtml}
+            
+            <div style="font-size:14px; color:${exColor}; margin-bottom:4px; font-style:italic; display: flex; align-items: flex-start; gap: 6px;">
+                <span style="flex: 1;">${exText || '暫無英文例句'}</span>
+                ${exText ? `<button class="mini-speaker srs-speaker-btn" data-speak="${exText.replace(/"/g, '&quot;')}">${ICONS.speaker}</button>` : ''}
+            </div>
+            <div style="font-size:13px; color:${exZhColor}; margin-bottom: 12px;">${exZhText || '(暫無中文翻譯)'}</div>
+            
+            <div style="font-size: 12px; color: #8b5cf6; font-weight: 500; padding-top: 10px; border-top: 1px dashed #e5e7eb; display: flex; align-items: center; justify-content: space-between;">
+                <span>⏰ 下次複習：<span class="srs-next-date">${wr.nextDate}</span></span>
+                <button class="mini-speaker srs-speaker-btn" data-speak="${displayEn}" style="background: #f3f4f6; padding: 6px; border-radius: 50%;">${ICONS.speaker}</button>
+            </div>
+        `;
 
-        const starBtn = document.createElement('button');
-        starBtn.innerHTML = '⭐ 標記不熟';
-        starBtn.style.cssText = 'background:none; border:1px solid #d1d5db; color:#4b5563; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition: all 0.2s; white-space: nowrap;';
-        
+        const starBtn = item.querySelector('.srs-star-btn');
         starBtn.onclick = async () => {
             const resetLevel = 0;
             const resetNext = getNextReviewTime(resetLevel); 
-            
             await DB.updateWordSRS(freshWord.id, resetLevel, resetNext);
             
             starBtn.innerHTML = '🌟 已降級';
@@ -358,20 +357,16 @@ async function showSrsResults() {
             starBtn.style.borderColor = '#fbbf24';
             starBtn.style.color = '#b45309';
             starBtn.disabled = true;
-            status.textContent = `${wr.cc}/3 Lv.${wr.oldLevel} → 0`;
-            status.className = 'srs-result-status down';
-            meta.innerHTML = `${freshWord.zh} <span class="review-date-meta">· ${t('srsNextReview', { date: new Date(resetNext).toLocaleDateString() })}</span>`;
+            
+            item.querySelector('.srs-result-status').textContent = `${wr.cc}/3 Lv.${wr.oldLevel} → 0`;
+            item.querySelector('.srs-result-status').className = 'srs-result-status down';
+            item.querySelector('.srs-next-date').textContent = new Date(resetNext).toLocaleDateString();
         };
 
-        statusArea.appendChild(status);
-        statusArea.appendChild(starBtn);
-
-        item.appendChild(main);
-        item.appendChild(statusArea);
         oArea.appendChild(item);
     });
 
-    oArea.querySelectorAll('.srs-result-speaker').forEach(btn => {
+    oArea.querySelectorAll('.srs-speaker-btn').forEach(btn => {
         btn.onclick = () => playRandomAccent(btn.dataset.speak || '');
     });
 
