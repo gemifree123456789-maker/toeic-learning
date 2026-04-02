@@ -9,13 +9,11 @@ import { t } from './i18n.js';
 let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
-let _filterLv0 = false; // 全域狀態，記錄「待加強」按鈕是否被按下
+let _filterLv0 = false; 
+let _filterPinned = false; // 🌟 新增：全域狀態，記錄「特別挑選」按鈕是否被按下
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
-/* =========================================
-   智慧排版引擎：處理衍生字的換行與逗號
-   ========================================= */
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
@@ -23,9 +21,6 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
-/* =========================================
-   同步至 Google Sheets 的背景發送函數
-   ========================================= */
 async function syncToGoogleSheet(item) {
     const payload = {
         action: "add",
@@ -228,7 +223,8 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
         deriv: vocabItem.derivatives || vocabItem.deriv || '',
         createdAt: Date.now(),
         nextReview: getNextReviewTime(0),
-        level: 0
+        level: 0,
+        pinned: false // 預設不釘選
     };
 }
 
@@ -406,7 +402,7 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🚀 真・全自動清洗機 (防死鎖自適應引擎 + 總電源煞車)
+// 🚀 全自動清洗機
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -418,7 +414,7 @@ document.addEventListener('click', async (event) => {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n系統已配備「防死鎖」與「總電源煞車」：\n若連續 3 個單字皆遭到 API 伺服器拒絕，系統將自動中止任務，避免無效等待。\n\n確定要開始升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n確定要開始升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
@@ -454,20 +450,16 @@ document.addEventListener('click', async (event) => {
                 if (e.message === "HTTP_429" || String(e).includes("429")) {
                     w._retry = (w._retry || 0) + 1;
                     if (w._retry <= 3) {
-                        console.warn(`單字 ${w.en} 觸發限速，降檔休息 6 秒並進行第 ${w._retry} 次重試...`);
                         currentDelay = 6000; i--; 
                     } else {
-                        console.error(`單字 ${w.en} 重試 3 次仍被擋，強制跳過！`);
                         currentDelay = 250; 
                         consecutiveFailures++;
-                        
                         if (consecutiveFailures >= 3) {
-                            alert("🚨 系統偵測到連續 3 個單字遭到完全阻擋！\n\n這代表您的 API 金鑰已徹底耗盡額度或帳單未生效。\n為保護您的設備，系統已啟動總開關中止任務。\n\n請確認您已換上綁定信用卡的全新 API Key。");
+                            alert("🚨 連續阻擋，中止任務！請確認 API Key。");
                             break; 
                         }
                     }
                 } else {
-                    console.error('單字升級失敗:', w.en, e);
                     consecutiveFailures++;
                 }
             }
@@ -494,33 +486,42 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    // 動態植入「⭐ 待加強」篩選按鈕
+    // 🌟 動態植入「⭐ 待加強」與「📌 特別挑選」按鈕
     if (filterSelect && !document.getElementById('btnFilterLv0')) {
-        const btn = document.createElement('button');
-        btn.id = 'btnFilterLv0';
-        btn.innerHTML = '⭐ 待加強';
-        btn.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        const btnLv0 = document.createElement('button');
+        btnLv0.id = 'btnFilterLv0';
+        btnLv0.innerHTML = '⭐ 待加強';
+        btnLv0.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        btnLv0.onclick = () => { _filterLv0 = !_filterLv0; renderVocabTab(); };
         
-        btn.onclick = () => {
-            _filterLv0 = !_filterLv0;
-            renderVocabTab(); 
-        };
+        const btnPinned = document.createElement('button');
+        btnPinned.id = 'btnFilterPinned';
+        btnPinned.innerHTML = '📌 挑選';
+        btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        btnPinned.onclick = () => { _filterPinned = !_filterPinned; renderVocabTab(); };
         
-        filterSelect.parentNode.insertBefore(btn, filterSelect);
+        filterSelect.parentNode.insertBefore(btnLv0, filterSelect);
+        filterSelect.parentNode.insertBefore(btnPinned, filterSelect);
+        
         filterSelect.parentNode.style.display = 'flex';
         filterSelect.parentNode.style.alignItems = 'center';
     }
 
+    // 🌟 更新過濾按鈕視覺狀態
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
     if (btnFilterLv0) {
         if (_filterLv0) {
-            btnFilterLv0.style.background = '#fef3c7';
-            btnFilterLv0.style.borderColor = '#fbbf24';
-            btnFilterLv0.style.color = '#b45309';
+            btnFilterLv0.style.background = '#fef3c7'; btnFilterLv0.style.borderColor = '#fbbf24'; btnFilterLv0.style.color = '#b45309';
         } else {
-            btnFilterLv0.style.background = '#fff';
-            btnFilterLv0.style.borderColor = '#e5e7eb';
-            btnFilterLv0.style.color = '#4b5563';
+            btnFilterLv0.style.background = '#fff'; btnFilterLv0.style.borderColor = '#e5e7eb'; btnFilterLv0.style.color = '#4b5563';
+        }
+    }
+    const btnFilterPinned = document.getElementById('btnFilterPinned');
+    if (btnFilterPinned) {
+        if (_filterPinned) {
+            btnFilterPinned.style.background = '#e0e7ff'; btnFilterPinned.style.borderColor = '#3b82f6'; btnFilterPinned.style.color = '#1d4ed8';
+        } else {
+            btnFilterPinned.style.background = '#fff'; btnFilterPinned.style.borderColor = '#e5e7eb'; btnFilterPinned.style.color = '#4b5563';
         }
     }
 
@@ -562,9 +563,8 @@ export async function renderVocabTab() {
     
     let displayWords = words;
     
-    if (_filterLv0) {
-        displayWords = displayWords.filter(w => w.level === 0);
-    }
+    if (_filterLv0) displayWords = displayWords.filter(w => w.level === 0);
+    if (_filterPinned) displayWords = displayWords.filter(w => w.pinned);
 
     if (filterValue !== 'all') {
         displayWords = displayWords.filter(w => {
@@ -578,10 +578,10 @@ export async function renderVocabTab() {
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
-        if (filterValue !== 'all' || _filterLv0) {
+        if (filterValue !== 'all' || _filterLv0 || _filterPinned) {
             emptyMsg = '沒有找到符合條件的單字';
         }
-        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' && !_filterLv0 ? t('vocabEmptyHint') : '請試著切換其他分類或取消篩選條件'}</span></p>`;
+        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' && !_filterLv0 && !_filterPinned ? t('vocabEmptyHint') : '請試著切換其他分類或取消篩選條件'}</span></p>`;
         renderVocabSubtab();
         if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
@@ -596,10 +596,10 @@ export async function renderVocabTab() {
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         const displayEn = normalizeWordId(w.en);
 
-        // 🌟 核心一：轉換等級為實心與空心星星 (超過 Lv.3 亦顯示 3 顆實星)
         const star1 = w.level >= 1 ? '★' : '☆';
         const star2 = w.level >= 2 ? '★' : '☆';
         const star3 = w.level >= 3 ? '★' : '☆';
+        const pinOpacity = w.pinned ? '1' : '0.2'; // 釘選視覺提示
 
         const derivText = formatDerivText(w.deriv);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
@@ -613,12 +613,12 @@ export async function renderVocabTab() {
                </div>` 
             : '';
 
-        // 🌟 核心二：用動態星星取代原本呆板的 srs-badge 標籤
         card.innerHTML = `
             <div class="saved-word-info" style="width: 100%;">
                 <div class="saved-word-top" style="display: flex; align-items: center; flex-wrap: wrap;">
                     <span class="saved-word-en">${displayEn}</span>
                     ${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}
+                    <span class="vocab-pin" style="cursor:pointer; opacity:${pinOpacity}; margin-left:12px; font-size:18px; transition: opacity 0.2s;" title="特別挑選">📌</span>
                     <span class="vocab-stars" data-id="${w.id}" style="color: #fbbf24; font-size: 18px; margin-left: auto; cursor: pointer; user-select: none; letter-spacing: 2px;">
                         <span data-target="1" style="transition: color 0.2s;">${star1}</span><span data-target="2" style="transition: color 0.2s;">${star2}</span><span data-target="3" style="transition: color 0.2s;">${star3}</span>
                     </span>
@@ -633,23 +633,24 @@ export async function renderVocabTab() {
             </div>
         `;
 
-        // 🌟 核心三：為每顆星星綁定點擊事件 (寫入新等級並刷新畫面)
+        // 🌟 綁定釘選按鈕事件
+        card.querySelector('.vocab-pin').onclick = async (e) => {
+            e.stopPropagation();
+            w.pinned = !w.pinned;
+            await DB.addSavedWord(w);
+            renderVocabTab();
+        };
+
         const starsContainer = card.querySelector('.vocab-stars');
         starsContainer.querySelectorAll('span').forEach(starEl => {
             starEl.onclick = async (e) => {
-                e.stopPropagation(); // 阻止卡片展開手風琴效果
+                e.stopPropagation(); 
                 let targetLevel = parseInt(starEl.dataset.target);
-                
-                // 如果點擊的是當前相同的星級，則重置歸零為 Lv.0
-                if (w.level === targetLevel) {
-                    targetLevel = 0;
-                }
-                
+                if (w.level === targetLevel) targetLevel = 0;
                 w.level = targetLevel;
                 w.nextReview = getNextReviewTime(targetLevel);
-                
-                await DB.addSavedWord(w); // 立即寫入資料庫
-                renderVocabTab(); // 重新渲染畫面，讓星星和複習時間立刻更新
+                await DB.addSavedWord(w); 
+                renderVocabTab(); 
             };
         });
 
