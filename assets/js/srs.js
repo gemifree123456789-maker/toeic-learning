@@ -10,6 +10,7 @@ export function setOnFinish(fn) { _onFinish = fn; }
 
 const srsState = { active: false, words: [], allWords: [], questions: [], currentQ: 0, results: {}, answered: false };
 
+// 將衍生字轉為條列式的排版引擎
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
@@ -18,6 +19,7 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
+// TOEIC 隨機口音引擎 (嚴格排除 iOS 外星人語音)
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return null;
@@ -67,6 +69,7 @@ function toLowerWord(word) {
     return String(word || '').trim().toLowerCase();
 }
 
+// 取得完整的「干擾選項」物件，以利後續綁定發音與釘選功能
 function getDistractorWords(correctWord, allWords) {
     return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2);
 }
@@ -99,7 +102,7 @@ export function closeSrsReview() {
     document.getElementById('srsOverlay').classList.add('hidden');
 }
 
-// 🌟 綁定測驗中的釘選事件輔助函數
+// 綁定測驗主單字的釘選事件
 function attachSrsPinListener(word) {
     const pinBtn = document.getElementById('srsPinBtn');
     if (pinBtn) {
@@ -130,7 +133,7 @@ function renderSrsQuestion() {
 
     const enLower = toLowerWord(word.en);
     const safeEn = enLower.replace(/'/g, "\\'");
-    const pinOpacity = word.pinned ? '1' : '0.2'; // 根據釘選狀態設定透明度
+    const pinOpacity = word.pinned ? '1' : '0.2'; 
 
     if (q.type === 'en2zh') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div>
@@ -144,9 +147,15 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); b.className = 'srs-option'; b.innerHTML = `<span>${w.zh}</span>`; 
-            b.dataset.reveal = toLowerWord(w.en); b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); oArea.appendChild(b); 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.dataset.reveal = toLowerWord(w.en); 
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.dataset.wordId = w.id; 
+            b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
+            oArea.appendChild(b); 
         });
     } else if (q.type === 'zh2en') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintZhToEn')}</div>
@@ -158,9 +167,15 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); b.className = 'srs-option'; b.innerHTML = `<span>${toLowerWord(w.en)}</span>`; 
-            b.dataset.reveal = w.zh; b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); oArea.appendChild(b); 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${toLowerWord(w.en)}</span>`; 
+            b.dataset.reveal = w.zh; 
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.dataset.wordId = w.id; 
+            b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
+            oArea.appendChild(b); 
         });
     } else if (q.type === 'listen') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToZh')}</div>
@@ -175,9 +190,15 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); b.className = 'srs-option'; b.innerHTML = `<span>${w.zh}</span>`; 
-            b.dataset.reveal = toLowerWord(w.en); b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type); oArea.appendChild(b); 
+            const b = document.createElement('button'); 
+            b.className = 'srs-option'; 
+            b.innerHTML = `<span>${w.zh}</span>`; 
+            b.dataset.reveal = toLowerWord(w.en); 
+            b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
+            b.dataset.wordId = w.id; 
+            b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
+            oArea.appendChild(b); 
         });
     } else if (q.type === 'listen3') {
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
@@ -212,12 +233,15 @@ function renderSrsQuestion() {
             b.innerHTML = `<span>${label}</span>`;
             b.dataset.reveal = `${toLowerWord(w.en)} (${w.zh})`;
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.onclick = () => handleSrsAnswer(b, w.id === word.id, q.type);
+            b.dataset.wordId = w.id;
+            b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); };
             oArea.appendChild(b);
         });
     }
 }
 
+// 答題後展開解析模式：停止跳轉、顯示翻譯、選項轉化為可釘選卡片
 function handleSrsAnswer(btnEl, isCorrect, type) {
     if (srsState.answered) return;
     srsState.answered = true;
@@ -226,10 +250,57 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
     const resultType = (type === 'listen3') ? 'listen' : type;
     srsState.results[word.id][resultType] = isCorrect;
 
-    document.querySelectorAll('.srs-option').forEach(b => {
+    // 將所有選項展開為微型單字卡
+    document.querySelectorAll('.srs-option').forEach(async b => {
         b.classList.add('disabled');
+        // CSS 覆蓋：讓 disabled 狀態下的內部按鈕依然可以被點擊
+        b.style.pointerEvents = 'auto';
+        b.style.cursor = 'default';
+        
         if (b.dataset.isCorrect === "true") b.classList.add('correct');
-        if (b.dataset.reveal) b.innerHTML += `<span style="font-size:14px; font-weight:normal; margin-left:8px; opacity:0.8;">— ${b.dataset.reveal}</span>`;
+        
+        let textContent = b.innerHTML; 
+        if (b.dataset.reveal) {
+            textContent += `<span style="font-size:14px; font-weight:normal; margin-left:8px; opacity:0.8;">— ${b.dataset.reveal}</span>`;
+        }
+
+        // 查詢該選項單字的最新釘選狀態
+        const optWord = await DB.getSavedWord(b.dataset.wordId);
+        const pinOpacity = optWord?.pinned ? '1' : '0.2';
+        
+        // 注入發音與釘選按鈕
+        const actionsHtml = `
+            <div class="srs-opt-actions" style="margin-left: auto; display: flex; align-items: center; gap: 16px; pointer-events: auto;">
+                <span class="opt-speak-btn" data-en="${b.dataset.en}" style="cursor: pointer; font-size: 18px; color: #4b5563;" title="播放發音">${ICONS.speaker}</span>
+                <span class="opt-pin-btn" data-id="${b.dataset.wordId}" style="cursor: pointer; font-size: 20px; opacity: ${pinOpacity}; transition: opacity 0.2s;" title="特別挑選">📌</span>
+            </div>
+        `;
+
+        b.style.display = 'flex';
+        b.style.alignItems = 'center';
+        b.style.justifyContent = 'space-between';
+        b.style.textAlign = 'left';
+
+        b.innerHTML = `<div style="display:flex; align-items:center; flex-wrap:wrap; flex:1;">${textContent}</div>` + actionsHtml;
+
+        // 綁定發音事件
+        const speakBtn = b.querySelector('.opt-speak-btn');
+        if (speakBtn) {
+            speakBtn.onclick = (e) => { e.stopPropagation(); playRandomAccent(b.dataset.en); };
+        }
+
+        // 綁定釘選事件 (陷阱題直接收編)
+        const pinBtn = b.querySelector('.opt-pin-btn');
+        if (pinBtn) {
+            pinBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (optWord) {
+                    optWord.pinned = !optWord.pinned;
+                    pinBtn.style.opacity = optWord.pinned ? '1' : '0.2';
+                    await DB.addSavedWord(optWord);
+                }
+            };
+        }
     });
 
     if (!isCorrect) btnEl.classList.add('wrong');
@@ -242,6 +313,7 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
 
     playRandomAccent(toLowerWord(word.en));
 
+    // 產生手動「下一題 ➔」按鈕
     const nextBtn = document.createElement('button');
     nextBtn.className = 'srs-done-btn'; 
     nextBtn.style.marginTop = '24px';
@@ -265,7 +337,6 @@ async function showSrsResults() {
     
     for (const word of srsState.words) {
         const freshWord = await DB.getSavedWord(word.id) || word;
-
         const r = srsState.results[word.id];
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
         totalCorrect += cc;
@@ -301,7 +372,6 @@ async function showSrsResults() {
         const ipaText = freshWord.ipa?.trim() || '';
         const catText = freshWord.cat?.trim() || freshWord.category?.trim() || '';
         const zhText = freshWord.zh?.trim() || freshWord.def?.trim() || '';
-        
         const exText = freshWord.ex?.trim() || '';
         const exZhText = freshWord.ex_zh?.trim() || '';
         const rawDeriv = freshWord.deriv?.trim() || freshWord.derivatives?.trim() || '';
@@ -316,12 +386,14 @@ async function showSrsResults() {
 
         const exColor = exText ? '#374151' : '#9ca3af';
         const exZhColor = exZhText ? '#6b7280' : '#9ca3af';
-        const pinOpacity = freshWord.pinned ? '1' : '0.2'; // 結算畫面釘選提示
+        const pinOpacity = freshWord.pinned ? '1' : '0.2';
 
         item.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                <div class="saved-word-top" style="margin-bottom: 0; display:flex; align-items:center;">
+                <div class="saved-word-top" style="margin-bottom: 0; display:flex; align-items:center; flex-wrap:wrap;">
                     <span class="saved-word-en" style="font-size: 1.15rem; font-weight: 700; color: #111827;">${displayEn}</span>
+                    <button class="mini-speaker srs-speaker-btn" data-speak="${displayEn}" style="margin-left: 8px; margin-right: 8px; font-size: 1.1rem; color: #4b5563; background: none; border: none; cursor: pointer;">${ICONS.speaker}</button>
+                    ${posText ? `<span class="vocab-pos">${posText}</span>` : ''}
                 </div>
                 
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
@@ -334,7 +406,6 @@ async function showSrsResults() {
             </div>
 
             <div class="vocab-lookup-meta" style="margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-                ${posText ? `<span class="vocab-pos">${posText}</span>` : ''}
                 ${ipaText ? `<span class="vocab-ipa">${ipaText}</span>` : ''}
                 ${catText ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:600;">${catText}</span>` : ''}
             </div>
@@ -349,13 +420,11 @@ async function showSrsResults() {
             </div>
             <div style="font-size:13px; color:${exZhColor}; margin-bottom: 12px;">${exZhText || '(暫無中文翻譯)'}</div>
             
-            <div style="font-size: 12px; color: #8b5cf6; font-weight: 500; padding-top: 10px; border-top: 1px dashed #e5e7eb; display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 12px; color: #8b5cf6; font-weight: 500; padding-top: 10px; border-top: 1px dashed #e5e7eb;">
                 <span>⏰ 下次複習：<span class="srs-next-date">${wr.nextDate}</span></span>
-                <button class="mini-speaker srs-speaker-btn" data-speak="${displayEn}" style="background: #f3f4f6; padding: 6px; border-radius: 50%;">${ICONS.speaker}</button>
             </div>
         `;
 
-        // 🌟 結算畫面釘選點擊事件
         const pinBtn = item.querySelector('.srs-result-pin');
         pinBtn.onclick = async (e) => {
             e.stopPropagation();
@@ -369,13 +438,7 @@ async function showSrsResults() {
             const resetLevel = 0;
             const resetNext = getNextReviewTime(resetLevel); 
             await DB.updateWordSRS(freshWord.id, resetLevel, resetNext);
-            
-            starBtn.innerHTML = '🌟 已降級';
-            starBtn.style.background = '#fef3c7';
-            starBtn.style.borderColor = '#fbbf24';
-            starBtn.style.color = '#b45309';
-            starBtn.disabled = true;
-            
+            starBtn.innerHTML = '🌟 已降級'; starBtn.style.background = '#fef3c7'; starBtn.style.borderColor = '#fbbf24'; starBtn.style.color = '#b45309'; starBtn.disabled = true;
             item.querySelector('.srs-result-status').textContent = `${wr.cc}/3 Lv.${wr.oldLevel} → 0`;
             item.querySelector('.srs-result-status').className = 'srs-result-status down';
             item.querySelector('.srs-next-date').textContent = new Date(resetNext).toLocaleDateString();
