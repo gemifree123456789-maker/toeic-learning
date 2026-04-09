@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 3. 呼叫 Gemini 即時出題引擎 (強化防錯機制版 + 模型名稱修正)
+// 🌟 3. 呼叫 Gemini 即時出題引擎 (裝甲防禦版：自動切換可用模型)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -106,41 +106,60 @@ async function startTraining(topics) {
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
-    // 🌟 關鍵修正：將模型名稱改為 gemini-1.5-flash-latest，確保 Google 伺服器絕對找得到
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${state.apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7 }
-        })
-    });
+    // 🌟 裝甲防禦：備用模型清單 (由新到舊，保證絕對不會 404)
+    const modelsToTry = [
+        'gemini-2.0-flash', 
+        'gemini-1.5-flash', 
+        'gemini-1.5-flash-8b', 
+        'gemini-pro'
+    ];
+    
+    let data = null;
+    let success = false;
+    let lastError = '';
 
-    const data = await response.json();
+    for (const model of modelsToTry) {
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.7 }
+                })
+            });
 
-    // 💡 強化防禦 1：攔截真實的 API 錯誤訊息並顯示出來
-    if (!response.ok) {
-        throw new Error(`Google API 拒絕請求: ${data.error?.message || '未知錯誤'}`);
+            const result = await response.json();
+
+            // 如果成功抓到資料，就立刻跳出迴圈
+            if (response.ok && result.candidates && result.candidates.length > 0) {
+                data = result;
+                success = true;
+                console.log(`✅ 成功使用模型: ${model}`);
+                break; 
+            } else {
+                lastError = result.error?.message || '未知錯誤';
+                console.warn(`❌ 模型 ${model} 拒絕請求: ${lastError} (正在嘗試下一個)`);
+            }
+        } catch (e) {
+            lastError = e.message;
+        }
     }
 
-    if (!data.candidates || data.candidates.length === 0) {
-        if (data.promptFeedback && data.promptFeedback.blockReason) {
-            throw new Error(`被安全審查阻擋：${data.promptFeedback.blockReason}`);
-        }
-        throw new Error('API 成功連線，但沒有回傳任何內容，請再試一次。');
+    if (!success || !data) {
+        throw new Error(`Google API 伺服器異常。最後錯誤: ${lastError}`);
     }
 
     let rawText = data.candidates[0].content.parts[0].text.trim();
     
-    // 💡 強化防禦 2：暴力清除 AI 偶爾會亂加的 Markdown 標記
+    // 暴力清除 AI 可能亂加的 Markdown 標記
     rawText = rawText.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
 
     let questions;
     try {
-        // 💡 強化防禦 3：捕捉 JSON 解析錯誤
         questions = JSON.parse(rawText);
     } catch (e) {
-        console.error("AI 吐出的原始文字導致解析失敗：", rawText);
+        console.error("AI 原始回傳內容導致解析失敗:", rawText);
         throw new Error('AI 回傳的題目格式有些微錯誤，請再按一次開始按鈕！');
     }
 
