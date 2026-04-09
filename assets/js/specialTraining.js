@@ -80,7 +80,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 3. 呼叫 Gemini 即時出題引擎 (抓真兇專用版：鎖定單一模型顯現真實錯誤)
+// 🌟 自動偵測可用模型清單 (解決 not found 的終極武器)
+async function getBestModel(apiKey) {
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!res.ok) return 'models/gemini-1.5-flash'; // 失敗則回傳預設值
+        
+        const data = await res.json();
+        if (data.models) {
+            // 過濾出所有支援 "生成內容" 的模型
+            const validModels = data.models
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+                .map(m => m.name); // 會拿到類似 "models/gemini-1.5-flash" 的字串
+            
+            console.log("您的 API Key 支援的模型清單：", validModels);
+            
+            // 優先挑選最好的模型 (由新到舊)
+            const preferred = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro", "models/gemini-pro"];
+            for (const p of preferred) {
+                if (validModels.includes(p)) return p;
+            }
+            
+            // 如果都不在優先清單內，直接抓取清單上的第一個可用模型
+            if (validModels.length > 0) return validModels[0];
+        }
+    } catch (e) {
+        console.warn("無法取得模型清單，使用預設值", e);
+    }
+    return 'models/gemini-1.5-flash';
+}
+
+// 🌟 3. 呼叫 Gemini 即時出題引擎 (終極智慧導航版)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -106,10 +136,12 @@ async function startTraining(topics) {
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
-    // 🌟 核心修改：只鎖定這顆官方目前最主力推薦的 Flash 模型
-    const model = 'gemini-1.5-flash';
-    
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
+    // 🌟 第一步：先問 Google 伺服器「我能用哪個模型？」
+    const bestModelName = await getBestModel(state.apiKey);
+    console.log("🚀 最終決定使用模型出題：", bestModelName);
+
+    // 🌟 第二步：使用確認過絕對存在的模型出題
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,9 +152,8 @@ async function startTraining(topics) {
 
     const data = await response.json();
 
-    // 💡 如果被拒絕，直接把 Google 伺服器的「真實客製化錯誤訊息」印在畫面上
     if (!response.ok) {
-        throw new Error(`[真兇抓到了] API 拒絕請求 (${model}): ${data.error?.message || '未知錯誤'}`);
+        throw new Error(`Google API 拒絕請求 (${bestModelName}): ${data.error?.message || '未知錯誤'}`);
     }
 
     if (!data.candidates || data.candidates.length === 0) {
