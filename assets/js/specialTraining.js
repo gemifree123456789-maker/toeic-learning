@@ -80,14 +80,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 3. 呼叫 Gemini 即時出題引擎
+// 🌟 3. 呼叫 Gemini 即時出題引擎 (強化防錯機制版)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
-請務必以「純 JSON 陣列」格式回傳，不要有 markdown 標記 (\`\`\`json)，也不要有問候語。
+請務必以「純 JSON 陣列」格式回傳，絕對不要有 markdown 標記 (如 \`\`\`json)，也不要有任何問候語或額外文字。
 格式必須完全符合以下結構：
 [
   {
@@ -116,13 +116,33 @@ async function startTraining(topics) {
     });
 
     const data = await response.json();
-    if (!data.candidates) throw new Error('API 發生錯誤，請檢查網路或配額。');
+
+    // 💡 強化防禦 1：攔截真實的 API 錯誤訊息並顯示出來
+    if (!response.ok) {
+        throw new Error(`Google API 拒絕請求: ${data.error?.message || '未知錯誤'}`);
+    }
+
+    if (!data.candidates || data.candidates.length === 0) {
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+            throw new Error(`被安全審查阻擋：${data.promptFeedback.blockReason}`);
+        }
+        throw new Error('API 成功連線，但沒有回傳任何內容，請再試一次。');
+    }
 
     let rawText = data.candidates[0].content.parts[0].text.trim();
-    if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    else if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '').trim();
+    
+    // 💡 強化防禦 2：暴力清除 AI 偶爾會亂加的 Markdown 標記
+    rawText = rawText.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
 
-    const questions = JSON.parse(rawText);
+    let questions;
+    try {
+        // 💡 強化防禦 3：捕捉 JSON 解析錯誤
+        questions = JSON.parse(rawText);
+    } catch (e) {
+        console.error("AI 吐出的原始文字導致解析失敗：", rawText);
+        throw new Error('AI 回傳的題目格式有些微錯誤，請再按一次開始按鈕！');
+    }
+
     questions.forEach(q => q.id = 'sp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
 
     stState.questions = questions;
