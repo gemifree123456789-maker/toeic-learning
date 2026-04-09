@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 🌟 3. 呼叫 Gemini 即時出題引擎 (強化防錯機制版)
+// 🌟 3. 呼叫 Gemini 即時出題引擎 (強化防錯機制版 + 模型名稱修正)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -106,7 +106,8 @@ async function startTraining(topics) {
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+    // 🌟 關鍵修正：將模型名稱改為 gemini-1.5-flash-latest，確保 Google 伺服器絕對找得到
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${state.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
