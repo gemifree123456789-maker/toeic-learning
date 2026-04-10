@@ -1,6 +1,6 @@
 import { state } from './state.js';
 
-// 🌟 1. 獨立的錯題本資料庫 (MistakesDB)
+// 🌟 1. 獨立的錯題本資料庫 (MistakesDB 擴充版)
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
@@ -23,12 +23,32 @@ export const MistakesDB = {
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
+    },
+    // 新增：取得所有錯題
+    async getAll() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('mistakes', 'readonly');
+            const req = tx.objectStore('mistakes').getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    },
+    // 新增：刪除錯題
+    async delete(id) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('mistakes', 'readwrite');
+            tx.objectStore('mistakes').delete(id);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
     }
 };
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
-// 🌟 2. 介面切換邏輯 (配合原生 CSS 框架)
+// 🌟 2. 介面切換邏輯 (加入紀錄頁籤的子選單控制)
 document.addEventListener('DOMContentLoaded', () => {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
@@ -38,14 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStartSpecial = document.getElementById('btnStartSpecial');
     const btnCloseSpecial = document.getElementById('btnCloseSpecial');
 
-    // 攔截原生切換邏輯
+    // 攔截專項特訓按鈕
     if (tabSpecial) {
         tabSpecial.addEventListener('click', (e) => {
-            // 清除其他按鈕 active 狀態
             practiceModeBtns.forEach(btn => btn.classList.remove('active'));
             tabSpecial.classList.add('active');
-            
-            // 隱藏所有面板，只顯示 special 面板
             practicePanels.forEach(panel => panel.classList.add('hidden'));
             if(specialConfigArea) specialConfigArea.classList.remove('hidden');
         });
@@ -78,39 +95,122 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // 🌟 新增：歷史紀錄子頁籤切換邏輯
+    const btnHistoryGeneral = document.querySelector('[data-history-subtab="general"]');
+    const btnHistoryMistakes = document.querySelector('[data-history-subtab="mistakes"]');
+    const panelHistoryGeneral = document.getElementById('historyMainPanel');
+    const panelHistoryMistakes = document.getElementById('historyMistakesPanel');
+    const tabHistoryBtn = document.querySelector('button[data-tab="history"]'); 
+
+    function switchHistorySubtab(tab) {
+        if(tab === 'general') {
+            btnHistoryGeneral.classList.add('active');
+            btnHistoryMistakes.classList.remove('active');
+            panelHistoryGeneral.classList.remove('hidden');
+            panelHistoryMistakes.classList.add('hidden');
+        } else {
+            btnHistoryMistakes.classList.add('active');
+            btnHistoryGeneral.classList.remove('active');
+            panelHistoryMistakes.classList.remove('hidden');
+            panelHistoryGeneral.classList.add('hidden');
+            renderMistakesList(); // 切換到錯題本時，立即重新讀取資料庫
+        }
+    }
+
+    if (btnHistoryGeneral) btnHistoryGeneral.onclick = () => switchHistorySubtab('general');
+    if (btnHistoryMistakes) btnHistoryMistakes.onclick = () => switchHistorySubtab('mistakes');
+
+    // 當點擊底部導覽列的「紀錄」時，如果停留在錯題本，自動更新畫面
+    if (tabHistoryBtn) {
+        tabHistoryBtn.addEventListener('click', () => {
+            if (panelHistoryMistakes && !panelHistoryMistakes.classList.contains('hidden')) {
+                renderMistakesList();
+            }
+        });
+    }
 });
 
-// 🌟 自動偵測可用模型清單 (解決 not found 的終極武器)
+// 🌟 3. 錯題本渲染引擎 (把資料庫的錯題畫在畫面上)
+async function renderMistakesList() {
+    const listEl = document.getElementById('mistakesList');
+    if (!listEl) return;
+    
+    listEl.innerHTML = '<p style="text-align:center; padding:20px; color:#9ca3af;">載入中...</p>';
+    const mistakes = await MistakesDB.getAll();
+    
+    if (mistakes.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; color:#9ca3af; background:#f9fafb; border-radius:12px; margin-top:20px;">尚無錯題紀錄<br><span style="font-size:12px;">在專項特訓中答錯或釘選的題目會出現在這裡</span></div>';
+        return;
+    }
+
+    // 依儲存時間由新到舊排序
+    mistakes.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+
+    listEl.innerHTML = '';
+    mistakes.forEach(q => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;';
+        
+        // 渲染選項 (標示正確答案)
+        let optsHtml = q.options.map(opt => `
+            <div style="font-size: 14px; margin-bottom: 6px; color: ${opt.isCorrect ? '#166534' : '#4b5563'}; background: ${opt.isCorrect ? '#dcfce7' : '#f3f4f6'}; padding: 8px 12px; border-radius: 8px; border: 1px solid ${opt.isCorrect ? '#bbf7d0' : '#e5e7eb'};">
+                <span style="font-weight: 500;">${opt.en}</span> <span style="font-size: 12px; opacity: 0.8; margin-left: 4px;">— ${opt.zh}</span>
+                ${opt.isCorrect ? '<span style="float:right;">✅</span>' : ''}
+            </div>
+        `).join('');
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <span style="background: #e0e7ff; color: #3b82f6; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;">${q.topic}</span>
+                <button class="delete-mistake-btn" data-id="${q.id}" style="background: #fee2e2; border: none; color: #ef4444; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="移除此題">✕</button>
+            </div>
+            <div style="font-size: 16px; font-weight: 500; color: #1f2937; margin-bottom: 8px; line-height: 1.5;">${q.en.replace('___', '_____')}</div>
+            <div style="font-size: 13px; color: #6b7280; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed #e5e7eb;">${q.zh}</div>
+            <div style="margin-bottom: 16px;">${optsHtml}</div>
+            <div style="background: #f8fafc; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px;">
+                <div style="font-size: 12px; font-weight: bold; color: #1e40af; margin-bottom: 4px;">💡 深入解析</div>
+                <div style="font-size: 13px; color: #1e3a8a; line-height: 1.6;">${q.explanation}</div>
+            </div>
+        `;
+
+        // 綁定刪除事件
+        card.querySelector('.delete-mistake-btn').onclick = async () => {
+            if (confirm('確定要從錯題本移除這題嗎？')) {
+                await MistakesDB.delete(q.id);
+                renderMistakesList(); 
+            }
+        };
+
+        listEl.appendChild(card);
+    });
+}
+
+// 🌟 自動偵測可用模型清單
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        if (!res.ok) return 'models/gemini-1.5-flash'; // 失敗則回傳預設值
+        if (!res.ok) return 'models/gemini-1.5-flash';
         
         const data = await res.json();
         if (data.models) {
-            // 過濾出所有支援 "生成內容" 的模型
             const validModels = data.models
                 .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-                .map(m => m.name); // 會拿到類似 "models/gemini-1.5-flash" 的字串
+                .map(m => m.name); 
             
-            console.log("您的 API Key 支援的模型清單：", validModels);
-            
-            // 優先挑選最好的模型 (由新到舊)
             const preferred = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro", "models/gemini-pro"];
             for (const p of preferred) {
                 if (validModels.includes(p)) return p;
             }
-            
-            // 如果都不在優先清單內，直接抓取清單上的第一個可用模型
             if (validModels.length > 0) return validModels[0];
         }
     } catch (e) {
-        console.warn("無法取得模型清單，使用預設值", e);
+        console.warn("無法取得模型清單", e);
     }
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 3. 呼叫 Gemini 即時出題引擎 (終極智慧導航版)
+// 🌟 4. 呼叫 Gemini 即時出題引擎
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -136,11 +236,8 @@ async function startTraining(topics) {
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
-    // 🌟 第一步：先問 Google 伺服器「我能用哪個模型？」
     const bestModelName = await getBestModel(state.apiKey);
-    console.log("🚀 最終決定使用模型出題：", bestModelName);
 
-    // 🌟 第二步：使用確認過絕對存在的模型出題
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,9 +254,6 @@ async function startTraining(topics) {
     }
 
     if (!data.candidates || data.candidates.length === 0) {
-        if (data.promptFeedback && data.promptFeedback.blockReason) {
-            throw new Error(`被安全審查阻擋：${data.promptFeedback.blockReason}`);
-        }
         throw new Error('API 成功連線，但回傳空白。');
     }
 
@@ -170,8 +264,7 @@ async function startTraining(topics) {
     try {
         questions = JSON.parse(rawText);
     } catch (e) {
-        console.error("AI 原始回傳內容導致解析失敗:", rawText);
-        throw new Error('AI 回傳的題目格式有些微錯誤 (少括號等)，請再按一次開始按鈕！');
+        throw new Error('AI 回傳的題目格式有些微錯誤，請再按一次開始按鈕！');
     }
 
     questions.forEach(q => q.id = 'sp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
@@ -184,7 +277,7 @@ async function startTraining(topics) {
     renderQuestion();
 }
 
-// 🌟 4. 高互動測驗渲染引擎 (套用原生 srs-option 樣式)
+// 🌟 5. 高互動測驗渲染引擎
 function renderQuestion() {
     const q = stState.questions[stState.currentQ];
     stState.answered = false;
@@ -266,7 +359,6 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         }
     };
 
-    // 🚨 智慧防呆：答錯自動收錄
     if (!isCorrect) btnPinMistake.click(); 
 
     const nextBtn = document.createElement('button');

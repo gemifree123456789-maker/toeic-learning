@@ -305,9 +305,24 @@
     </div>
 
     <div id="tabHistory" class="container hidden">
-        <h3 class="section-title" style="margin-top: 10px;" data-i18n="historyTitle">學習紀錄 History</h3>
-        <div id="historyList"></div>
-        <button id="btnClearHistory" style="font-size:13px; color:red; background:none; border:none; margin-top:10px;" data-i18n="clearAllHistoryBtn">清除全部紀錄</button>
+        <div class="vocab-tab-header" style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="section-title" style="margin: 0;" data-i18n="historyTitle">紀錄與錯題</h3>
+        </div>
+        
+        <div class="vocab-subtab-switch" id="historySubtabSwitch" style="margin-bottom: 16px;">
+            <button class="vocab-subtab-btn active" data-history-subtab="general">學習紀錄</button>
+            <button class="vocab-subtab-btn" data-history-subtab="mistakes">特訓錯題本 📌</button>
+        </div>
+
+        <div id="historyMainPanel">
+            <div id="historyList"></div>
+            <button id="btnClearHistory" style="font-size:13px; color:red; background:none; border:none; margin-top:10px;" data-i18n="clearAllHistoryBtn">清除全部紀錄</button>
+        </div>
+
+        <div id="historyMistakesPanel" class="hidden">
+            <p style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-align: center;">收錄您在「專項特訓」中答錯或手動釘選的文法考題。</p>
+            <div id="mistakesList"></div>
+        </div>
     </div>
 
     <div id="tabAbout" class="container hidden">
