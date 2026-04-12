@@ -1,5 +1,8 @@
 import { state } from './state.js';
 
+// 🌟 全域狀態：記錄使用者目前勾選了哪些錯題過濾器 (Set 資料結構支援複選)
+let activeMistakeFilters = new Set();
+
 // 🌟 1. 獨立的錯題本資料庫 (MistakesDB 擴充版)
 export const MistakesDB = {
     async open() {
@@ -24,7 +27,6 @@ export const MistakesDB = {
             tx.onerror = () => reject(tx.error);
         });
     },
-    // 新增：取得所有錯題
     async getAll() {
         const db = await this.open();
         return new Promise((resolve, reject) => {
@@ -34,7 +36,6 @@ export const MistakesDB = {
             req.onerror = () => reject(req.error);
         });
     },
-    // 新增：刪除錯題
     async delete(id) {
         const db = await this.open();
         return new Promise((resolve, reject) => {
@@ -48,7 +49,7 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
-// 🌟 2. 介面切換邏輯 (加入紀錄頁籤的子選單控制)
+// 🌟 2. 介面切換與事件綁定邏輯
 document.addEventListener('DOMContentLoaded', () => {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
@@ -96,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 🌟 新增：歷史紀錄子頁籤切換邏輯
+    // 歷史紀錄子頁籤切換邏輯
     const btnHistoryGeneral = document.querySelector('[data-history-subtab="general"]');
     const btnHistoryMistakes = document.querySelector('[data-history-subtab="mistakes"]');
     const panelHistoryGeneral = document.getElementById('historyMainPanel');
@@ -121,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnHistoryGeneral) btnHistoryGeneral.onclick = () => switchHistorySubtab('general');
     if (btnHistoryMistakes) btnHistoryMistakes.onclick = () => switchHistorySubtab('mistakes');
 
-    // 當點擊底部導覽列的「紀錄」時，如果停留在錯題本，自動更新畫面
     if (tabHistoryBtn) {
         tabHistoryBtn.addEventListener('click', () => {
             if (panelHistoryMistakes && !panelHistoryMistakes.classList.contains('hidden')) {
@@ -129,30 +129,97 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // 🌟 綁定錯題過濾器點擊事件 (單/複選邏輯)
+    const filterBtns = document.querySelectorAll('.mistake-filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const topic = btn.dataset.topic;
+            
+            if (topic === 'all') {
+                activeMistakeFilters.clear(); // 點擊全部，清空所有過濾器
+            } else {
+                if (activeMistakeFilters.has(topic)) {
+                    activeMistakeFilters.delete(topic); // 再次點擊取消勾選
+                } else {
+                    activeMistakeFilters.add(topic); // 點擊加入勾選
+                }
+            }
+
+            // 更新按鈕視覺狀態
+            filterBtns.forEach(b => {
+                const t = b.dataset.topic;
+                const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
+                
+                if (isActive) {
+                    b.style.background = '#e0e7ff';
+                    b.style.borderColor = '#818cf8';
+                    b.style.color = '#4338ca';
+                    b.style.fontWeight = 'bold';
+                } else {
+                    b.style.background = '#fff';
+                    b.style.borderColor = '#e5e7eb';
+                    b.style.color = '#4b5563';
+                    b.style.fontWeight = '500';
+                }
+            });
+
+            renderMistakesList(); // 重新渲染列表
+        });
+    });
+
+    // 🌟 綁定 PDF 匯出/列印事件
+    const btnPrintPDF = document.getElementById('btnPrintPDF');
+    if (btnPrintPDF) {
+        btnPrintPDF.addEventListener('click', () => {
+            window.print();
+        });
+    }
+
+    // 🌟 動態注入列印專屬 CSS (隱藏導覽列，只印出租題)
+    const printStyle = document.createElement('style');
+    printStyle.textContent = `
+        @media print {
+            body * { visibility: hidden; }
+            #historyMistakesPanel, #historyMistakesPanel * { visibility: visible; }
+            #historyMistakesPanel { position: absolute; left: 0; top: 0; width: 100%; }
+            header, .tab-bar, .vocab-tab-header, .vocab-subtab-switch, #mistakesFilterArea, #btnPrintPDF, .delete-mistake-btn { display: none !important; }
+            #historyMistakesPanel > p { display: none !important; }
+            .mistake-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; margin-bottom: 20px !important; }
+        }
+    `;
+    document.head.appendChild(printStyle);
 });
 
-// 🌟 3. 錯題本渲染引擎 (把資料庫的錯題畫在畫面上)
+// 🌟 3. 錯題本渲染引擎 (包含過濾邏輯)
 async function renderMistakesList() {
     const listEl = document.getElementById('mistakesList');
     if (!listEl) return;
     
     listEl.innerHTML = '<p style="text-align:center; padding:20px; color:#9ca3af;">載入中...</p>';
-    const mistakes = await MistakesDB.getAll();
+    const allMistakes = await MistakesDB.getAll();
     
-    if (mistakes.length === 0) {
-        listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; color:#9ca3af; background:#f9fafb; border-radius:12px; margin-top:20px;">尚無錯題紀錄<br><span style="font-size:12px;">在專項特訓中答錯或釘選的題目會出現在這裡</span></div>';
+    // 依據 activeMistakeFilters 進行篩選
+    let displayMistakes = allMistakes;
+    if (activeMistakeFilters.size > 0) {
+        displayMistakes = allMistakes.filter(q => activeMistakeFilters.has(q.topic));
+    }
+    
+    if (displayMistakes.length === 0) {
+        const msg = activeMistakeFilters.size > 0 ? '沒有找到符合該分類的錯題' : '尚無錯題紀錄<br><span style="font-size:12px;">在專項特訓中答錯或釘選的題目會出現在這裡</span>';
+        listEl.innerHTML = `<div style="text-align:center; padding:40px 20px; color:#9ca3af; background:#f9fafb; border-radius:12px; margin-top:20px;">${msg}</div>`;
         return;
     }
 
     // 依儲存時間由新到舊排序
-    mistakes.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    displayMistakes.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 
     listEl.innerHTML = '';
-    mistakes.forEach(q => {
+    displayMistakes.forEach(q => {
         const card = document.createElement('div');
+        card.className = 'mistake-card';
         card.style.cssText = 'background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;';
         
-        // 渲染選項 (標示正確答案)
         let optsHtml = q.options.map(opt => `
             <div style="font-size: 14px; margin-bottom: 6px; color: ${opt.isCorrect ? '#166534' : '#4b5563'}; background: ${opt.isCorrect ? '#dcfce7' : '#f3f4f6'}; padding: 8px 12px; border-radius: 8px; border: 1px solid ${opt.isCorrect ? '#bbf7d0' : '#e5e7eb'};">
                 <span style="font-weight: 500;">${opt.en}</span> <span style="font-size: 12px; opacity: 0.8; margin-left: 4px;">— ${opt.zh}</span>
@@ -174,7 +241,6 @@ async function renderMistakesList() {
             </div>
         `;
 
-        // 綁定刪除事件
         card.querySelector('.delete-mistake-btn').onclick = async () => {
             if (confirm('確定要從錯題本移除這題嗎？')) {
                 await MistakesDB.delete(q.id);
@@ -210,11 +276,10 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 4. 呼叫 Gemini 即時出題引擎 (終極智慧導航版 + 解析防錯亂機制)
+// 🌟 4. 呼叫 Gemini 即時出題引擎
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
-    // 🌟 核心修正：在 explanation 處下達了嚴格的「禁止使用 A/B/C/D」指令
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
@@ -237,11 +302,9 @@ async function startTraining(topics) {
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
-    // 🌟 第一步：先問 Google 伺服器「我能用哪個模型？」
     const bestModelName = await getBestModel(state.apiKey);
     console.log("🚀 最終決定使用模型出題：", bestModelName);
 
-    // 🌟 第二步：使用確認過絕對存在的模型出題
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

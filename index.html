@@ -321,6 +321,22 @@
 
         <div id="historyMistakesPanel" class="hidden">
             <p style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-align: center;">收錄您在「專項特訓」中答錯或手動釘選的文法考題。</p>
+            
+            <div id="mistakesFilterArea" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 16px;">
+                <button class="mistake-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
+                <button class="mistake-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
+                <button class="mistake-filter-btn" data-topic="詞性判斷" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">詞性判斷</button>
+                <button class="mistake-filter-btn" data-topic="介系詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">介系詞</button>
+                <button class="mistake-filter-btn" data-topic="代名詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">代名詞</button>
+                <button class="mistake-filter-btn" data-topic="單複數" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">單複數</button>
+                <button class="mistake-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
+                <button class="mistake-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
+            </div>
+            
+            <div style="text-align: center; margin-bottom: 16px;">
+                <button id="btnPrintPDF" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📄 儲存為 PDF (列印)</button>
+            </div>
+
             <div id="mistakesList"></div>
         </div>
     </div>
