@@ -1,4 +1,4 @@
-// Word modal (long-press lookup), save-to-vocab, renderVocabTab.
+// Word modal (click/select lookup), save-to-vocab, renderVocabTab.
 
 import { state, ICONS, SRS_INTERVALS, SRS_MIN_WORDS, SRS_MAX_WORDS, getNextReviewTime } from './state.js';
 import { DB } from './db.js';
@@ -66,28 +66,21 @@ export function setVocabSubtab(tab) {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
+// 🌟 核心升級 1：將原本卡頓的「長按」，優化為輕快絲滑的「點擊」
 export function addLongPressListener(element, wordText) {
-    let pressTimer;
-    const start = (e) => {
-        if (e.type === 'mousedown' && e.button !== 0) return;
-        element.classList.add('word-pressing');
-        pressTimer = setTimeout(() => {
-            element.classList.remove('word-pressing');
-            element.classList.add('word-highlighted');
-            if (state.highlightedElement && state.highlightedElement !== element)
-                state.highlightedElement.classList.remove('word-highlighted');
-            state.highlightedElement = element;
-            showWordModal(wordText);
-        }, 600);
-    };
-    const cancel = () => { clearTimeout(pressTimer); element.classList.remove('word-pressing'); };
-    element.addEventListener('touchstart', start, { passive: true });
-    element.addEventListener('touchend', cancel);
-    element.addEventListener('touchmove', cancel);
-    element.addEventListener('mousedown', start);
-    element.addEventListener('mouseup', cancel);
-    element.addEventListener('mouseleave', cancel);
-    element.oncontextmenu = (e) => { e.preventDefault(); return false; };
+    element.style.cursor = 'pointer';
+    element.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (state.highlightedElement && state.highlightedElement !== element) {
+            state.highlightedElement.classList.remove('word-highlighted');
+        }
+        element.classList.add('word-highlighted');
+        state.highlightedElement = element;
+        
+        showWordModal(wordText);
+    });
 }
 
 function showWordModal(word) {
@@ -144,6 +137,7 @@ function showWordModal(word) {
             else { exZhEl.classList.add('hidden'); }
             await renderSaveButton(actionArea, word, vocabItem);
         } else {
+            // 🌟 找不到單字時，自動顯示「一鍵呼叫 AI」按鈕
             document.getElementById('wmPos').innerText = '';
             document.getElementById('wmIpa').innerText = '';
             let oldCat = document.getElementById('wmCat');
@@ -151,6 +145,7 @@ function showWordModal(word) {
             document.getElementById('wmDef').innerText = t('vocabNoDetails');
             document.getElementById('wmEx').classList.add('hidden');
             document.getElementById('wmExZh').classList.add('hidden');
+            
             const genBtn = document.createElement('button');
             genBtn.className = 'wm-btn';
             genBtn.style.marginTop = '0';
@@ -402,7 +397,7 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🚀 全自動清洗機 (終極防毒逃脫版)
+// 全自動清洗機 
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -443,14 +438,12 @@ document.addEventListener('click', async (event) => {
                 await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (e) {
-                // 遇到限速乖乖等待
                 if (e.message === "HTTP_429" || String(e).includes("429") || String(e).includes("quota")) {
                     console.warn(`觸發 API 限速，啟動 30 秒冷卻...`);
                     btn.innerHTML = `⏳ 限速冷卻 30 秒...`;
                     await new Promise(resolve => setTimeout(resolve, 30000)); 
-                    i--; // 退回一步重洗
+                    i--; 
                 } else {
-                    // 🌟 終極逃脫：遇到 AI 無法處理的毒瘤字，強制蓋上印章，永遠踢出隊列！
                     console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en, e);
                     w.deriv = w.deriv || '(查無衍生字)';
                     w.ipa = w.ipa || '(查無音標)';
@@ -532,7 +525,6 @@ export async function renderVocabTab() {
         filterSelect.parentNode.insertBefore(btnPinned, filterSelect);
         filterSelect.parentNode.style.display = 'flex';
         filterSelect.parentNode.style.alignItems = 'center';
-        // 🌟 修正排版：為過濾器按鈕區塊增加底部間距，不再黏著單字卡
         filterSelect.parentNode.style.marginBottom = '20px';
     }
 
@@ -671,4 +663,34 @@ export async function renderVocabTab() {
     
     renderVocabSubtab();
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
+}
+
+// 🌟 核心升級 2：全域劃詞/反白選取查單字功能 (完全解放限制)
+document.addEventListener('mouseup', handleGlobalSelection);
+document.addEventListener('touchend', handleGlobalSelection);
+
+function handleGlobalSelection(e) {
+    // 避免在輸入框內選取文字時誤觸發
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return; // 確保有選取到文字
+        
+        const selectedText = selection.toString().trim();
+        
+        // 嚴格把關：必須是 2~35 個字元的「純英文單字」(允許連字號與撇號)
+        // 確保不會選到一整句話或中文字而亂彈視窗
+        const wordRegex = /^[a-zA-Z\-']{2,35}$/;
+        
+        if (wordRegex.test(selectedText)) {
+            const modal = document.getElementById('wordModal');
+            
+            // 無論字典是不是開著的，都強制幫你查這個新選取的字
+            showWordModal(selectedText.toLowerCase());
+            
+            // 查完之後自動取消反白，讓畫面維持乾淨 (對手機版體驗特別好)
+            selection.removeAllRanges();
+        }
+    }, 150); // 稍微延遲，讓瀏覽器或手機作業系統原生選取動作順利完成
 }
