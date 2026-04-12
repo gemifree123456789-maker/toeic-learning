@@ -210,10 +210,11 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 4. 呼叫 Gemini 即時出題引擎
+// 🌟 4. 呼叫 Gemini 即時出題引擎 (終極智慧導航版 + 解析防錯亂機制)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
+    // 🌟 核心修正：在 explanation 處下達了嚴格的「禁止使用 A/B/C/D」指令
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
@@ -226,18 +227,21 @@ async function startTraining(topics) {
     "en": "完整的英文題目，空格請用 ___ 表示",
     "zh": "題目的完整中文翻譯",
     "options": [
-      {"en": "選項A的英文", "zh": "選項A的中文", "isCorrect": true},
-      {"en": "選項B", "zh": "選項B的中文", "isCorrect": false},
-      {"en": "選項C", "zh": "選項C的中文", "isCorrect": false},
-      {"en": "選項D", "zh": "選項D的中文", "isCorrect": false}
+      {"en": "正確選項", "zh": "正確選項的中文", "isCorrect": true},
+      {"en": "錯誤選項1", "zh": "錯誤選項1的中文", "isCorrect": false},
+      {"en": "錯誤選項2", "zh": "錯誤選項2的中文", "isCorrect": false},
+      {"en": "錯誤選項3", "zh": "錯誤選項3的中文", "isCorrect": false}
     ],
-    "explanation": "詳細的中文解析，說明為什麼選這個答案，以及其他選項錯在哪裡。"
+    "explanation": "詳細的中文解析。⚠️極度重要：解釋時請直接引用「英文單字」本身，絕對不要使用「選項A」、「選項B」等字眼，因為前端系統會隨機打亂選項順序。"
   }
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
+    // 🌟 第一步：先問 Google 伺服器「我能用哪個模型？」
     const bestModelName = await getBestModel(state.apiKey);
+    console.log("🚀 最終決定使用模型出題：", bestModelName);
 
+    // 🌟 第二步：使用確認過絕對存在的模型出題
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -254,6 +258,9 @@ async function startTraining(topics) {
     }
 
     if (!data.candidates || data.candidates.length === 0) {
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+            throw new Error(`被安全審查阻擋：${data.promptFeedback.blockReason}`);
+        }
         throw new Error('API 成功連線，但回傳空白。');
     }
 
@@ -264,7 +271,8 @@ async function startTraining(topics) {
     try {
         questions = JSON.parse(rawText);
     } catch (e) {
-        throw new Error('AI 回傳的題目格式有些微錯誤，請再按一次開始按鈕！');
+        console.error("AI 原始回傳內容導致解析失敗:", rawText);
+        throw new Error('AI 回傳的題目格式有些微錯誤 (少括號等)，請再按一次開始按鈕！');
     }
 
     questions.forEach(q => q.id = 'sp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
