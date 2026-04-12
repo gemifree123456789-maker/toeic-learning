@@ -10,7 +10,7 @@ let _startSrsReview = null;
 let _vocabSubtab = 'notebook';
 let _lookupResult = null;
 let _filterLv0 = false; 
-let _filterPinned = false; // 🌟 新增：全域狀態，記錄「特別挑選」按鈕是否被按下
+let _filterPinned = false; 
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
@@ -224,7 +224,7 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
         createdAt: Date.now(),
         nextReview: getNextReviewTime(0),
         level: 0,
-        pinned: false // 預設不釘選
+        pinned: false
     };
 }
 
@@ -402,12 +402,13 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🚀 全自動清洗機
+// 🚀 全自動清洗機 (終極防毒逃脫版)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
+        
         let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
         
         if (targets.length === 0) {
@@ -419,52 +420,43 @@ document.addEventListener('click', async (event) => {
 
         btn.disabled = true;
         let successCount = 0;
-        let currentDelay = 250; 
-        let consecutiveFailures = 0;
 
         for (let i = 0; i < targets.length; i++) {
             const w = targets[i];
-            const speedStatus = currentDelay <= 250 ? "⚡ 極速" : "🐢 降檔";
-            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length}) [${speedStatus}]...`;
+            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
             
             try {
                 const info = await fetchWordDetails(w.en, true);
                 
-                w.pos = info.pos || w.pos;
-                w.ipa = info.ipa || w.ipa;
-                w.cat = info.category || w.cat;
-                w.zh = info.def || w.zh;
-                w.ex = info.ex || w.ex;
-                w.ex_zh = info.ex_zh || w.ex_zh;
-                w.deriv = info.derivatives || w.deriv || '';
+                w.pos = info.pos || w.pos || '-';
+                w.ipa = info.ipa || w.ipa || '(查無音標)';
+                w.cat = info.category || w.cat || 'Other';
+                w.zh = info.def || w.zh || '-';
+                w.ex = info.ex || w.ex || '';
+                w.ex_zh = info.ex_zh || w.ex_zh || '';
+                w.deriv = info.derivatives || w.deriv || '(查無衍生字)'; 
                 
                 await DB.addSavedWord(w);
                 syncFullUpdateToCloud(w); 
                 
                 successCount++;
-                w._retry = 0;
-                currentDelay = 250;
-                consecutiveFailures = 0;
+                await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (e) {
-                if (e.message === "HTTP_429" || String(e).includes("429")) {
-                    w._retry = (w._retry || 0) + 1;
-                    if (w._retry <= 3) {
-                        currentDelay = 6000; i--; 
-                    } else {
-                        currentDelay = 250; 
-                        consecutiveFailures++;
-                        if (consecutiveFailures >= 3) {
-                            alert("🚨 連續阻擋，中止任務！請確認 API Key。");
-                            break; 
-                        }
-                    }
+                // 遇到限速乖乖等待
+                if (e.message === "HTTP_429" || String(e).includes("429") || String(e).includes("quota")) {
+                    console.warn(`觸發 API 限速，啟動 30 秒冷卻...`);
+                    btn.innerHTML = `⏳ 限速冷卻 30 秒...`;
+                    await new Promise(resolve => setTimeout(resolve, 30000)); 
+                    i--; // 退回一步重洗
                 } else {
-                    consecutiveFailures++;
+                    // 🌟 終極逃脫：遇到 AI 無法處理的毒瘤字，強制蓋上印章，永遠踢出隊列！
+                    console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en, e);
+                    w.deriv = w.deriv || '(查無衍生字)';
+                    w.ipa = w.ipa || '(查無音標)';
+                    await DB.addSavedWord(w);
+                    syncFullUpdateToCloud(w);
                 }
-            }
-            if (i < targets.length - 1 && consecutiveFailures < 3) {
-                await new Promise(resolve => setTimeout(resolve, currentDelay));
             }
         }
         alert(`✅ 清洗任務結束！成功標準化並回寫了 ${successCount} 個單字。`);
@@ -473,6 +465,43 @@ document.addEventListener('click', async (event) => {
         renderVocabTab();
     }
 });
+
+export async function refreshSrsBanner(allWords) {
+    const entryEl = document.getElementById('srsReviewEntry');
+    if (!entryEl) return;
+    
+    const dueWords = allWords.filter(w => w.nextReview <= Date.now());
+    entryEl.innerHTML = '';
+
+    if (allWords.length < SRS_MIN_WORDS) {
+        entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsNeedMinimum', { min: SRS_MIN_WORDS, current: allWords.length })}</p></div>`;
+    } else if (dueWords.length < SRS_MIN_WORDS) {
+        const nextDue = allWords.filter(w => w.nextReview > Date.now()).sort((a, b) => a.nextReview - b.nextReview);
+        const nextDate = nextDue.length > 0 ? new Date(nextDue[0].nextReview).toLocaleDateString() : '—';
+        entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsDueInsufficient', { min: SRS_MIN_WORDS, current: dueWords.length })}<br>${t('vocabNextReviewLabel', { date: nextDate })}</p></div>`;
+    } else {
+        const reviewCount = Math.min(dueWords.length, SRS_MAX_WORDS);
+        const card = document.createElement('button');
+        card.className = 'review-entry-card';
+        card.innerHTML = `<h3>${t('vocabSrsStartTitle')}</h3><p>${t('vocabSrsStartDesc', { dueCount: dueWords.length, reviewCount })}</p>`;
+        card.onclick = () => { if (_startSrsReview) _startSrsReview(dueWords, allWords); };
+        entryEl.appendChild(card);
+    }
+
+    const lv5Words = allWords.filter(w => w.level >= SRS_INTERVALS.length - 1);
+    if (lv5Words.length > 0) {
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'review-entry-card';
+        clearBtn.style.background = 'var(--success)';
+        clearBtn.innerHTML = `<h3>${t('vocabClearMasteredTitle')}</h3><p>${t('vocabClearMasteredDesc', { count: lv5Words.length })}</p>`;
+        clearBtn.onclick = async () => {
+            if (!confirm(t('vocabClearMasteredConfirm', { count: lv5Words.length }))) return;
+            for (const w of lv5Words) { await removeWordFromNotebook(w.id); }
+            renderVocabTab();
+        };
+        entryEl.appendChild(clearBtn);
+    }
+}
 
 /* ====== Vocabulary Tab ====== */
 export async function renderVocabTab() {
@@ -486,7 +515,6 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    // 🌟 動態植入「⭐ 待加強」與「📌 特別挑選」按鈕
     if (filterSelect && !document.getElementById('btnFilterLv0')) {
         const btnLv0 = document.createElement('button');
         btnLv0.id = 'btnFilterLv0';
@@ -502,70 +530,31 @@ export async function renderVocabTab() {
         
         filterSelect.parentNode.insertBefore(btnLv0, filterSelect);
         filterSelect.parentNode.insertBefore(btnPinned, filterSelect);
-        
         filterSelect.parentNode.style.display = 'flex';
         filterSelect.parentNode.style.alignItems = 'center';
+        // 🌟 修正排版：為過濾器按鈕區塊增加底部間距，不再黏著單字卡
+        filterSelect.parentNode.style.marginBottom = '20px';
     }
 
-    // 🌟 更新過濾按鈕視覺狀態
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
     if (btnFilterLv0) {
-        if (_filterLv0) {
-            btnFilterLv0.style.background = '#fef3c7'; btnFilterLv0.style.borderColor = '#fbbf24'; btnFilterLv0.style.color = '#b45309';
-        } else {
-            btnFilterLv0.style.background = '#fff'; btnFilterLv0.style.borderColor = '#e5e7eb'; btnFilterLv0.style.color = '#4b5563';
-        }
+        if (_filterLv0) { btnFilterLv0.style.background = '#fef3c7'; btnFilterLv0.style.borderColor = '#fbbf24'; btnFilterLv0.style.color = '#b45309'; } 
+        else { btnFilterLv0.style.background = '#fff'; btnFilterLv0.style.borderColor = '#e5e7eb'; btnFilterLv0.style.color = '#4b5563'; }
     }
     const btnFilterPinned = document.getElementById('btnFilterPinned');
     if (btnFilterPinned) {
-        if (_filterPinned) {
-            btnFilterPinned.style.background = '#e0e7ff'; btnFilterPinned.style.borderColor = '#3b82f6'; btnFilterPinned.style.color = '#1d4ed8';
-        } else {
-            btnFilterPinned.style.background = '#fff'; btnFilterPinned.style.borderColor = '#e5e7eb'; btnFilterPinned.style.color = '#4b5563';
-        }
+        if (_filterPinned) { btnFilterPinned.style.background = '#e0e7ff'; btnFilterPinned.style.borderColor = '#3b82f6'; btnFilterPinned.style.color = '#1d4ed8'; } 
+        else { btnFilterPinned.style.background = '#fff'; btnFilterPinned.style.borderColor = '#e5e7eb'; btnFilterPinned.style.color = '#4b5563'; }
     }
 
-    const dueWords = words.filter(w => w.nextReview <= Date.now());
-    const entryEl = document.getElementById('srsReviewEntry');
-    entryEl.innerHTML = '';
-
-    if (words.length < SRS_MIN_WORDS) {
-        entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsNeedMinimum', { min: SRS_MIN_WORDS, current: words.length })}</p></div>`;
-    } else if (dueWords.length < SRS_MIN_WORDS) {
-        const nextDue = words.filter(w => w.nextReview > Date.now()).sort((a, b) => a.nextReview - b.nextReview);
-        const nextDate = nextDue.length > 0 ? new Date(nextDue[0].nextReview).toLocaleDateString() : '—';
-        entryEl.innerHTML = `<div class="review-entry-card disabled"><h3>${t('vocabSrsTitle')}</h3><p>${t('vocabSrsDueInsufficient', { min: SRS_MIN_WORDS, current: dueWords.length })}<br>${t('vocabNextReviewLabel', { date: nextDate })}</p></div>`;
-    } else {
-        const reviewCount = Math.min(dueWords.length, SRS_MAX_WORDS);
-        const card = document.createElement('button');
-        card.className = 'review-entry-card';
-        card.innerHTML = `<h3>${t('vocabSrsStartTitle')}</h3><p>${t('vocabSrsStartDesc', { dueCount: dueWords.length, reviewCount })}</p>`;
-        card.onclick = () => { if (_startSrsReview) _startSrsReview(dueWords, words); };
-        entryEl.appendChild(card);
-    }
-
-    const lv5Words = words.filter(w => w.level >= SRS_INTERVALS.length - 1);
-    if (lv5Words.length > 0) {
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'review-entry-card';
-        clearBtn.style.background = 'var(--success)';
-        clearBtn.innerHTML = `<h3>${t('vocabClearMasteredTitle')}</h3><p>${t('vocabClearMasteredDesc', { count: lv5Words.length })}</p>`;
-        clearBtn.onclick = async () => {
-            if (!confirm(t('vocabClearMasteredConfirm', { count: lv5Words.length }))) return;
-            for (const w of lv5Words) { await removeWordFromNotebook(w.id); }
-            renderVocabTab();
-        };
-        entryEl.appendChild(clearBtn);
-    }
+    refreshSrsBanner(words);
 
     const listEl = document.getElementById('savedWordsList');
     listEl.innerHTML = '';
     
     let displayWords = words;
-    
     if (_filterLv0) displayWords = displayWords.filter(w => w.level === 0);
     if (_filterPinned) displayWords = displayWords.filter(w => w.pinned);
-
     if (filterValue !== 'all') {
         displayWords = displayWords.filter(w => {
             const rawPos = String(w.pos || '').toLowerCase();
@@ -578,10 +567,8 @@ export async function renderVocabTab() {
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
-        if (filterValue !== 'all' || _filterLv0 || _filterPinned) {
-            emptyMsg = '沒有找到符合條件的單字';
-        }
-        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">${filterValue === 'all' && !_filterLv0 && !_filterPinned ? t('vocabEmptyHint') : '請試著切換其他分類或取消篩選條件'}</span></p>`;
+        if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
+        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">請試著切換其他分類或取消篩選條件</span></p>`;
         renderVocabSubtab();
         if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
@@ -599,7 +586,7 @@ export async function renderVocabTab() {
         const star1 = w.level >= 1 ? '★' : '☆';
         const star2 = w.level >= 2 ? '★' : '☆';
         const star3 = w.level >= 3 ? '★' : '☆';
-        const pinOpacity = w.pinned ? '1' : '0.2'; // 釘選視覺提示
+        const pinOpacity = w.pinned ? '1' : '0.2'; 
 
         const derivText = formatDerivText(w.deriv);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
@@ -633,12 +620,11 @@ export async function renderVocabTab() {
             </div>
         `;
 
-        // 🌟 綁定釘選按鈕事件
         card.querySelector('.vocab-pin').onclick = async (e) => {
             e.stopPropagation();
             w.pinned = !w.pinned;
             await DB.addSavedWord(w);
-            renderVocabTab();
+            card.querySelector('.vocab-pin').style.opacity = w.pinned ? '1' : '0.2';
         };
 
         const starsContainer = card.querySelector('.vocab-stars');
@@ -647,10 +633,22 @@ export async function renderVocabTab() {
                 e.stopPropagation(); 
                 let targetLevel = parseInt(starEl.dataset.target);
                 if (w.level === targetLevel) targetLevel = 0;
+                
                 w.level = targetLevel;
                 w.nextReview = getNextReviewTime(targetLevel);
                 await DB.addSavedWord(w); 
-                renderVocabTab(); 
+                
+                starsContainer.querySelectorAll('span').forEach(s => {
+                    s.textContent = parseInt(s.dataset.target) <= w.level ? '★' : '☆';
+                });
+
+                const isOverdueNow = w.nextReview <= Date.now();
+                const newDateStr = isOverdueNow ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
+                const nextEl = card.querySelector('.saved-word-next');
+                if(nextEl) nextEl.textContent = `${isOverdueNow ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: newDateStr })}`;
+
+                const updatedWords = await DB.getSavedWords();
+                refreshSrsBanner(updatedWords); 
             };
         });
 
