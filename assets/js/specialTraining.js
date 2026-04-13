@@ -1,9 +1,9 @@
 import { state } from './state.js';
 
-// 🌟 全域狀態：記錄使用者目前勾選了哪些錯題過濾器 (Set 資料結構支援複選)
+// 🌟 全域狀態：記錄使用者目前勾選了哪些錯題過濾器
 let activeMistakeFilters = new Set();
 
-// 🌟 1. 獨立的錯題本資料庫 (MistakesDB 擴充版)
+// 🌟 1. 獨立的錯題本資料庫
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
@@ -49,6 +49,21 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
+// 🌟 新增：解析渲染輔助函數 (支援新版結構化解析與舊版純文字向下相容)
+function buildExplanationHtml(explanation) {
+    if (typeof explanation === 'string') {
+        return `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${explanation}</div>`;
+    }
+    let html = `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;">${explanation.core || ''}</div>`;
+    if (explanation.skills) {
+        html += `<div style="margin-top: 10px; padding: 10px; background: #dcfce7; border-left: 4px solid #22c55e; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #166534; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">🎯 答題技巧：</strong>${explanation.skills}</div>`;
+    }
+    if (explanation.warnings) {
+        html += `<div style="margin-top: 10px; padding: 10px; background: #fef9c3; border-left: 4px solid #eab308; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #854d0e; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">⚠️ 注意事項：</strong>${explanation.warnings}</div>`;
+    }
+    return html;
+}
+
 // 🌟 2. 介面切換與事件綁定邏輯
 document.addEventListener('DOMContentLoaded', () => {
     const tabSpecial = document.getElementById('tabSpecial');
@@ -59,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStartSpecial = document.getElementById('btnStartSpecial');
     const btnCloseSpecial = document.getElementById('btnCloseSpecial');
 
-    // 攔截專項特訓按鈕
     if (tabSpecial) {
         tabSpecial.addEventListener('click', (e) => {
             practiceModeBtns.forEach(btn => btn.classList.remove('active'));
@@ -97,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 歷史紀錄子頁籤切換邏輯
     const btnHistoryGeneral = document.querySelector('[data-history-subtab="general"]');
     const btnHistoryMistakes = document.querySelector('[data-history-subtab="mistakes"]');
     const panelHistoryGeneral = document.getElementById('historyMainPanel');
@@ -113,9 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             btnHistoryMistakes.classList.add('active');
             btnHistoryGeneral.classList.remove('active');
-            panelHistoryMistakes.classList.remove('hidden');
+            panelHistoryMistakes.remove('hidden');
             panelHistoryGeneral.classList.add('hidden');
-            renderMistakesList(); // 切換到錯題本時，立即重新讀取資料庫
+            renderMistakesList(); 
         }
     }
 
@@ -130,23 +143,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 🌟 綁定錯題過濾器點擊事件 (單/複選邏輯)
     const filterBtns = document.querySelectorAll('.mistake-filter-btn');
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const topic = btn.dataset.topic;
             
             if (topic === 'all') {
-                activeMistakeFilters.clear(); // 點擊全部，清空所有過濾器
+                activeMistakeFilters.clear();
             } else {
                 if (activeMistakeFilters.has(topic)) {
-                    activeMistakeFilters.delete(topic); // 再次點擊取消勾選
+                    activeMistakeFilters.delete(topic);
                 } else {
-                    activeMistakeFilters.add(topic); // 點擊加入勾選
+                    activeMistakeFilters.add(topic);
                 }
             }
 
-            // 更新按鈕視覺狀態
             filterBtns.forEach(b => {
                 const t = b.dataset.topic;
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
@@ -164,11 +175,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            renderMistakesList(); // 重新渲染列表
+            renderMistakesList();
         });
     });
 
-    // 🌟 綁定 PDF 匯出/列印事件
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
         btnPrintPDF.addEventListener('click', () => {
@@ -176,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 🌟 動態注入列印專屬 CSS (隱藏導覽列，只印出租題)
     const printStyle = document.createElement('style');
     printStyle.textContent = `
         @media print {
@@ -191,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(printStyle);
 });
 
-// 🌟 3. 錯題本渲染引擎 (包含過濾邏輯)
+// 🌟 3. 錯題本渲染引擎
 async function renderMistakesList() {
     const listEl = document.getElementById('mistakesList');
     if (!listEl) return;
@@ -199,7 +208,6 @@ async function renderMistakesList() {
     listEl.innerHTML = '<p style="text-align:center; padding:20px; color:#9ca3af;">載入中...</p>';
     const allMistakes = await MistakesDB.getAll();
     
-    // 依據 activeMistakeFilters 進行篩選
     let displayMistakes = allMistakes;
     if (activeMistakeFilters.size > 0) {
         displayMistakes = allMistakes.filter(q => activeMistakeFilters.has(q.topic));
@@ -211,7 +219,6 @@ async function renderMistakesList() {
         return;
     }
 
-    // 依儲存時間由新到舊排序
     displayMistakes.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 
     listEl.innerHTML = '';
@@ -227,6 +234,8 @@ async function renderMistakesList() {
             </div>
         `).join('');
 
+        const expHtml = buildExplanationHtml(q.explanation);
+
         card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                 <span style="background: #e0e7ff; color: #3b82f6; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;">${q.topic}</span>
@@ -237,7 +246,7 @@ async function renderMistakesList() {
             <div style="margin-bottom: 16px;">${optsHtml}</div>
             <div style="background: #f8fafc; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px;">
                 <div style="font-size: 12px; font-weight: bold; color: #1e40af; margin-bottom: 4px;">💡 深入解析</div>
-                <div style="font-size: 13px; color: #1e3a8a; line-height: 1.6;">${q.explanation}</div>
+                ${expHtml}
             </div>
         `;
 
@@ -252,7 +261,6 @@ async function renderMistakesList() {
     });
 }
 
-// 🌟 自動偵測可用模型清單
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -276,12 +284,15 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 4. 呼叫 Gemini 即時出題引擎
+// 🌟 4. 呼叫 Gemini 即時出題引擎 (出題大腦 2.0 升級版)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
+    // 🌟 核心升級：融合黃金 Prompt 條件，限制難度為國中基礎，並要求結構化產出技巧與警告
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
+
+⚠️ 極度重要難度限制：必須符合「國中英文學習需求條件」，請使用國中基礎單字來測驗多益核心文法，幫助學習者建立信心，避免使用過於艱澀的商業冷僻字。
 
 請務必以「純 JSON 陣列」格式回傳，絕對不要有 markdown 標記 (如 \`\`\`json)，也不要有任何問候語或額外文字。
 格式必須完全符合以下結構：
@@ -297,7 +308,11 @@ async function startTraining(topics) {
       {"en": "錯誤選項2", "zh": "錯誤選項2的中文", "isCorrect": false},
       {"en": "錯誤選項3", "zh": "錯誤選項3的中文", "isCorrect": false}
     ],
-    "explanation": "詳細的中文解析。⚠️極度重要：解釋時請直接引用「英文單字」本身，絕對不要使用「選項A」、「選項B」等字眼，因為前端系統會隨機打亂選項順序。"
+    "explanation": {
+      "core": "詳細的中文解析。⚠️解釋時請直接引用「英文單字」本身，絕對不要使用「選項A、B、C、D」等字眼，因前端系統會打亂選項順序。",
+      "skills": "答題技巧：教導如何快速判斷（例如：看到某字就知道要選什麼詞性/時態）。",
+      "warnings": "注意事項：易混淆的陷阱提醒，或補充該題相關的一般動詞三態變化。"
+    }
   }
 ]
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
@@ -401,6 +416,8 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         btn.innerHTML += `<span style="font-size:13px; font-weight:normal; margin-top:4px; display:block; opacity:0.8;">— ${opt.zh}</span>`;
     });
 
+    const expHtml = buildExplanationHtml(questionObj.explanation);
+
     const explanationDiv = document.createElement('div');
     explanationDiv.style.cssText = 'margin-top: 16px; background: #eff6ff; padding: 16px; border-radius: 12px; border: 1px solid #bfdbfe;';
     explanationDiv.innerHTML = `
@@ -410,7 +427,7 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
                 <span style="opacity: 0.3; font-size:16px;" id="pinIcon">📌</span> <span id="pinText">收錄錯題</span>
             </button>
         </div>
-        <div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${questionObj.explanation}</div>
+        ${expHtml}
     `;
     oArea.appendChild(explanationDiv);
 
