@@ -397,7 +397,7 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 全自動清洗機 
+// 🚀 全自動清洗機 (終極防毒逃脫版 + 30 秒冷卻)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -668,7 +668,6 @@ export async function renderVocabTab() {
 // 🌟 核心升級 2：全域劃詞/反白選取「浮動快捷鍵」功能
 let aiFloatingBtn = document.getElementById('global-ai-lookup-btn');
 if (!aiFloatingBtn) {
-    // 動態建立浮動按鈕與精美樣式
     aiFloatingBtn = document.createElement('button');
     aiFloatingBtn.id = 'global-ai-lookup-btn';
     aiFloatingBtn.innerHTML = '✨ AI 即時解析<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #4f46e5;"></div>';
@@ -696,7 +695,6 @@ if (!aiFloatingBtn) {
 document.addEventListener('mouseup', handleGlobalSelection);
 document.addEventListener('touchend', handleGlobalSelection);
 
-// 點擊畫面其他空白處時，隱藏按鈕
 document.addEventListener('mousedown', (e) => {
     if (e.target.id !== 'global-ai-lookup-btn') {
         aiFloatingBtn.style.display = 'none';
@@ -704,7 +702,6 @@ document.addEventListener('mousedown', (e) => {
 });
 
 function handleGlobalSelection(e) {
-    // 避免在輸入框內、或是點擊按鈕本身時誤觸發
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.target.id === 'global-ai-lookup-btn' || e.target.closest('#global-ai-lookup-btn')) return;
 
@@ -717,28 +714,25 @@ function handleGlobalSelection(e) {
         
         const selectedText = selection.toString().trim();
         
-        // 嚴格把關：必須是 2~35 個字元的「純英文單字」
         const wordRegex = /^[a-zA-Z\-']{2,35}$/;
         
         if (wordRegex.test(selectedText)) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             
-            // 精準計算座標，讓按鈕懸浮在選取文字的正上方中央
             const top = rect.top + window.scrollY;
             const left = rect.left + window.scrollX + (rect.width / 2);
             
             aiFloatingBtn.style.display = 'block';
-            aiFloatingBtn.style.top = \`\${top}px\`;
-            aiFloatingBtn.style.left = \`\${left}px\`;
+            aiFloatingBtn.style.top = `${top}px`;
+            aiFloatingBtn.style.left = `${left}px`;
             
-            // 綁定點擊事件
             aiFloatingBtn.onclick = (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                aiFloatingBtn.style.display = 'none'; // 點擊後隱藏浮動按鈕
-                showWordModal(selectedText.toLowerCase()); // 呼叫字典模組
-                selection.removeAllRanges(); // 貼心地幫使用者取消反白
+                aiFloatingBtn.style.display = 'none'; 
+                showWordModal(selectedText.toLowerCase()); 
+                selection.removeAllRanges(); 
             };
         } else {
             aiFloatingBtn.style.display = 'none';
