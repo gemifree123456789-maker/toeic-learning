@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelHistoryMistakes = document.getElementById('historyMistakesPanel');
     const tabHistoryBtn = document.querySelector('button[data-tab="history"]'); 
 
-    function switchHistorySubtab(tab) {
+   function switchHistorySubtab(tab) {
         if(tab === 'general') {
             btnHistoryGeneral.classList.add('active');
             btnHistoryMistakes.classList.remove('active');
@@ -126,9 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             btnHistoryMistakes.classList.add('active');
             btnHistoryGeneral.classList.remove('active');
-            panelHistoryMistakes.remove('hidden');
+            // 🌟 關鍵修復：補上了 classList，不再把整個面板刪除！
+            panelHistoryMistakes.classList.remove('hidden');
             panelHistoryGeneral.classList.add('hidden');
-            renderMistakesList(); 
+            renderMistakesList(); // 切換到錯題本時，立即重新讀取資料庫
         }
     }
 
