@@ -333,8 +333,9 @@
                 <button class="mistake-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
             </div>
             
-            <div style="text-align: center; margin-bottom: 16px;">
-                <button id="btnPrintPDF" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📄 儲存為 PDF (列印)</button>
+            <div style="text-align: center; margin-bottom: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                <button id="btnPrintPDF" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📄 儲存錯題為 PDF</button>
+                <button id="btnGenerateSecrets" style="background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📘 匯總專屬文法秘笈</button>
             </div>
 
             <div id="mistakesList"></div>
@@ -542,6 +543,20 @@
     </div>
 
     <audio id="mainAudio"></audio>
+    <div class="srs-overlay hidden" id="grammarSecretsModal" style="z-index: 100000; background: rgba(243, 244, 246, 0.95); backdrop-filter: blur(4px);">
+        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1); padding: 0;">
+            <div class="srs-top-bar" style="border-bottom: 1px solid #e5e7eb; padding: 16px 20px; background: #f8fafc; border-radius: 24px 24px 0 0;">
+                <button class="srs-close-btn" id="btnCloseSecrets" style="background: #e2e8f0; color: #4b5563;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                <span class="srs-progress-text" style="font-size: 18px; font-weight: 800; color: #4338ca; display: flex; align-items: center; gap: 8px;"><span>📘</span> 專屬文法秘笈</span>
+                <span class="srs-phase-badge" style="background-color: #4338ca; color: white;">精華匯總</span>
+            </div>
+            <div id="grammarSecretsContent" style="padding: 20px;">
+                </div>
+            <div style="text-align: center; padding: 20px; border-top: 1px dashed #e5e7eb; background: #f8fafc; border-radius: 0 0 24px 24px;">
+                <button id="btnPrintSecrets" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 8px;">🖨️ 單獨列印此份秘笈</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="assets/js/specialTraining.js"></script>
 </body>

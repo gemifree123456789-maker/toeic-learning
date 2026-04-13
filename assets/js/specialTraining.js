@@ -1,9 +1,7 @@
 import { state } from './state.js';
 
-// 🌟 全域狀態：記錄使用者目前勾選了哪些錯題過濾器
 let activeMistakeFilters = new Set();
 
-// 🌟 1. 獨立的錯題本資料庫
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
@@ -49,7 +47,6 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
-// 🌟 新增：解析渲染輔助函數 (支援新版結構化解析與舊版純文字向下相容)
 function buildExplanationHtml(explanation) {
     if (typeof explanation === 'string') {
         return `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${explanation}</div>`;
@@ -64,7 +61,6 @@ function buildExplanationHtml(explanation) {
     return html;
 }
 
-// 🌟 2. 介面切換與事件綁定邏輯
 document.addEventListener('DOMContentLoaded', () => {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
@@ -117,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelHistoryMistakes = document.getElementById('historyMistakesPanel');
     const tabHistoryBtn = document.querySelector('button[data-tab="history"]'); 
 
-   function switchHistorySubtab(tab) {
+    function switchHistorySubtab(tab) {
         if(tab === 'general') {
             btnHistoryGeneral.classList.add('active');
             btnHistoryMistakes.classList.remove('active');
@@ -126,10 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             btnHistoryMistakes.classList.add('active');
             btnHistoryGeneral.classList.remove('active');
-            // 🌟 關鍵修復：補上了 classList，不再把整個面板刪除！
             panelHistoryMistakes.classList.remove('hidden');
             panelHistoryGeneral.classList.add('hidden');
-            renderMistakesList(); // 切換到錯題本時，立即重新讀取資料庫
+            renderMistakesList(); 
         }
     }
 
@@ -148,15 +143,11 @@ document.addEventListener('DOMContentLoaded', () => {
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const topic = btn.dataset.topic;
-            
             if (topic === 'all') {
                 activeMistakeFilters.clear();
             } else {
-                if (activeMistakeFilters.has(topic)) {
-                    activeMistakeFilters.delete(topic);
-                } else {
-                    activeMistakeFilters.add(topic);
-                }
+                if (activeMistakeFilters.has(topic)) activeMistakeFilters.delete(topic);
+                else activeMistakeFilters.add(topic);
             }
 
             filterBtns.forEach(b => {
@@ -164,44 +155,121 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
                 
                 if (isActive) {
-                    b.style.background = '#e0e7ff';
-                    b.style.borderColor = '#818cf8';
-                    b.style.color = '#4338ca';
-                    b.style.fontWeight = 'bold';
+                    b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
-                    b.style.background = '#fff';
-                    b.style.borderColor = '#e5e7eb';
-                    b.style.color = '#4b5563';
-                    b.style.fontWeight = '500';
+                    b.style.background = '#fff'; b.style.borderColor = '#e5e7eb'; b.style.color = '#4b5563'; b.style.fontWeight = '500';
                 }
             });
-
             renderMistakesList();
         });
     });
 
+    // 🌟 列印控制雙軌系統
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
         btnPrintPDF.addEventListener('click', () => {
+            document.body.classList.add('print-mistakes-mode');
             window.print();
+            setTimeout(() => document.body.classList.remove('print-mistakes-mode'), 500);
         });
     }
 
+    const btnPrintSecrets = document.getElementById('btnPrintSecrets');
+    if (btnPrintSecrets) {
+        btnPrintSecrets.addEventListener('click', () => {
+            document.body.classList.add('print-secrets-mode');
+            window.print();
+            setTimeout(() => document.body.classList.remove('print-secrets-mode'), 500);
+        });
+    }
+
+    // 🌟 文法秘笈生成與視窗控制
+    const btnGenerateSecrets = document.getElementById('btnGenerateSecrets');
+    const grammarSecretsModal = document.getElementById('grammarSecretsModal');
+    const btnCloseSecrets = document.getElementById('btnCloseSecrets');
+
+    if (btnGenerateSecrets) {
+        btnGenerateSecrets.addEventListener('click', async () => {
+            const allMistakes = await MistakesDB.getAll();
+            if (allMistakes.length === 0) return alert('您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！');
+
+            const secretsByTopic = {};
+            let hasNewFormat = false;
+
+            // 分類收集技巧與警告，並使用 Set 去除重複
+            allMistakes.forEach(q => {
+                if (!q.explanation || typeof q.explanation === 'string') return; 
+                hasNewFormat = true;
+                const topic = q.topic || '其他';
+                if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
+                if (q.explanation.skills) secretsByTopic[topic].skills.add(q.explanation.skills.trim());
+                if (q.explanation.warnings) secretsByTopic[topic].warnings.add(q.explanation.warnings.trim());
+            });
+
+            const contentEl = document.getElementById('grammarSecretsContent');
+            contentEl.innerHTML = '';
+
+            if (!hasNewFormat) {
+                contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中的題目皆為舊版解析格式。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
+            } else {
+                for (const [topic, data] of Object.entries(secretsByTopic)) {
+                    if (data.skills.size === 0 && data.warnings.size === 0) continue;
+                    
+                    let topicHtml = `
+                        <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                            <div style="background: #eef2ff; color: #3730a3; padding: 12px 20px; font-weight: 800; font-size: 16px; border-bottom: 2px solid #c7d2fe; display: flex; align-items: center; gap: 8px;">
+                                🏷️ ${topic}
+                            </div>
+                            <div style="padding: 20px;">
+                    `;
+
+                    if (data.skills.size > 0) {
+                        topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ul style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500;">`;
+                        data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px;">${skill}</li>`; });
+                        topicHtml += `</ul></div>`;
+                    }
+
+                    if (data.warnings.size > 0) {
+                        topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ul style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500;">`;
+                        data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px;">${warning}</li>`; });
+                        topicHtml += `</ul></div>`;
+                    }
+
+                    topicHtml += `</div></div>`;
+                    contentEl.innerHTML += topicHtml;
+                }
+            }
+            grammarSecretsModal.classList.remove('hidden');
+        });
+    }
+
+    if (btnCloseSecrets) {
+        btnCloseSecrets.addEventListener('click', () => {
+            grammarSecretsModal.classList.add('hidden');
+        });
+    }
+
+    // 🌟 列印專屬 CSS (根據雙軌模式動態調整)
     const printStyle = document.createElement('style');
     printStyle.textContent = `
         @media print {
-            body * { visibility: hidden; }
-            #historyMistakesPanel, #historyMistakesPanel * { visibility: visible; }
-            #historyMistakesPanel { position: absolute; left: 0; top: 0; width: 100%; }
-            header, .tab-bar, .vocab-tab-header, .vocab-subtab-switch, #mistakesFilterArea, #btnPrintPDF, .delete-mistake-btn { display: none !important; }
-            #historyMistakesPanel > p { display: none !important; }
-            .mistake-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; margin-bottom: 20px !important; }
+            body.print-mistakes-mode * { visibility: hidden; }
+            body.print-mistakes-mode #historyMistakesPanel, body.print-mistakes-mode #historyMistakesPanel * { visibility: visible; }
+            body.print-mistakes-mode #historyMistakesPanel { position: absolute; left: 0; top: 0; width: 100%; }
+            body.print-mistakes-mode header, body.print-mistakes-mode .tab-bar, body.print-mistakes-mode .vocab-tab-header, body.print-mistakes-mode .vocab-subtab-switch, body.print-mistakes-mode #mistakesFilterArea, body.print-mistakes-mode #btnPrintPDF, body.print-mistakes-mode #btnGenerateSecrets, body.print-mistakes-mode .delete-mistake-btn { display: none !important; }
+            body.print-mistakes-mode #historyMistakesPanel > p { display: none !important; }
+            body.print-mistakes-mode .mistake-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; margin-bottom: 20px !important; }
+
+            body.print-secrets-mode * { visibility: hidden; }
+            body.print-secrets-mode #grammarSecretsModal, body.print-secrets-mode #grammarSecretsModal * { visibility: visible; }
+            body.print-secrets-mode #grammarSecretsModal { position: absolute; left: 0; top: 0; width: 100%; background: white !important; }
+            body.print-secrets-mode .srs-close-btn, body.print-secrets-mode #btnPrintSecrets { display: none !important; }
+            body.print-secrets-mode .srs-content { box-shadow: none !important; overflow: visible !important; max-height: none !important; }
         }
     `;
     document.head.appendChild(printStyle);
 });
 
-// 🌟 3. 錯題本渲染引擎
 async function renderMistakesList() {
     const listEl = document.getElementById('mistakesList');
     if (!listEl) return;
@@ -285,11 +353,9 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 4. 呼叫 Gemini 即時出題引擎 (出題大腦 2.0 升級版)
 async function startTraining(topics) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
-    // 🌟 核心升級：融合黃金 Prompt 條件，限制難度為國中基礎，並要求結構化產出技巧與警告
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
@@ -319,7 +385,6 @@ async function startTraining(topics) {
 注意：必須剛好 10 題，每個題目 4 個選項，且只有 1 個 isCorrect 是 true。`;
 
     const bestModelName = await getBestModel(state.apiKey);
-    console.log("🚀 最終決定使用模型出題：", bestModelName);
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
@@ -337,9 +402,6 @@ async function startTraining(topics) {
     }
 
     if (!data.candidates || data.candidates.length === 0) {
-        if (data.promptFeedback && data.promptFeedback.blockReason) {
-            throw new Error(`被安全審查阻擋：${data.promptFeedback.blockReason}`);
-        }
         throw new Error('API 成功連線，但回傳空白。');
     }
 
@@ -350,7 +412,6 @@ async function startTraining(topics) {
     try {
         questions = JSON.parse(rawText);
     } catch (e) {
-        console.error("AI 原始回傳內容導致解析失敗:", rawText);
         throw new Error('AI 回傳的題目格式有些微錯誤 (少括號等)，請再按一次開始按鈕！');
     }
 
@@ -364,7 +425,6 @@ async function startTraining(topics) {
     renderQuestion();
 }
 
-// 🌟 5. 高互動測驗渲染引擎
 function renderQuestion() {
     const q = stState.questions[stState.currentQ];
     stState.answered = false;
