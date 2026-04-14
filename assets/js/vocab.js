@@ -14,15 +14,12 @@ let _filterPinned = false;
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
-// 🌟 核心升級：加入隨機多國口音過濾器
 function getRandomToeicVoice() {
     const voices = window.speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return null;
     
-    // 排除掉 macOS/iOS 內建的搞笑怪聲
     const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
     
-    // 只挑選開頭是 'en' 的語系 (包含 en-US, en-GB, en-AU 等)
     const englishVoices = voices.filter(v => {
         if (!v.lang.startsWith('en')) return false;
         const nameLower = String(v.name).toLowerCase();
@@ -30,38 +27,27 @@ function getRandomToeicVoice() {
         return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
     });
     
-    // 隨機抽選一個口音
     if (englishVoices.length > 0) {
         return englishVoices[Math.floor(Math.random() * englishVoices.length)];
     }
     return null;
 }
 
-// 🌟 核心修復：iOS 防彈發音引擎 (支援多國隨機腔調)
 function playRobustEnglishSound(text) {
     if (!text) return;
     
-    // 1. 強制重置語音引擎 (解除 iOS 卡死狀態)
     window.speechSynthesis.cancel();
-    
     const utterance = new SpeechSynthesisUtterance(text);
-    
-    // 2. 取得隨機的多國英文口音
     const voice = getRandomToeicVoice();
     
     if (voice) {
         utterance.voice = voice;
-        // 3. 動態鎖定語系：抽到英國腔就鎖定 en-GB，抽到澳洲腔就鎖定 en-AU
-        // 這樣 iOS 就不會試圖用中文引擎去硬唸而導致靜音當機
         utterance.lang = voice.lang; 
     } else {
-        // 如果抓不到任何語音包，保底使用美式英文防止崩潰
         utterance.lang = 'en-US';
     }
     
-    // 4. 稍微調慢語速，讓發音更適合學習 (0.9倍速)
     utterance.rate = 0.9;
-    
     window.speechSynthesis.speak(utterance);
 }
 
@@ -716,13 +702,17 @@ export async function renderVocabTab() {
         };
 
         if (hasExtraInfo) {
-            card.onclick = () => {
+            // 🌟 核心修復：加入文字選取保護罩
+            card.onclick = (e) => {
+                // 如果使用者正在反白文字，絕對不要觸發折疊/展開！
+                if (window.getSelection && window.getSelection().toString().trim().length > 0) return;
                 const expArea = card.querySelector('.vocab-card-expanded');
                 if (expArea) expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
             };
         }
 
-        addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
+        // 🌟 核心修復：長按事件只綁定在「英文單字(.saved-word-en)」上
+        addLongPressListener(card.querySelector('.saved-word-en'), displayEn);
         listEl.appendChild(card);
     });
     
