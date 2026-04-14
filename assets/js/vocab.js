@@ -14,6 +14,57 @@ let _filterPinned = false;
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
+// 🌟 核心升級：加入隨機多國口音過濾器
+function getRandomToeicVoice() {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+    
+    // 排除掉 macOS/iOS 內建的搞笑怪聲
+    const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
+    
+    // 只挑選開頭是 'en' 的語系 (包含 en-US, en-GB, en-AU 等)
+    const englishVoices = voices.filter(v => {
+        if (!v.lang.startsWith('en')) return false;
+        const nameLower = String(v.name).toLowerCase();
+        const uriLower = String(v.voiceURI || '').toLowerCase();
+        return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
+    });
+    
+    // 隨機抽選一個口音
+    if (englishVoices.length > 0) {
+        return englishVoices[Math.floor(Math.random() * englishVoices.length)];
+    }
+    return null;
+}
+
+// 🌟 核心修復：iOS 防彈發音引擎 (支援多國隨機腔調)
+function playRobustEnglishSound(text) {
+    if (!text) return;
+    
+    // 1. 強制重置語音引擎 (解除 iOS 卡死狀態)
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // 2. 取得隨機的多國英文口音
+    const voice = getRandomToeicVoice();
+    
+    if (voice) {
+        utterance.voice = voice;
+        // 3. 動態鎖定語系：抽到英國腔就鎖定 en-GB，抽到澳洲腔就鎖定 en-AU
+        // 這樣 iOS 就不會試圖用中文引擎去硬唸而導致靜音當機
+        utterance.lang = voice.lang; 
+    } else {
+        // 如果抓不到任何語音包，保底使用美式英文防止崩潰
+        utterance.lang = 'en-US';
+    }
+    
+    // 4. 稍微調慢語速，讓發音更適合學習 (0.9倍速)
+    utterance.rate = 0.9;
+    
+    window.speechSynthesis.speak(utterance);
+}
+
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
@@ -66,7 +117,6 @@ export function setVocabSubtab(tab) {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
-// 🌟 修復 2：恢復真正的「長按」，把單純的「點擊」還給卡片折疊功能！
 export function addLongPressListener(element, wordText) {
     let pressTimer;
     const start = (e) => {
@@ -79,7 +129,7 @@ export function addLongPressListener(element, wordText) {
                 state.highlightedElement.classList.remove('word-highlighted');
             state.highlightedElement = element;
             showWordModal(wordText);
-        }, 600); // 0.6秒長按觸發
+        }, 600); 
     };
     const cancel = () => { clearTimeout(pressTimer); element.classList.remove('word-pressing'); };
     
@@ -110,7 +160,7 @@ function showWordModal(word) {
         }
 
         document.getElementById('wmWord').innerText = word;
-        document.getElementById('btnWordAudio').onclick = () => speakText(word);
+        document.getElementById('btnWordAudio').onclick = () => playRobustEnglishSound(word);
         actionArea.innerHTML = '';
 
         let oldDeriv = document.getElementById('wmDeriv');
@@ -136,7 +186,7 @@ function showWordModal(word) {
 
             if (vocabItem.ex || vocabItem.exEn) {
                 document.getElementById('wmExText').innerText = vocabItem.ex || vocabItem.exEn;
-                document.getElementById('wmExSpeakBtn').onclick = () => speakText(vocabItem.ex || vocabItem.exEn);
+                document.getElementById('wmExSpeakBtn').onclick = () => playRobustEnglishSound(vocabItem.ex || vocabItem.exEn);
                 document.getElementById('wmEx').classList.remove('hidden');
             } else {
                 document.getElementById('wmEx').classList.add('hidden');
@@ -178,7 +228,7 @@ function showWordModal(word) {
                     }
 
                     document.getElementById('wmExText').innerText = info.ex;
-                    document.getElementById('wmExSpeakBtn').onclick = () => speakText(info.ex);
+                    document.getElementById('wmExSpeakBtn').onclick = () => playRobustEnglishSound(info.ex);
                     document.getElementById('wmEx').classList.remove('hidden');
                     const exZhEl = document.getElementById('wmExZh');
                     if (info.ex_zh) { exZhEl.textContent = info.ex_zh; exZhEl.classList.remove('hidden'); }
@@ -338,8 +388,8 @@ function renderLookupResultCard() {
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
         <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
     `;
-    card.querySelector('[data-action="speak-word"]')?.addEventListener('click', () => speakText(item.word || item.en || ''));
-    card.querySelector('[data-action="speak-ex"]')?.addEventListener('click', () => speakText(item.ex || ''));
+    card.querySelector('[data-action="speak-word"]')?.addEventListener('click', () => playRobustEnglishSound(item.word || item.en || ''));
+    card.querySelector('[data-action="speak-ex"]')?.addEventListener('click', () => playRobustEnglishSound(item.ex || ''));
     resultEl.innerHTML = '';
     resultEl.appendChild(card);
     renderSaveButton(card.querySelector('#vocabLookupActionArea'), item.word || item.en, item, {
@@ -405,7 +455,6 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 全自動清洗機 
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
@@ -432,7 +481,7 @@ document.addEventListener('click', async (event) => {
                 const targetWord = w.en || w.word;
                 const info = await fetchWordDetails(targetWord, true);
                 
-                w.en = targetWord; // 確保有 .en 屬性
+                w.en = targetWord; 
                 w.pos = info.pos || w.pos || '-';
                 w.ipa = info.ipa || w.ipa || w.kk || '(查無音標)';
                 w.cat = info.category || w.cat || 'Other';
@@ -584,9 +633,7 @@ export async function renderVocabTab() {
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
         
-        // 🌟 核心修復 1：相容新舊資料庫欄位 (防護 .word vs .en 衝突)
         const displayEn = normalizeWordId(w.en || w.word || 'Unknown');
-        const displayIpa = w.ipa || w.kk || '';
         const displayZh = w.zh || w.def || '';
         const displayPos = w.pos || '';
 
@@ -662,7 +709,7 @@ export async function renderVocabTab() {
             };
         });
 
-        card.querySelector('.saved-word-speak').onclick = (e) => { e.stopPropagation(); speakText(displayEn); };
+        card.querySelector('.saved-word-speak').onclick = (e) => { e.stopPropagation(); playRobustEnglishSound(displayEn); };
         card.querySelector('.saved-word-delete').onclick = async (e) => {
             e.stopPropagation(); 
             if (confirm(t('vocabDeleteConfirm', { word: displayEn }))) { await removeWordFromNotebook(w.id); renderVocabTab(); }
@@ -675,7 +722,6 @@ export async function renderVocabTab() {
             };
         }
 
-        // 綁定長按事件 (修復版)
         addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
         listEl.appendChild(card);
     });
@@ -684,7 +730,6 @@ export async function renderVocabTab() {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
-// 🌟 全域劃詞/反白選取「浮動快捷鍵」功能
 let aiFloatingBtn = document.getElementById('global-ai-lookup-btn');
 if (!aiFloatingBtn) {
     aiFloatingBtn = document.createElement('button');

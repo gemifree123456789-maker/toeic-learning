@@ -18,6 +18,22 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
+// 🌟 核心防護：相容舊版/試算表匯入的資料欄位 (word vs en, def vs zh 等)
+function normalizeW(w) {
+    if (!w) return w;
+    return {
+        ...w,
+        en: w.en || w.word || 'Unknown',
+        zh: w.zh || w.def || '(無中文)',
+        ipa: w.ipa || w.kk || '',
+        pos: w.pos || '',
+        cat: w.cat || w.category || '',
+        ex: w.ex || w.exEn || '',
+        ex_zh: w.ex_zh || w.exZh || '',
+        deriv: w.deriv || w.derivatives || ''
+    };
+}
+
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return null;
@@ -62,7 +78,11 @@ function getDistractorWords(correctWord, allWords) {
 }
 
 export function startSrsReview(dueWords, allWords) {
-    const selected = shuffleArray(dueWords).slice(0, SRS_MAX_WORDS);
+    // 🌟 在測驗一開始，全面淨化所有單字資料格式
+    const normDue = dueWords.map(normalizeW);
+    const normAll = allWords.map(normalizeW);
+    
+    const selected = shuffleArray(normDue).slice(0, SRS_MAX_WORDS);
     let questions = [];
     selected.forEach(w => {
         questions.push({ word: w, type: 'en2zh' });
@@ -73,7 +93,7 @@ export function startSrsReview(dueWords, allWords) {
 
     srsState.active = true;
     srsState.words = selected;
-    srsState.allWords = allWords;
+    srsState.allWords = normAll;
     srsState.questions = questions;
     srsState.currentQ = 0;
     srsState.answered = false;
@@ -134,7 +154,6 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); b.className = 'srs-option'; 
             b.innerHTML = `<span style="font-size:16px;">${w.zh}</span>`; 
-            // 🌟 核心修正：附加詞性顯示
             const posStr = w.pos ? ` (${w.pos})` : '';
             b.dataset.reveal = `${toLowerWord(w.en)}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
@@ -153,7 +172,6 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); b.className = 'srs-option'; 
             b.innerHTML = `<span style="font-size:16px;">${toLowerWord(w.en)}</span>`; 
-            // 🌟 核心修正：附加詞性顯示
             const posStr = w.pos ? ` (${w.pos})` : '';
             b.dataset.reveal = `${w.zh}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
@@ -175,7 +193,6 @@ function renderSrsQuestion() {
         optsData.forEach(w => { 
             const b = document.createElement('button'); b.className = 'srs-option'; 
             b.innerHTML = `<span style="font-size:16px;">${w.zh}</span>`; 
-            // 🌟 核心修正：附加詞性顯示
             const posStr = w.pos ? ` (${w.pos})` : '';
             b.dataset.reveal = `${toLowerWord(w.en)}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
@@ -212,7 +229,6 @@ function renderSrsQuestion() {
             const w = optsData[i];
             const b = document.createElement('button'); b.className = 'srs-option'; 
             b.innerHTML = `<span style="font-size:16px;">${label}</span>`; 
-            // 🌟 核心修正：附加詞性顯示
             const posStr = w.pos ? ` (${w.pos})` : '';
             b.dataset.reveal = `${toLowerWord(w.en)}${posStr} - ${w.zh}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
@@ -309,7 +325,10 @@ async function showSrsResults() {
     const wordResults = [];
     
     for (const word of srsState.words) {
-        const freshWord = await DB.getSavedWord(word.id) || word;
+        // 🌟 在結算時也套用防護，確保從資料庫抓出的字也有正常的 en/zh 屬性
+        let freshWord = await DB.getSavedWord(word.id) || word;
+        freshWord = normalizeW(freshWord);
+
         const r = srsState.results[word.id];
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
         totalCorrect += cc;
