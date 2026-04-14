@@ -10,7 +10,6 @@ export function setOnFinish(fn) { _onFinish = fn; }
 
 const srsState = { active: false, words: [], allWords: [], questions: [], currentQ: 0, results: {}, answered: false };
 
-// 將衍生字轉為條列式的排版引擎
 function formatDerivText(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
@@ -19,25 +18,16 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
-// TOEIC 隨機口音引擎 (嚴格排除 iOS 外星人語音)
 function getRandomToeicVoice() {
     const voices = speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return null;
-    
-    const jokeVoices = [
-        'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 
-        'cellos', 'deranged', 'good news', 'hysterical', 'junior', 
-        'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 
-        'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'
-    ];
-
+    const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
     const englishVoices = voices.filter(v => {
         if (!v.lang.startsWith('en')) return false;
         const nameLower = String(v.name).toLowerCase();
         const uriLower = String(v.voiceURI || '').toLowerCase();
         return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
     });
-
     if (englishVoices.length > 0) return englishVoices[Math.floor(Math.random() * englishVoices.length)];
     return null;
 }
@@ -65,11 +55,8 @@ function playRandomAccentPromise(text) {
     });
 }
 
-function toLowerWord(word) {
-    return String(word || '').trim().toLowerCase();
-}
+function toLowerWord(word) { return String(word || '').trim().toLowerCase(); }
 
-// 取得完整的「干擾選項」物件，以利後續綁定發音與釘選功能
 function getDistractorWords(correctWord, allWords) {
     return shuffleArray(allWords.filter(w => w.id !== correctWord.id)).slice(0, 2);
 }
@@ -102,7 +89,6 @@ export function closeSrsReview() {
     document.getElementById('srsOverlay').classList.add('hidden');
 }
 
-// 綁定測驗主單字的釘選事件
 function attachSrsPinListener(word) {
     const pinBtn = document.getElementById('srsPinBtn');
     if (pinBtn) {
@@ -133,13 +119,12 @@ function renderSrsQuestion() {
 
     const enLower = toLowerWord(word.en);
     const safeEn = enLower.replace(/'/g, "\\'");
-    const pinOpacity = word.pinned ? '1' : '0.2'; 
+    const pinOpacity = word.pinned ? '1' : '0.2';
 
     if (q.type === 'en2zh') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintEnToZh')}</div>
         <div class="srs-question-word">
-            ${enLower} 
-            <button class="mini-speaker" onclick="playRandomAccent('${safeEn}')">${ICONS.speaker}</button>
+            ${enLower} <button class="mini-speaker" onclick="playRandomAccent('${safeEn}')">${ICONS.speaker}</button>
             <span id="srsPinBtn" style="cursor:pointer; opacity:${pinOpacity}; margin-left:8px; font-size:24px; transition: opacity 0.2s;" title="特別挑選">📌</span>
         </div>`;
         attachSrsPinListener(word);
@@ -147,15 +132,14 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); 
-            b.className = 'srs-option'; 
-            b.innerHTML = `<span>${w.zh}</span>`; 
-            b.dataset.reveal = toLowerWord(w.en); 
+            const b = document.createElement('button'); b.className = 'srs-option'; 
+            b.innerHTML = `<span style="font-size:16px;">${w.zh}</span>`; 
+            // 🌟 核心修正：附加詞性顯示
+            const posStr = w.pos ? ` (${w.pos})` : '';
+            b.dataset.reveal = `${toLowerWord(w.en)}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.dataset.wordId = w.id; 
-            b.dataset.en = toLowerWord(w.en);
-            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
-            oArea.appendChild(b); 
+            b.dataset.wordId = w.id; b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; oArea.appendChild(b); 
         });
     } else if (q.type === 'zh2en') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintZhToEn')}</div>
@@ -167,15 +151,14 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); 
-            b.className = 'srs-option'; 
-            b.innerHTML = `<span>${toLowerWord(w.en)}</span>`; 
-            b.dataset.reveal = w.zh; 
+            const b = document.createElement('button'); b.className = 'srs-option'; 
+            b.innerHTML = `<span style="font-size:16px;">${toLowerWord(w.en)}</span>`; 
+            // 🌟 核心修正：附加詞性顯示
+            const posStr = w.pos ? ` (${w.pos})` : '';
+            b.dataset.reveal = `${w.zh}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.dataset.wordId = w.id; 
-            b.dataset.en = toLowerWord(w.en);
-            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
-            oArea.appendChild(b); 
+            b.dataset.wordId = w.id; b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; oArea.appendChild(b); 
         });
     } else if (q.type === 'listen') {
         qArea.innerHTML = `<div class="srs-question-hint">${t('srsHintListenToZh')}</div>
@@ -190,15 +173,14 @@ function renderSrsQuestion() {
         
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
         optsData.forEach(w => { 
-            const b = document.createElement('button'); 
-            b.className = 'srs-option'; 
-            b.innerHTML = `<span>${w.zh}</span>`; 
-            b.dataset.reveal = toLowerWord(w.en); 
+            const b = document.createElement('button'); b.className = 'srs-option'; 
+            b.innerHTML = `<span style="font-size:16px;">${w.zh}</span>`; 
+            // 🌟 核心修正：附加詞性顯示
+            const posStr = w.pos ? ` (${w.pos})` : '';
+            b.dataset.reveal = `${toLowerWord(w.en)}${posStr}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.dataset.wordId = w.id; 
-            b.dataset.en = toLowerWord(w.en);
-            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; 
-            oArea.appendChild(b); 
+            b.dataset.wordId = w.id; b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; oArea.appendChild(b); 
         });
     } else if (q.type === 'listen3') {
         const optsData = shuffleArray([word, ...getDistractorWords(word, srsState.allWords)]);
@@ -228,20 +210,18 @@ function renderSrsQuestion() {
         oArea.innerHTML = '';
         labels.forEach((label, i) => {
             const w = optsData[i];
-            const b = document.createElement('button');
-            b.className = 'srs-option';
-            b.innerHTML = `<span>${label}</span>`;
-            b.dataset.reveal = `${toLowerWord(w.en)} (${w.zh})`;
+            const b = document.createElement('button'); b.className = 'srs-option'; 
+            b.innerHTML = `<span style="font-size:16px;">${label}</span>`; 
+            // 🌟 核心修正：附加詞性顯示
+            const posStr = w.pos ? ` (${w.pos})` : '';
+            b.dataset.reveal = `${toLowerWord(w.en)}${posStr} - ${w.zh}`; 
             b.dataset.isCorrect = (w.id === word.id) ? "true" : "false";
-            b.dataset.wordId = w.id;
-            b.dataset.en = toLowerWord(w.en);
-            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); };
-            oArea.appendChild(b);
+            b.dataset.wordId = w.id; b.dataset.en = toLowerWord(w.en);
+            b.onclick = () => { if (!srsState.answered) handleSrsAnswer(b, w.id === word.id, q.type); }; oArea.appendChild(b);
         });
     }
 }
 
-// 答題後展開解析模式：停止跳轉、顯示翻譯、選項轉化為可釘選卡片
 function handleSrsAnswer(btnEl, isCorrect, type) {
     if (srsState.answered) return;
     srsState.answered = true;
@@ -250,11 +230,9 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
     const resultType = (type === 'listen3') ? 'listen' : type;
     srsState.results[word.id][resultType] = isCorrect;
 
-    // 將所有選項展開為微型單字卡
     document.querySelectorAll('.srs-option').forEach(async b => {
         b.classList.add('disabled');
-        // CSS 覆蓋：讓 disabled 狀態下的內部按鈕依然可以被點擊
-        b.style.pointerEvents = 'auto';
+        b.style.pointerEvents = 'auto'; 
         b.style.cursor = 'default';
         
         if (b.dataset.isCorrect === "true") b.classList.add('correct');
@@ -264,32 +242,28 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
             textContent += `<span style="font-size:14px; font-weight:normal; margin-left:8px; opacity:0.8;">— ${b.dataset.reveal}</span>`;
         }
 
-        // 查詢該選項單字的最新釘選狀態
         const optWord = await DB.getSavedWord(b.dataset.wordId);
         const pinOpacity = optWord?.pinned ? '1' : '0.2';
         
-        // 注入發音與釘選按鈕
         const actionsHtml = `
-            <div class="srs-opt-actions" style="margin-left: auto; display: flex; align-items: center; gap: 16px; pointer-events: auto;">
-                <span class="opt-speak-btn" data-en="${b.dataset.en}" style="cursor: pointer; font-size: 18px; color: #4b5563;" title="播放發音">${ICONS.speaker}</span>
-                <span class="opt-pin-btn" data-id="${b.dataset.wordId}" style="cursor: pointer; font-size: 20px; opacity: ${pinOpacity}; transition: opacity 0.2s;" title="特別挑選">📌</span>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 16px; padding-left: 12px;">
+                <span class="opt-speak-btn" data-en="${b.dataset.en}" style="cursor: pointer; font-size: 20px; color: #4b5563;" title="播放發音">${ICONS.speaker}</span>
+                <span class="opt-pin-btn" data-id="${b.dataset.wordId}" style="cursor: pointer; font-size: 22px; opacity: ${pinOpacity}; transition: opacity 0.2s;" title="特別挑選">📌</span>
             </div>
         `;
 
         b.style.display = 'flex';
         b.style.alignItems = 'center';
-        b.style.justifyContent = 'space-between';
+        b.style.justifyContent = 'space-between'; 
         b.style.textAlign = 'left';
 
         b.innerHTML = `<div style="display:flex; align-items:center; flex-wrap:wrap; flex:1;">${textContent}</div>` + actionsHtml;
 
-        // 綁定發音事件
         const speakBtn = b.querySelector('.opt-speak-btn');
         if (speakBtn) {
             speakBtn.onclick = (e) => { e.stopPropagation(); playRandomAccent(b.dataset.en); };
         }
 
-        // 綁定釘選事件 (陷阱題直接收編)
         const pinBtn = b.querySelector('.opt-pin-btn');
         if (pinBtn) {
             pinBtn.onclick = async (e) => {
@@ -313,7 +287,6 @@ function handleSrsAnswer(btnEl, isCorrect, type) {
 
     playRandomAccent(toLowerWord(word.en));
 
-    // 產生手動「下一題 ➔」按鈕
     const nextBtn = document.createElement('button');
     nextBtn.className = 'srs-done-btn'; 
     nextBtn.style.marginTop = '24px';
