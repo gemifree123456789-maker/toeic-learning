@@ -1,4 +1,4 @@
-// Google Drive appDataFolder backup/restore (manual actions only).
+// Google Drive & GAS dual-track sync engine
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
@@ -6,12 +6,13 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
+    // 🌟 請將這裡的網址，換成你剛剛在 Apps Script 「新增部署作業」產生的最新網址！
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbx64QDDfzneI4sNoal4nmpdiWeEjNjS55q8VN7YsWNu7WcFkkIF0MyV9vbMimArrAii/exec',
+
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
-    SCOPES: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    BACKUP_FILENAME: 'toeic-tutor-backup.json',
+    SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     tokenClient: null,
     accessToken: null,
-    fileId: null,
     _pendingLoginResolve: null,
 
     setCallbacks(cbs) {
@@ -79,7 +80,6 @@ export const DriveSync = {
             google.accounts.oauth2.revoke(this.accessToken);
         }
         this.accessToken = null;
-        this.fileId = null;
         await DB.setSetting('cloud_sync_enabled', false);
         await DB.setSetting('cloud_user_email', null);
         await DB.setSetting('cloud_user_name', null);
@@ -103,160 +103,125 @@ export const DriveSync = {
         } catch (e) { console.warn('Failed to fetch user info:', e); }
     },
 
-    async _apiFetch(url, opts = {}) {
-        if (!this.accessToken) throw new Error('Not authenticated');
-        opts.headers = { ...opts.headers, Authorization: `Bearer ${this.accessToken}` };
-        const resp = await fetch(url, opts);
-        if (resp.status === 401) {
-            this.accessToken = null;
-            DB.setSetting('gis_access_token', null);
-            DB.setSetting('gis_token_expires_at', null);
-            this.updateUI();
-            throw new Error('Token expired');
-        }
-        return resp;
-    },
-
-    async exportData() {
-        const [history, savedWords] = await Promise.all([
-            DB.getHistory(),
-            DB.getSavedWords(),
-        ]);
-        const lightHistory = history.map(h => ({ ...h, audio: null }));
-        return JSON.stringify({
-            version: 1,
-            exportedAt: Date.now(),
-            history: lightHistory,
-            savedWords,
+    // --- 🌟 錯題本 (MistakesDB) 專用輔助函數 ---
+    async _getMistakesFromDB() {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('ToeicMistakesDB', 1);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) return resolve([]);
+                const tx = db.transaction('mistakes', 'readonly');
+                const reqAll = tx.objectStore('mistakes').getAll();
+                reqAll.onsuccess = () => resolve(reqAll.result);
+            };
+            req.onerror = () => resolve([]);
         });
     },
 
-    async importData(jsonStr) {
-        const data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
-        if (data.history) {
-            await DB.clearHistory();
-            for (const item of data.history) { await DB.addHistory(item); }
-        }
-        if (data.savedWords) {
-            const existing = await DB.getSavedWords();
-            for (const w of existing) { await DB.deleteSavedWord(w.id); }
-            for (const w of data.savedWords) { await DB.addSavedWord(w); }
-        }
-    },
-
-    async findBackupFile() {
-        if (this.fileId) return this.fileId;
-        const resp = await this._apiFetch(
-            `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'${this.BACKUP_FILENAME}'&fields=files(id,modifiedTime)&orderBy=modifiedTime%20desc&pageSize=1`
-        );
-        const data = await resp.json();
-        if (data.files && data.files.length > 0) {
-            this.fileId = data.files[0].id;
-            return this.fileId;
-        }
-        return null;
-    },
-
-    async upload(jsonStr) {
-        const fileId = await this.findBackupFile();
-        const metadata = { name: this.BACKUP_FILENAME, mimeType: 'application/json' };
-        if (!fileId) metadata.parents = ['appDataFolder'];
-
-        const boundary = '-------DriveBackupBoundary';
-        const body =
-            `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
-            `--${boundary}\r\nContent-Type: application/json\r\n\r\n${jsonStr}\r\n` +
-            `--${boundary}--`;
-
-        const url = fileId
-            ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-
-        const resp = await this._apiFetch(url, {
-            method: fileId ? 'PATCH' : 'POST',
-            headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-            body,
+    async _saveMistakeToDB(mistake) {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('ToeicMistakesDB', 1);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) return resolve();
+                const tx = db.transaction('mistakes', 'readwrite');
+                tx.objectStore('mistakes').put(mistake);
+                tx.oncomplete = () => resolve();
+            };
         });
-        const result = await resp.json();
-        if (result.id) this.fileId = result.id;
-
-        const now = new Date().toLocaleString();
-        await DB.setSetting('cloud_last_sync', now);
-        this.updateUI();
     },
 
-    async download() {
-        const fileId = await this.findBackupFile();
-        if (!fileId) return null;
-        const resp = await this._apiFetch(
-            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
-        );
-        return resp.json();
+    async _clearMistakesDB() {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('ToeicMistakesDB', 1);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) return resolve();
+                const tx = db.transaction('mistakes', 'readwrite');
+                tx.objectStore('mistakes').clear();
+                tx.oncomplete = () => resolve();
+            };
+        });
     },
+    // ------------------------------------------
 
+    // 🌟 1. 立即備份 (雙軌打包送往 GAS)
     async backupNow() {
+        // 如果沒有登入或不想綁定登入，我們依然允許備份到 GAS (看你的需求，這裡保留原本的登入檢查)
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
+        
         const btn = document.getElementById('btnBackupNow');
-        btn.disabled = true; btn.textContent = t('driveBackupInProgress');
+        if (btn) { btn.disabled = true; btn.textContent = '☁️ 雙軌打包備份中...'; }
+        
         try {
-            const json = await this.exportData();
-            await this.upload(json);
-            btn.textContent = t('driveBackupDone');
-            setTimeout(() => { btn.textContent = t('cloudBackupNowBtn'); btn.disabled = false; }, 2000);
+            // 讀取兩個資料庫的資料
+            const vocabWords = await DB.getSavedWords();
+            const mistakes = await this._getMistakesFromDB();
+
+            const payload = {
+                action: "backup",
+                vocab: vocabWords,
+                mistakes: mistakes
+            };
+
+            const res = await fetch(this.GAS_URL, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            const result = await res.json();
+            
+            if (result.status === 'success') {
+                const now = new Date().toLocaleString();
+                await DB.setSetting('cloud_last_sync', now);
+                this.updateUI();
+                alert(`✅ 雲端備份成功！\n共備份了 ${vocabWords.length} 個單字，以及 ${mistakes.length} 題精華錯題。`);
+            } else {
+                throw new Error('伺服器回傳錯誤狀態');
+            }
         } catch (e) {
-            alert(t('driveBackupFailed', { message: e.message }));
-            btn.textContent = t('cloudBackupNowBtn'); btn.disabled = false;
+            alert('備份失敗，請檢查網路或試算表設定：' + e.message);
+        } finally {
+            if (btn) { btn.textContent = t('cloudBackupNowBtn'); btn.disabled = false; }
         }
     },
 
+    // 🌟 2. 從雲端還原 (雙軌下載覆蓋)
     async restore() {
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
-        const btn = document.getElementById('btnRestore');
-        btn.disabled = true; btn.textContent = t('driveRestoreChecking');
-        try {
-            const data = await this.download();
-            if (!data) { alert(t('driveRestoreNotFound')); btn.textContent = t('cloudRestoreBtn'); btn.disabled = false; return; }
-            const date = data.exportedAt ? new Date(data.exportedAt).toLocaleString() : t('driveUnknownDate');
-            this._showRestorePrompt(data, date, btn);
-        } catch (e) {
-            alert(t('driveRestoreFailed', { message: e.message }));
-            btn.textContent = t('cloudRestoreBtn'); btn.disabled = false;
-        }
-    },
+        
+        if (!confirm('⚠️ 警告：還原將會完全覆蓋本機目前的「單字本」與「錯題本」進度。\n確定要還原嗎？')) return;
 
-    _showRestorePrompt(data, dateStr, triggerBtn) {
-        const overlay = document.createElement('div');
-        overlay.className = 'restore-overlay';
-        overlay.innerHTML = `<div class="restore-card">
-            <h3>${t('driveRestoreDetectedTitle')}</h3>
-            <p>${t('driveRestoreDetectedSummary', { date: dateStr, historyCount: (data.history || []).length, vocabCount: (data.savedWords || []).length })}</p>
-            <div class="restore-btns">
-                <button class="btn-cancel">${t('driveCancelBtn')}</button>
-                <button class="btn-restore">${t('driveRestoreBtn')}</button>
-            </div>
-        </div>`;
-        overlay.querySelector('.btn-cancel').onclick = () => {
-            overlay.remove();
-            if (triggerBtn) { triggerBtn.textContent = t('cloudRestoreBtn'); triggerBtn.disabled = false; }
-        };
-        overlay.querySelector('.btn-restore').onclick = async () => {
-            overlay.querySelector('.btn-restore').textContent = t('driveRestoring');
-            overlay.querySelector('.btn-restore').disabled = true;
-            try {
-                await this.importData(data);
-                overlay.remove();
-                if (_callbacks.renderHistory) _callbacks.renderHistory();
-                if (_callbacks.loadLastSession) await _callbacks.loadLastSession();
-                if (_callbacks.renderVocabTab) _callbacks.renderVocabTab();
-                if (triggerBtn) { triggerBtn.textContent = t('cloudRestoreBtn'); triggerBtn.disabled = false; }
-                alert(t('driveRestoreSuccess'));
-            } catch (e) {
-                alert(t('driveRestoreFailed', { message: e.message }));
-                overlay.remove();
-                if (triggerBtn) { triggerBtn.textContent = t('cloudRestoreBtn'); triggerBtn.disabled = false; }
+        const btn = document.getElementById('btnRestore');
+        if (btn) { btn.disabled = true; btn.textContent = '☁️ 雙軌還原下載中...'; }
+        
+        try {
+            const res = await fetch(this.GAS_URL + '?action=sync_all');
+            const data = await res.json();
+
+            let vCount = 0;
+            let mCount = 0;
+
+            // 1. 還原單字本
+            if (data.vocab && data.vocab.length > 0) {
+                const existing = await DB.getSavedWords();
+                for (const w of existing) await DB.deleteSavedWord(w.id); // 清空舊單字
+                for (const w of data.vocab) { await DB.addSavedWord(w); vCount++; }
             }
-        };
-        document.body.appendChild(overlay);
+
+            // 2. 還原錯題本
+            if (data.mistakes && data.mistakes.length > 0) {
+                await this._clearMistakesDB(); // 清空舊錯題
+                for (const m of data.mistakes) { await this._saveMistakeToDB(m); mCount++; }
+            }
+
+            alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字，與 ${mCount} 題錯題。\n為了確保資料正確載入，系統即將為您重新整理網頁。`);
+            location.reload(); // 強制重整以刷新所有頁面與快取
+        } catch (e) {
+            alert('還原失敗，請檢查網路或 API 狀態：' + e.message);
+        } finally {
+            if (btn) { btn.textContent = t('cloudRestoreBtn'); btn.disabled = false; }
+        }
     },
 
     async updateUI() {
@@ -286,5 +251,7 @@ export const DriveSync = {
             authArea.classList.remove('hidden');
             userArea.classList.add('hidden');
         }
-    },
+    }
 };
+
+window.DriveSync = DriveSync;
