@@ -27,15 +27,15 @@ async function syncToGoogleSheet(item) {
         data: {
             id: item.id || Date.now(),
             word: item.en || item.word || "",
-            kk: item.ipa || "",
+            kk: item.ipa || item.kk || "",
             pos: item.pos || "",
             cat: item.cat || item.category || "Other",
             zh: item.zh || item.def || "",
-            exEn: item.ex || "",
-            exZh: item.ex_zh || "",
+            exEn: item.ex || item.exEn || "",
+            exZh: item.ex_zh || item.exZh || "",
             col: item.col || "",
             phrase: item.phrase || "",
-            deriv: item.deriv || ""
+            deriv: item.deriv || item.derivatives || ""
         }
     };
     try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
@@ -46,14 +46,14 @@ async function syncFullUpdateToCloud(item) {
         action: "update_all",
         data: {
             id: item.id,
-            word: item.en,
-            kk: item.ipa,
+            word: item.en || item.word,
+            kk: item.ipa || item.kk,
             pos: item.pos,
-            cat: item.cat,
-            zh: item.zh,
-            exEn: item.ex,
-            exZh: item.ex_zh,
-            deriv: item.deriv
+            cat: item.cat || item.category,
+            zh: item.zh || item.def,
+            exEn: item.ex || item.exEn,
+            exZh: item.ex_zh || item.exZh,
+            deriv: item.deriv || item.derivatives
         }
     };
     try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
@@ -66,21 +66,30 @@ export function setVocabSubtab(tab) {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
-// 🌟 核心升級 1：將原本卡頓的「長按」，優化為輕快絲滑的「點擊」
+// 🌟 修復 2：恢復真正的「長按」，把單純的「點擊」還給卡片折疊功能！
 export function addLongPressListener(element, wordText) {
-    element.style.cursor = 'pointer';
-    element.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (state.highlightedElement && state.highlightedElement !== element) {
-            state.highlightedElement.classList.remove('word-highlighted');
-        }
-        element.classList.add('word-highlighted');
-        state.highlightedElement = element;
-        
-        showWordModal(wordText);
-    });
+    let pressTimer;
+    const start = (e) => {
+        if (e.type === 'mousedown' && e.button !== 0) return;
+        element.classList.add('word-pressing');
+        pressTimer = setTimeout(() => {
+            element.classList.remove('word-pressing');
+            element.classList.add('word-highlighted');
+            if (state.highlightedElement && state.highlightedElement !== element)
+                state.highlightedElement.classList.remove('word-highlighted');
+            state.highlightedElement = element;
+            showWordModal(wordText);
+        }, 600); // 0.6秒長按觸發
+    };
+    const cancel = () => { clearTimeout(pressTimer); element.classList.remove('word-pressing'); };
+    
+    element.addEventListener('touchstart', start, { passive: true });
+    element.addEventListener('touchend', cancel);
+    element.addEventListener('touchmove', cancel);
+    element.addEventListener('mousedown', start);
+    element.addEventListener('mouseup', cancel);
+    element.addEventListener('mouseleave', cancel);
+    element.oncontextmenu = (e) => { e.preventDefault(); return false; };
 }
 
 function showWordModal(word) {
@@ -97,7 +106,7 @@ function showWordModal(word) {
         }
         if (!vocabItem) {
             const saved = await DB.getSavedWord(normalizeWordId(word));
-            if (saved) vocabItem = { word: saved.en, pos: saved.pos, ipa: saved.ipa, category: saved.cat, def: saved.zh, ex: saved.ex, ex_zh: saved.ex_zh, derivatives: saved.deriv || '' };
+            if (saved) vocabItem = { word: saved.en || saved.word, pos: saved.pos, ipa: saved.ipa || saved.kk, category: saved.cat, def: saved.zh || saved.def, ex: saved.ex || saved.exEn, ex_zh: saved.ex_zh || saved.exZh, derivatives: saved.deriv || saved.derivatives || '' };
         }
 
         document.getElementById('wmWord').innerText = word;
@@ -110,7 +119,7 @@ function showWordModal(word) {
         if (vocabItem) {
             await backfillSavedWordExample(word, vocabItem);
             document.getElementById('wmPos').innerText = vocabItem.pos || '';
-            document.getElementById('wmIpa').innerText = vocabItem.ipa || '';
+            document.getElementById('wmIpa').innerText = vocabItem.ipa || vocabItem.kk || '';
             
             let oldCat = document.getElementById('wmCat');
             if (oldCat) oldCat.remove();
@@ -118,26 +127,25 @@ function showWordModal(word) {
                 document.querySelector('.wm-meta').insertAdjacentHTML('beforeend', `<span id="wmCat" style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${vocabItem.category || vocabItem.cat}</span>`);
             }
 
-            document.getElementById('wmDef').innerText = vocabItem.def || '';
+            document.getElementById('wmDef').innerText = vocabItem.def || vocabItem.zh || '';
             
             const derivText = formatDerivText(vocabItem.derivatives || vocabItem.deriv);
             if (derivText) {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`);
             }
 
-            if (vocabItem.ex) {
-                document.getElementById('wmExText').innerText = vocabItem.ex;
-                document.getElementById('wmExSpeakBtn').onclick = () => speakText(vocabItem.ex);
+            if (vocabItem.ex || vocabItem.exEn) {
+                document.getElementById('wmExText').innerText = vocabItem.ex || vocabItem.exEn;
+                document.getElementById('wmExSpeakBtn').onclick = () => speakText(vocabItem.ex || vocabItem.exEn);
                 document.getElementById('wmEx').classList.remove('hidden');
             } else {
                 document.getElementById('wmEx').classList.add('hidden');
             }
             const exZhEl = document.getElementById('wmExZh');
-            if (vocabItem.ex_zh) { exZhEl.textContent = vocabItem.ex_zh; exZhEl.classList.remove('hidden'); }
+            if (vocabItem.ex_zh || vocabItem.exZh) { exZhEl.textContent = vocabItem.ex_zh || vocabItem.exZh; exZhEl.classList.remove('hidden'); }
             else { exZhEl.classList.add('hidden'); }
             await renderSaveButton(actionArea, word, vocabItem);
         } else {
-            // 🌟 找不到單字時，自動顯示「一鍵呼叫 AI」按鈕
             document.getElementById('wmPos').innerText = '';
             document.getElementById('wmIpa').innerText = '';
             let oldCat = document.getElementById('wmCat');
@@ -203,16 +211,16 @@ function renderLookupMessage(message) {
 }
 
 export function buildSavedWordPayload(word, vocabItem = {}) {
-    const normalizedEn = normalizeWordId(vocabItem.word || word);
+    const normalizedEn = normalizeWordId(vocabItem.en || vocabItem.word || word);
     return {
         id: normalizeWordId(vocabItem.word || word),
         en: normalizedEn,
-        zh: vocabItem.def || '',
+        zh: vocabItem.def || vocabItem.zh || '',
         pos: vocabItem.pos || '',
-        ipa: vocabItem.ipa || '',
+        ipa: vocabItem.ipa || vocabItem.kk || '',
         cat: vocabItem.category || vocabItem.cat || 'Other',
-        ex: vocabItem.ex || '',
-        ex_zh: vocabItem.ex_zh || '',
+        ex: vocabItem.ex || vocabItem.exEn || '',
+        ex_zh: vocabItem.ex_zh || vocabItem.exZh || '',
         col: vocabItem.col || '',
         phrase: vocabItem.phrase || '',
         deriv: vocabItem.derivatives || vocabItem.deriv || '',
@@ -225,9 +233,9 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
 
 async function backfillSavedWordExample(word, vocabItem = {}) {
     const existingSaved = await DB.getSavedWord(normalizeWordId(word));
-    if (!existingSaved || !vocabItem.ex || existingSaved.ex) return;
-    existingSaved.ex = vocabItem.ex;
-    existingSaved.ex_zh = vocabItem.ex_zh || '';
+    if (!existingSaved || !(vocabItem.ex || vocabItem.exEn) || (existingSaved.ex || existingSaved.exEn)) return;
+    existingSaved.ex = vocabItem.ex || vocabItem.exEn;
+    existingSaved.ex_zh = vocabItem.ex_zh || vocabItem.exZh || '';
     await DB.addSavedWord(existingSaved);
 }
 
@@ -316,7 +324,7 @@ function renderLookupResultCard() {
 
     card.innerHTML = `
         <div class="saved-word-top">
-            <span class="saved-word-en">${item.word || ''}</span>
+            <span class="saved-word-en">${item.word || item.en || ''}</span>
             <button class="saved-word-speak" data-action="speak-word">${ICONS.speaker}</button>
         </div>
         <div class="vocab-lookup-meta">
@@ -324,17 +332,17 @@ function renderLookupResultCard() {
             ${item.ipa ? `<span class="vocab-ipa">${item.ipa}</span>` : ''}
             ${item.category ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${item.category}</span>` : ''}
         </div>
-        <div class="saved-word-zh">${item.def || ''}</div>
+        <div class="saved-word-zh">${item.def || item.zh || ''}</div>
         ${derivHtml}
         ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
         <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
     `;
-    card.querySelector('[data-action="speak-word"]')?.addEventListener('click', () => speakText(item.word || ''));
+    card.querySelector('[data-action="speak-word"]')?.addEventListener('click', () => speakText(item.word || item.en || ''));
     card.querySelector('[data-action="speak-ex"]')?.addEventListener('click', () => speakText(item.ex || ''));
     resultEl.innerHTML = '';
     resultEl.appendChild(card);
-    renderSaveButton(card.querySelector('#vocabLookupActionArea'), item.word, item, {
+    renderSaveButton(card.querySelector('#vocabLookupActionArea'), item.word || item.en, item, {
         onToggle: async () => { await renderVocabTab(); }
     }).then(() => {});
 }
@@ -397,14 +405,14 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🚀 全自動清洗機 (終極防毒逃脫版 + 30 秒冷卻)
+// 全自動清洗機 
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        let targets = words.filter(w => !w.deriv || w.deriv.trim() === '' || !w.ipa || w.ipa.trim() === '');
+        let targets = words.filter(w => !(w.deriv || w.derivatives) || String(w.deriv || w.derivatives).trim() === '' || !(w.ipa || w.kk) || String(w.ipa || w.kk).trim() === '');
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
@@ -421,15 +429,17 @@ document.addEventListener('click', async (event) => {
             btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
             
             try {
-                const info = await fetchWordDetails(w.en, true);
+                const targetWord = w.en || w.word;
+                const info = await fetchWordDetails(targetWord, true);
                 
+                w.en = targetWord; // 確保有 .en 屬性
                 w.pos = info.pos || w.pos || '-';
-                w.ipa = info.ipa || w.ipa || '(查無音標)';
+                w.ipa = info.ipa || w.ipa || w.kk || '(查無音標)';
                 w.cat = info.category || w.cat || 'Other';
-                w.zh = info.def || w.zh || '-';
-                w.ex = info.ex || w.ex || '';
-                w.ex_zh = info.ex_zh || w.ex_zh || '';
-                w.deriv = info.derivatives || w.deriv || '(查無衍生字)'; 
+                w.zh = info.def || w.zh || w.def || '-';
+                w.ex = info.ex || w.ex || w.exEn || '';
+                w.ex_zh = info.ex_zh || w.ex_zh || w.exZh || '';
+                w.deriv = info.derivatives || w.deriv || w.derivatives || '(查無衍生字)'; 
                 
                 await DB.addSavedWord(w);
                 syncFullUpdateToCloud(w); 
@@ -444,9 +454,9 @@ document.addEventListener('click', async (event) => {
                     await new Promise(resolve => setTimeout(resolve, 30000)); 
                     i--; 
                 } else {
-                    console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en, e);
-                    w.deriv = w.deriv || '(查無衍生字)';
-                    w.ipa = w.ipa || '(查無音標)';
+                    console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en || w.word, e);
+                    w.deriv = w.deriv || w.derivatives || '(查無衍生字)';
+                    w.ipa = w.ipa || w.kk || '(查無音標)';
                     await DB.addSavedWord(w);
                     syncFullUpdateToCloud(w);
                 }
@@ -573,17 +583,25 @@ export async function renderVocabTab() {
 
         const isOverdue = w.nextReview <= Date.now();
         const dateStr = isOverdue ? t('vocabReadyForReview') : new Date(w.nextReview).toLocaleDateString();
-        const displayEn = normalizeWordId(w.en);
+        
+        // 🌟 核心修復 1：相容新舊資料庫欄位 (防護 .word vs .en 衝突)
+        const displayEn = normalizeWordId(w.en || w.word || 'Unknown');
+        const displayIpa = w.ipa || w.kk || '';
+        const displayZh = w.zh || w.def || '';
+        const displayPos = w.pos || '';
 
         const star1 = w.level >= 1 ? '★' : '☆';
         const star2 = w.level >= 2 ? '★' : '☆';
         const star3 = w.level >= 3 ? '★' : '☆';
         const pinOpacity = w.pinned ? '1' : '0.2'; 
 
-        const derivText = formatDerivText(w.deriv);
+        const derivText = formatDerivText(w.deriv || w.derivatives);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
-        const exHtml = w.ex ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${w.ex}</div>` : '';
-        const exZhHtml = w.ex_zh ? `<div style="font-size:12px; color:#6b7280;">${w.ex_zh}</div>` : '';
+        
+        const rawEx = w.ex || w.exEn || '';
+        const rawExZh = w.ex_zh || w.exZh || '';
+        const exHtml = rawEx ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${rawEx}</div>` : '';
+        const exZhHtml = rawExZh ? `<div style="font-size:12px; color:#6b7280;">${rawExZh}</div>` : '';
         
         const hasExtraInfo = derivHtml || exHtml || exZhHtml;
         const expandedArea = hasExtraInfo 
@@ -596,13 +614,13 @@ export async function renderVocabTab() {
             <div class="saved-word-info" style="width: 100%;">
                 <div class="saved-word-top" style="display: flex; align-items: center; flex-wrap: wrap;">
                     <span class="saved-word-en">${displayEn}</span>
-                    ${w.pos ? `<span class="vocab-pos">${w.pos}</span>` : ''}
+                    ${displayPos ? `<span class="vocab-pos">${displayPos}</span>` : ''}
                     <span class="vocab-pin" style="cursor:pointer; opacity:${pinOpacity}; margin-left:12px; font-size:18px; transition: opacity 0.2s;" title="特別挑選">📌</span>
                     <span class="vocab-stars" data-id="${w.id}" style="color: #fbbf24; font-size: 18px; margin-left: auto; cursor: pointer; user-select: none; letter-spacing: 2px;">
                         <span data-target="1" style="transition: color 0.2s;">${star1}</span><span data-target="2" style="transition: color 0.2s;">${star2}</span><span data-target="3" style="transition: color 0.2s;">${star3}</span>
                     </span>
                 </div>
-                <div class="saved-word-zh">${w.zh}</div>
+                <div class="saved-word-zh">${displayZh}</div>
                 <div class="saved-word-next">${isOverdue ? '⏰ ' : ''}${t('vocabNextReviewLabel', { date: dateStr })}</div>
                 ${expandedArea}
             </div>
@@ -657,6 +675,7 @@ export async function renderVocabTab() {
             };
         }
 
+        // 綁定長按事件 (修復版)
         addLongPressListener(card.querySelector('.saved-word-info'), displayEn);
         listEl.appendChild(card);
     });
@@ -665,7 +684,7 @@ export async function renderVocabTab() {
     if (_vocabSubtab === 'lookup') renderLookupResultCard();
 }
 
-// 🌟 核心升級 2：全域劃詞/反白選取「浮動快捷鍵」功能
+// 🌟 全域劃詞/反白選取「浮動快捷鍵」功能
 let aiFloatingBtn = document.getElementById('global-ai-lookup-btn');
 if (!aiFloatingBtn) {
     aiFloatingBtn = document.createElement('button');
@@ -713,7 +732,6 @@ function handleGlobalSelection(e) {
         }
         
         const selectedText = selection.toString().trim();
-        
         const wordRegex = /^[a-zA-Z\-']{2,35}$/;
         
         if (wordRegex.test(selectedText)) {
