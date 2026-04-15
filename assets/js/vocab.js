@@ -130,6 +130,10 @@ export function addLongPressListener(element, wordText) {
 
 function showWordModal(word) {
     const modal = document.getElementById('wordModal');
+    
+    // 🌟 核心修復：強制將字典視窗的圖層推到最高點，避免被考試視窗蓋住！
+    modal.style.zIndex = '9999999'; 
+    
     const actionArea = document.getElementById('wmActionArea');
     (async () => {
         let vocabItem = null;
@@ -702,16 +706,13 @@ export async function renderVocabTab() {
         };
 
         if (hasExtraInfo) {
-            // 🌟 核心修復：加入文字選取保護罩
             card.onclick = (e) => {
-                // 如果使用者正在反白文字，絕對不要觸發折疊/展開！
                 if (window.getSelection && window.getSelection().toString().trim().length > 0) return;
                 const expArea = card.querySelector('.vocab-card-expanded');
                 if (expArea) expArea.style.display = expArea.style.display === 'none' ? 'block' : 'none';
             };
         }
 
-        // 🌟 核心修復：長按事件只綁定在「英文單字(.saved-word-en)」上
         addLongPressListener(card.querySelector('.saved-word-en'), displayEn);
         listEl.appendChild(card);
     });
@@ -725,9 +726,11 @@ if (!aiFloatingBtn) {
     aiFloatingBtn = document.createElement('button');
     aiFloatingBtn.id = 'global-ai-lookup-btn';
     aiFloatingBtn.innerHTML = '✨ AI 即時解析<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #4f46e5;"></div>';
+    
+    // 🌟 核心修復：強制將浮動按鈕也推到最高圖層，絕對不被蓋住！
     aiFloatingBtn.style.cssText = `
         position: absolute;
-        z-index: 999999;
+        z-index: 9999999;
         display: none;
         background: linear-gradient(135deg, #6366f1, #4f46e5);
         color: white;
