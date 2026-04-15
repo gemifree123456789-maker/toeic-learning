@@ -196,8 +196,18 @@
 
             <div class="practice-mode-panel hidden" id="practicePanelSpecial">
                 <div id="specialConfigArea">
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">選擇特訓考點 (可複選)</h3>
-                    <p class="practice-note" style="text-align: center; margin-bottom: 20px;">由 AI 即時生成對應考點的文法單字題</p>
+                    <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇特訓難度</h3>
+                    <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+                        <select id="specialDifficultySelect" style="padding: 10px 14px; border-radius: 8px; border: 2px solid #c7d2fe; background-color: #eef2ff; font-size: 15px; color: #4338ca; font-weight: bold; cursor: pointer; outline: none; width: 90%; max-width: 320px; text-align: center; appearance: none;">
+                            <option value="國中基礎程度 (使用最簡單的國中單字，專注於測試基礎文法觀念，嚴禁商業冷僻字)">⭐ 國中基礎 (文法打底)</option>
+                            <option value="多益 500 分程度 (使用多益 500 分等級的常見生活與職場單字)">⭐⭐ 多益 500 分 (常見生活)</option>
+                            <option value="多益 600 分程度 (使用多益 600 分等級的核心商業單字與情境)">⭐⭐⭐ 多益 600 分 (核心商業)</option>
+                            <option value="多益 700 分程度 (使用多益 700 分等級的進階商業單字與稍長句型)">⭐⭐⭐⭐ 多益 700 分 (進階句型)</option>
+                            <option value="多益 800 分以上程度 (使用多益 800 分以上的艱澀單字、複雜長難句與倒裝等特殊結構)">⭐⭐⭐⭐⭐ 多益 800 分 (魔王挑戰)</option>
+                        </select>
+                    </div>
+
+                    <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">2. 選擇特訓考點 (可複選)</h3>
                     
                     <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px;">
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">

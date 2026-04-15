@@ -85,11 +85,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
 
+            // 🌟 動態讀取選定的難度
+            const difficultySelect = document.getElementById('specialDifficultySelect');
+            const difficulty = difficultySelect ? difficultySelect.value : '國中程度 (使用最簡單的單字)';
+
             btnStartSpecial.disabled = true;
             btnStartSpecial.innerHTML = '✨ 題目即時生成中 (約 5-10 秒)...';
 
             try {
-                await startTraining(topics);
+                // 將難度參數一起傳遞給出題大腦
+                await startTraining(topics, difficulty);
             } catch (e) {
                 alert('生成失敗，請重試：' + e.message);
             } finally {
@@ -164,7 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 🌟 列印控制雙軌系統
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
         btnPrintPDF.addEventListener('click', () => {
@@ -183,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 🌟 文法秘笈生成與視窗控制
     const btnGenerateSecrets = document.getElementById('btnGenerateSecrets');
     const grammarSecretsModal = document.getElementById('grammarSecretsModal');
     const btnCloseSecrets = document.getElementById('btnCloseSecrets');
@@ -196,7 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const secretsByTopic = {};
             let hasNewFormat = false;
 
-            // 分類收集技巧與警告，並使用 Set 去除重複
             allMistakes.forEach(q => {
                 if (!q.explanation || typeof q.explanation === 'string') return; 
                 hasNewFormat = true;
@@ -249,7 +251,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 🌟 列印專屬 CSS (根據雙軌模式動態調整)
     const printStyle = document.createElement('style');
     printStyle.textContent = `
         @media print {
@@ -353,13 +354,14 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-async function startTraining(topics) {
+// 🌟 核心升級：將 difficulty 參數寫入 Prompt 靈魂深處
+async function startTraining(topics, difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
-⚠️ 極度重要難度限制：必須符合「國中英文學習需求條件」，請使用國中基礎單字來測驗多益核心文法，幫助學習者建立信心，避免使用過於艱澀的商業冷僻字。
+⚠️ 極度重要難度限制：必須符合「${difficulty}」的程度要求。請嚴格根據此難度標準來控制單字難度、句式長度與情境複雜度。例如若為國中難度，嚴禁使用商業單字；若為 800 分難度，請盡量使用長難句與陷阱題。
 
 請務必以「純 JSON 陣列」格式回傳，絕對不要有 markdown 標記 (如 \`\`\`json)，也不要有任何問候語或額外文字。
 格式必須完全符合以下結構：
