@@ -47,6 +47,22 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
+// 🌟 核心升級 1：AI 創意標籤自動校正器 (拯救舊資料，強制歸納)
+function normalizeTopic(rawTopic) {
+    if (!rawTopic) return '其他';
+    const t = String(rawTopic).toLowerCase();
+    
+    if (t.includes('時態') || t.includes('現在') || t.includes('過去') || t.includes('未來') || t.includes('完成') || t.includes('進行')) return '時態';
+    if (t.includes('詞性') || t.includes('名詞') || t.includes('動詞') || t.includes('形容詞') || t.includes('副詞')) return '詞性判斷';
+    if (t.includes('介系詞') || t.includes('介詞')) return '介系詞';
+    if (t.includes('代名詞')) return '代名詞';
+    if (t.includes('單複數') || t.includes('可數')) return '單複數';
+    if (t.includes('比較級') || t.includes('最高級')) return '比較級';
+    if (t.includes('假設')) return '假設語氣';
+    
+    return rawTopic; // 如果真的都不符合，保留原樣
+}
+
 function buildExplanationHtml(explanation) {
     if (typeof explanation === 'string') {
         return `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${explanation}</div>`;
@@ -85,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
 
-            // 🌟 動態讀取選定的難度
             const difficultySelect = document.getElementById('specialDifficultySelect');
             const difficulty = difficultySelect ? difficultySelect.value : '國中程度 (使用最簡單的單字)';
 
@@ -93,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btnStartSpecial.innerHTML = '✨ 題目即時生成中 (約 5-10 秒)...';
 
             try {
-                // 將難度參數一起傳遞給出題大腦
                 await startTraining(topics, difficulty);
             } catch (e) {
                 alert('生成失敗，請重試：' + e.message);
@@ -202,7 +216,10 @@ document.addEventListener('DOMContentLoaded', () => {
             allMistakes.forEach(q => {
                 if (!q.explanation || typeof q.explanation === 'string') return; 
                 hasNewFormat = true;
-                const topic = q.topic || '其他';
+                
+                // 🌟 套用校正器，確保舊題目的怪標籤(如'簡單現在式')被合併進大分類(如'時態')
+                const topic = normalizeTopic(q.topic);
+                
                 if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
                 if (q.explanation.skills) secretsByTopic[topic].skills.add(q.explanation.skills.trim());
                 if (q.explanation.warnings) secretsByTopic[topic].warnings.add(q.explanation.warnings.trim());
@@ -280,7 +297,11 @@ async function renderMistakesList() {
     
     let displayMistakes = allMistakes;
     if (activeMistakeFilters.size > 0) {
-        displayMistakes = allMistakes.filter(q => activeMistakeFilters.has(q.topic));
+        // 🌟 篩選列表時也套用校正器，讓你點擊「時態」按鈕時能順利抓出舊題
+        displayMistakes = allMistakes.filter(q => {
+            const normalized = normalizeTopic(q.topic);
+            return activeMistakeFilters.has(normalized);
+        });
     }
     
     if (displayMistakes.length === 0) {
@@ -305,10 +326,13 @@ async function renderMistakesList() {
         `).join('');
 
         const expHtml = buildExplanationHtml(q.explanation);
+        
+        // 🌟 卡片標籤顯示時，強制顯示為校正後的大分類
+        const displayTopic = normalizeTopic(q.topic);
 
         card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                <span style="background: #e0e7ff; color: #3b82f6; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;">${q.topic}</span>
+                <span style="background: #e0e7ff; color: #3b82f6; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;">${displayTopic}</span>
                 <button class="delete-mistake-btn" data-id="${q.id}" style="background: #fee2e2; border: none; color: #ef4444; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="移除此題">✕</button>
             </div>
             <div style="font-size: 16px; font-weight: 500; color: #1f2937; margin-bottom: 8px; line-height: 1.5;">${q.en.replace('___', '_____')}</div>
@@ -354,10 +378,10 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 🌟 核心升級：將 difficulty 參數寫入 Prompt 靈魂深處
 async function startTraining(topics, difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
+    // 🌟 核心升級 2：嚴格限制 AI 分類與回應精煉度
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
@@ -368,7 +392,7 @@ async function startTraining(topics, difficulty) {
 [
   {
     "id": "q_12345",
-    "topic": "該題的文法主題",
+    "topic": "必須嚴格填寫該題所屬的主題名稱，只能從【${topics.join('、')}】中挑選一個完全一樣的字眼，絕對不能自己發明分類（例如不能寫'簡單現在式'，只能寫'時態'）！",
     "en": "完整的英文題目，空格請用 ___ 表示",
     "zh": "題目的完整中文翻譯",
     "options": [
@@ -379,8 +403,8 @@ async function startTraining(topics, difficulty) {
     ],
     "explanation": {
       "core": "詳細的中文解析。⚠️解釋時請直接引用「英文單字」本身，絕對不要使用「選項A、B、C、D」等字眼，因前端系統會打亂選項順序。",
-      "skills": "答題技巧：教導如何快速判斷（例如：看到某字就知道要選什麼詞性/時態）。",
-      "warnings": "注意事項：易混淆的陷阱提醒，或補充該題相關的一般動詞三態變化。"
+      "skills": "一句話總結核心答題技巧（例如：'看到 last night 就選過去式'），請盡量精煉、標準化，方便系統歸納。",
+      "warnings": "一句話總結易混淆陷阱或注意事項（例如：'注意 do 的第三人稱單數是 does'），請精煉、標準化。"
     }
   }
 ]
@@ -432,7 +456,9 @@ function renderQuestion() {
     stState.answered = false;
 
     document.getElementById('specialProgressText').textContent = `${stState.currentQ + 1} / ${stState.questions.length}`;
-    document.getElementById('specialTopicBadge').textContent = q.topic;
+    
+    // 🌟 測驗中顯示的徽章也套用校正
+    document.getElementById('specialTopicBadge').textContent = normalizeTopic(q.topic);
 
     const qArea = document.getElementById('specialQuestionArea');
     const oArea = document.getElementById('specialOptionsArea');
