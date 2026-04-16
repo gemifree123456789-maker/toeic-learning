@@ -47,7 +47,6 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
-// 🌟 核心升級 1：AI 創意標籤自動校正器 (拯救舊資料，強制歸納)
 function normalizeTopic(rawTopic) {
     if (!rawTopic) return '其他';
     const t = String(rawTopic).toLowerCase();
@@ -60,7 +59,7 @@ function normalizeTopic(rawTopic) {
     if (t.includes('比較級') || t.includes('最高級')) return '比較級';
     if (t.includes('假設')) return '假設語氣';
     
-    return rawTopic; // 如果真的都不符合，保留原樣
+    return rawTopic; 
 }
 
 function buildExplanationHtml(explanation) {
@@ -217,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!q.explanation || typeof q.explanation === 'string') return; 
                 hasNewFormat = true;
                 
-                // 🌟 套用校正器，確保舊題目的怪標籤(如'簡單現在式')被合併進大分類(如'時態')
                 const topic = normalizeTopic(q.topic);
                 
                 if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
@@ -242,16 +240,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div style="padding: 20px;">
                     `;
 
+                    // 🌟 核心排版升級：改用 <ol> 標籤並強制啟用數字排序 (list-style-type: decimal)
                     if (data.skills.size > 0) {
-                        topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ul style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500;">`;
-                        data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px;">${skill}</li>`; });
-                        topicHtml += `</ul></div>`;
+                        topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                        data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
+                        topicHtml += `</ol></div>`;
                     }
 
+                    // 🌟 核心排版升級：改用 <ol> 標籤並強制啟用數字排序 (list-style-type: decimal)
                     if (data.warnings.size > 0) {
-                        topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ul style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500;">`;
-                        data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px;">${warning}</li>`; });
-                        topicHtml += `</ul></div>`;
+                        topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                        data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
+                        topicHtml += `</ol></div>`;
                     }
 
                     topicHtml += `</div></div>`;
@@ -297,7 +297,6 @@ async function renderMistakesList() {
     
     let displayMistakes = allMistakes;
     if (activeMistakeFilters.size > 0) {
-        // 🌟 篩選列表時也套用校正器，讓你點擊「時態」按鈕時能順利抓出舊題
         displayMistakes = allMistakes.filter(q => {
             const normalized = normalizeTopic(q.topic);
             return activeMistakeFilters.has(normalized);
@@ -327,7 +326,6 @@ async function renderMistakesList() {
 
         const expHtml = buildExplanationHtml(q.explanation);
         
-        // 🌟 卡片標籤顯示時，強制顯示為校正後的大分類
         const displayTopic = normalizeTopic(q.topic);
 
         card.innerHTML = `
@@ -381,7 +379,6 @@ async function getBestModel(apiKey) {
 async function startTraining(topics, difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
-    // 🌟 核心升級 2：嚴格限制 AI 分類與回應精煉度
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請根據以下文法主題：【${topics.join('、')}】，出 10 題高質量的 TOEIC 單選題。考點必須在這些主題中隨機混搭。
 
@@ -456,8 +453,6 @@ function renderQuestion() {
     stState.answered = false;
 
     document.getElementById('specialProgressText').textContent = `${stState.currentQ + 1} / ${stState.questions.length}`;
-    
-    // 🌟 測驗中顯示的徽章也套用校正
     document.getElementById('specialTopicBadge').textContent = normalizeTopic(q.topic);
 
     const qArea = document.getElementById('specialQuestionArea');
