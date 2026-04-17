@@ -47,14 +47,17 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
+// 🌟 核心修復：調整字串攔截順序，拯救被吞噬的「代名詞」
 function normalizeTopic(rawTopic) {
     if (!rawTopic) return '其他';
     const t = String(rawTopic).toLowerCase();
     
+    // ⚠️ 必須優先攔截「代名詞」，否則會被下方的「名詞」字串給誤殺！
+    if (t.includes('代名詞')) return '代名詞';
+    
     if (t.includes('時態') || t.includes('現在') || t.includes('過去') || t.includes('未來') || t.includes('完成') || t.includes('進行')) return '時態';
     if (t.includes('詞性') || t.includes('名詞') || t.includes('動詞') || t.includes('形容詞') || t.includes('副詞')) return '詞性判斷';
     if (t.includes('介系詞') || t.includes('介詞')) return '介系詞';
-    if (t.includes('代名詞')) return '代名詞';
     if (t.includes('單複數') || t.includes('可數')) return '單複數';
     if (t.includes('比較級') || t.includes('最高級')) return '比較級';
     if (t.includes('假設')) return '假設語氣';
@@ -240,14 +243,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div style="padding: 20px;">
                     `;
 
-                    // 🌟 核心排版升級：改用 <ol> 標籤並強制啟用數字排序 (list-style-type: decimal)
                     if (data.skills.size > 0) {
                         topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
                         data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
                         topicHtml += `</ol></div>`;
                     }
 
-                    // 🌟 核心排版升級：改用 <ol> 標籤並強制啟用數字排序 (list-style-type: decimal)
                     if (data.warnings.size > 0) {
                         topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
                         data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
