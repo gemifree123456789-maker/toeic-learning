@@ -6,8 +6,8 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 🌟 請將這裡的網址，換成你剛剛在 Apps Script 「新增部署作業」產生的最新網址！
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbx64QDDfzneI4sNoal4nmpdiWeEjNjS55q8VN7YsWNu7WcFkkIF0MyV9vbMimArrAii/exec',
+    // 🌟 保持你原本的 GAS 網址
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -103,16 +103,27 @@ export const DriveSync = {
         } catch (e) { console.warn('Failed to fetch user info:', e); }
     },
 
-    // --- 🌟 錯題本 (MistakesDB) 專用輔助函數 ---
+    // --- 🌟 核心修復：升級 DB 版本號為 2，並加入完整的升級與防呆機制 ---
     async _getMistakesFromDB() {
         return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 1);
+            const req = indexedDB.open('ToeicMistakesDB', 2);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) {
+                    db.createObjectStore('mistakes', { keyPath: 'id' });
+                }
+            };
             req.onsuccess = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) return resolve([]);
-                const tx = db.transaction('mistakes', 'readonly');
-                const reqAll = tx.objectStore('mistakes').getAll();
-                reqAll.onsuccess = () => resolve(reqAll.result);
+                try {
+                    const tx = db.transaction('mistakes', 'readonly');
+                    const reqAll = tx.objectStore('mistakes').getAll();
+                    reqAll.onsuccess = () => resolve(reqAll.result);
+                    reqAll.onerror = () => resolve([]);
+                } catch (err) {
+                    resolve([]);
+                }
             };
             req.onerror = () => resolve([]);
         });
@@ -120,41 +131,58 @@ export const DriveSync = {
 
     async _saveMistakeToDB(mistake) {
         return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 1);
+            const req = indexedDB.open('ToeicMistakesDB', 2);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) {
+                    db.createObjectStore('mistakes', { keyPath: 'id' });
+                }
+            };
             req.onsuccess = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                const tx = db.transaction('mistakes', 'readwrite');
-                tx.objectStore('mistakes').put(mistake);
-                tx.oncomplete = () => resolve();
+                try {
+                    const tx = db.transaction('mistakes', 'readwrite');
+                    tx.objectStore('mistakes').put(mistake);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => resolve();
+                } catch (err) { resolve(); }
             };
+            req.onerror = () => resolve();
         });
     },
 
     async _clearMistakesDB() {
         return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 1);
+            const req = indexedDB.open('ToeicMistakesDB', 2);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('mistakes')) {
+                    db.createObjectStore('mistakes', { keyPath: 'id' });
+                }
+            };
             req.onsuccess = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                const tx = db.transaction('mistakes', 'readwrite');
-                tx.objectStore('mistakes').clear();
-                tx.oncomplete = () => resolve();
+                try {
+                    const tx = db.transaction('mistakes', 'readwrite');
+                    tx.objectStore('mistakes').clear();
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => resolve();
+                } catch (err) { resolve(); }
             };
+            req.onerror = () => resolve();
         });
     },
     // ------------------------------------------
 
-    // 🌟 1. 立即備份 (雙軌打包送往 GAS)
     async backupNow() {
-        // 如果沒有登入或不想綁定登入，我們依然允許備份到 GAS (看你的需求，這裡保留原本的登入檢查)
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
         
         const btn = document.getElementById('btnBackupNow');
         if (btn) { btn.disabled = true; btn.textContent = '☁️ 雙軌打包備份中...'; }
         
         try {
-            // 讀取兩個資料庫的資料
             const vocabWords = await DB.getSavedWords();
             const mistakes = await this._getMistakesFromDB();
 
@@ -186,7 +214,6 @@ export const DriveSync = {
         }
     },
 
-    // 🌟 2. 從雲端還原 (雙軌下載覆蓋)
     async restore() {
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
         
@@ -202,21 +229,19 @@ export const DriveSync = {
             let vCount = 0;
             let mCount = 0;
 
-            // 1. 還原單字本
             if (data.vocab && data.vocab.length > 0) {
                 const existing = await DB.getSavedWords();
-                for (const w of existing) await DB.deleteSavedWord(w.id); // 清空舊單字
+                for (const w of existing) await DB.deleteSavedWord(w.id); 
                 for (const w of data.vocab) { await DB.addSavedWord(w); vCount++; }
             }
 
-            // 2. 還原錯題本
             if (data.mistakes && data.mistakes.length > 0) {
-                await this._clearMistakesDB(); // 清空舊錯題
+                await this._clearMistakesDB(); 
                 for (const m of data.mistakes) { await this._saveMistakeToDB(m); mCount++; }
             }
 
             alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字，與 ${mCount} 題錯題。\n為了確保資料正確載入，系統即將為您重新整理網頁。`);
-            location.reload(); // 強制重整以刷新所有頁面與快取
+            location.reload(); 
         } catch (e) {
             alert('還原失敗，請檢查網路或 API 狀態：' + e.message);
         } finally {

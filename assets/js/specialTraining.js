@@ -5,7 +5,8 @@ let activeMistakeFilters = new Set();
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('ToeicMistakesDB', 1);
+            // 🌟 核心修復：版本號升級為 2，觸發 iOS/Safari 重新檢查資料庫結構
+            const req = indexedDB.open('ToeicMistakesDB', 2);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) {
@@ -47,14 +48,11 @@ export const MistakesDB = {
 
 const stState = { active: false, questions: [], currentQ: 0, answered: false };
 
-// 🌟 核心修復：調整字串攔截順序，拯救被吞噬的「代名詞」
 function normalizeTopic(rawTopic) {
     if (!rawTopic) return '其他';
     const t = String(rawTopic).toLowerCase();
     
-    // ⚠️ 必須優先攔截「代名詞」，否則會被下方的「名詞」字串給誤殺！
     if (t.includes('代名詞')) return '代名詞';
-    
     if (t.includes('時態') || t.includes('現在') || t.includes('過去') || t.includes('未來') || t.includes('完成') || t.includes('進行')) return '時態';
     if (t.includes('詞性') || t.includes('名詞') || t.includes('動詞') || t.includes('形容詞') || t.includes('副詞')) return '詞性判斷';
     if (t.includes('介系詞') || t.includes('介詞')) return '介系詞';
@@ -209,7 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnGenerateSecrets) {
         btnGenerateSecrets.addEventListener('click', async () => {
-            const allMistakes = await MistakesDB.getAll();
+            let allMistakes = [];
+            try { allMistakes = await MistakesDB.getAll(); } catch(e) { console.error(e); }
             if (allMistakes.length === 0) return alert('您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！');
 
             const secretsByTopic = {};
@@ -294,7 +293,13 @@ async function renderMistakesList() {
     if (!listEl) return;
     
     listEl.innerHTML = '<p style="text-align:center; padding:20px; color:#9ca3af;">載入中...</p>';
-    const allMistakes = await MistakesDB.getAll();
+    
+    let allMistakes = [];
+    try {
+        allMistakes = await MistakesDB.getAll();
+    } catch(e) {
+        console.error("載入錯題失敗", e);
+    }
     
     let displayMistakes = allMistakes;
     if (activeMistakeFilters.size > 0) {
