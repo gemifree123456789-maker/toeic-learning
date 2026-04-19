@@ -286,12 +286,19 @@
         <div id="vocabNotebookPanel">
             <div id="srsReviewEntry"></div>
             
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
-                <button id="btnBatchUpgradeDeriv" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f3f4f6; color: #4b5563; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center;">
-                    🚀 升級舊單字
-                </button>
-                <select id="posFilterSelect" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f9fafb; font-size: 14px; color: #374151; font-weight: 500; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    <option value="all">🔍 全部詞性</option>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
+                <div style="display: flex; gap: 8px; flex: 1; min-width: 220px;">
+                    <button id="btnBatchUpgradeDeriv" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f3f4f6; color: #4b5563; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; white-space: nowrap; transition: all 0.2s;">
+                        🚀 升級舊單字
+                    </button>
+                    <div style="position: relative; flex: 1;">
+                        <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 13px; opacity: 0.5;">🔍</span>
+                        <input type="text" id="vocabSearchInput" placeholder="搜尋單字或中文..." style="width: 100%; padding: 6px 10px 6px 30px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #fff; font-size: 14px; color: #374151; outline: none; box-sizing: border-box; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); transition: border-color 0.2s;">
+                    </div>
+                </div>
+                
+                <select id="posFilterSelect" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f9fafb; font-size: 14px; color: #374151; font-weight: 500; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <option value="all">全詞性</option>
                     <option value="n">名詞 (n.)</option>
                     <option value="v">動詞 (v.)</option>
                     <option value="adj">形容詞 (adj.)</option>

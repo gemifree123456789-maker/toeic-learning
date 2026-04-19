@@ -11,9 +11,10 @@ let _vocabSubtab = 'notebook';
 let _lookupResult = null;
 let _filterLv0 = false; 
 let _filterPinned = false; 
-
-// 🌟 核心升級：加入全域的清洗狀態開關，用來控制暫停
 let _isUpgrading = false; 
+
+// 🌟 新增：全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
+let _searchQuery = ''; 
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycby7qtD8nym6_4yBbyLdj81VAUIsKJR4kfgG6bubqSaiCPwmuGajrMoM-IFi6iXYw3a8/exec";
 
@@ -495,11 +496,17 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🌟 全自動清洗機 (極速防斷線與暫停版)
+// 🌟 新增：監聽搜尋框的「即時輸入」事件 (Live Filter)
+document.addEventListener('input', (event) => {
+    if (event.target && event.target.id === 'vocabSearchInput') {
+        _searchQuery = event.target.value.trim(); // 更新全域搜尋字串
+        renderVocabTab(); // 重新觸發畫面渲染
+    }
+});
+
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
-        // 如果正在執行中，再次點擊就是「要求暫停」
         if (_isUpgrading) {
             _isUpgrading = false;
             btn.innerHTML = `🛑 正在中斷...`;
@@ -510,8 +517,6 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        // 🌟 核心修復 1：嚴格判斷「屬性是否存在(typeof === 'undefined')」，
-        // 這樣就算 AI 找不到同義字回傳空字串("")，下次也不會被當作沒洗過而重洗！
         let targets = words.filter(w => typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined');
         
         if (targets.length === 0) {
@@ -522,11 +527,10 @@ document.addEventListener('click', async (event) => {
         if (!confirm(confirmMsg)) return;
 
         _isUpgrading = true;
-        btn.disabled = false; // 保持按鈕可點擊，用來觸發暫停
+        btn.disabled = false; 
         let successCount = 0;
 
         for (let i = 0; i < targets.length; i++) {
-            // 每次迴圈檢查使用者是否按下了暫停
             if (!_isUpgrading) {
                 alert(`🛑 已手動暫停清洗！\n本次成功升級了 ${successCount} 個單字。\n下次按升級會直接從進度接續。\n\n⚠️ 請務必前往「紀錄」頁面點擊【立即備份】！`);
                 break;
@@ -548,11 +552,9 @@ document.addEventListener('click', async (event) => {
                 w.ex_zh = info.ex_zh || w.ex_zh || w.exZh || '';
                 w.deriv = info.derivatives || w.deriv || w.derivatives || ''; 
                 
-                // 🌟 確保這兩個屬性一定會被建立，即使是空字串，下次就不會再被抓去洗
                 w.synonyms = info.synonyms || '';
                 w.antonyms = info.antonyms || '';
                 
-                // 🌟 核心修復 2：只存本機，切斷 Google 試算表連續 POST 以防斷線
                 await DB.addSavedWord(w);
                 
                 successCount++;
@@ -568,14 +570,13 @@ document.addEventListener('click', async (event) => {
                     console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en || w.word, e);
                     w.deriv = w.deriv || w.derivatives || '';
                     w.ipa = w.ipa || w.kk || '(查無音標)';
-                    w.synonyms = ''; // 強制蓋章為已處理
+                    w.synonyms = ''; 
                     w.antonyms = '';
                     await DB.addSavedWord(w);
                 }
             }
         }
         
-        // 如果是自然跑完（不是被手動暫停的）
         if (_isUpgrading) {
             _isUpgrading = false;
             alert(`✅ 清洗任務徹底結束！\n共升級了 ${successCount} 個單字。\n\n⚠️ 請立刻前往「紀錄」頁面點擊【立即備份】將進度存上雲端！`);
@@ -683,12 +684,25 @@ export async function renderVocabTab() {
         });
     }
 
+    // 🌟 新增：即時搜尋過濾邏輯 (比對英文或中文)
+    if (_searchQuery) {
+        const q = _searchQuery.toLowerCase();
+        displayWords = displayWords.filter(w => {
+            const en = String(w.en || w.word || '').toLowerCase();
+            const zh = String(w.zh || w.def || '').toLowerCase();
+            return en.includes(q) || zh.includes(q);
+        });
+    }
+
     document.getElementById('vocabCount').textContent = t('vocabCountLabel', { count: displayWords.length });
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
-        if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
-        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">請試著切換其他分類或取消篩選條件</span></p>`;
+        // 如果是因為搜尋找不到，給予不同的提示
+        if (_searchQuery) emptyMsg = '找不到包含此關鍵字的單字喔！';
+        else if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
+        
+        listEl.innerHTML = `<p style="text-align:center; color:var(--text-sub); padding: 30px 0;">${emptyMsg}<br><span style="font-size:13px;">請試著清除搜尋或切換其他分類</span></p>`;
         renderVocabSubtab();
         if (_vocabSubtab === 'lookup') renderLookupResultCard();
         return;
