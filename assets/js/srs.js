@@ -18,6 +18,33 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
+// 🌟 核心升級 1：加入同反義字標籤解析器 (與 vocab.js 保持一致)
+function formatRelWordsHtml(synonyms, antonyms) {
+    const synStr = String(synonyms || '').trim();
+    const antStr = String(antonyms || '').trim();
+    if (!synStr && !antStr) return '';
+
+    let html = `<div style="margin-bottom:12px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                    <span style="font-size:12px; color:#4b5563; font-weight:bold; margin-right:4px;">🔗 同反義字：</span>`;
+    
+    if (synStr) {
+        const synList = synStr.split(',').map(s => s.trim()).filter(s => s);
+        synList.forEach(s => {
+            html += `<span style="background-color: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #bbf7d0;">= ${s}</span>`;
+        });
+    }
+
+    if (antStr) {
+        const antList = antStr.split(',').map(a => a.trim()).filter(a => a);
+        antList.forEach(a => {
+            html += `<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #fecaca;">↔ ${a}</span>`;
+        });
+    }
+
+    html += `</div>`;
+    return html;
+}
+
 function normalizeW(w) {
     if (!w) return w;
     return {
@@ -29,7 +56,9 @@ function normalizeW(w) {
         cat: w.cat || w.category || '',
         ex: w.ex || w.exEn || '',
         ex_zh: w.ex_zh || w.exZh || '',
-        deriv: w.deriv || w.derivatives || ''
+        deriv: w.deriv || w.derivatives || '',
+        synonyms: w.synonyms || w.syn || '',
+        antonyms: w.antonyms || w.ant || ''
     };
 }
 
@@ -80,9 +109,7 @@ export function startSrsReview(dueWords, allWords) {
     const normDue = dueWords.map(normalizeW);
     const normAll = allWords.map(normalizeW);
     
-    // 🌟 核心升級 1：不再純隨機盲抽。先依照 nextReview (欠最久的) 排序，再切出前 N 個來複習！
     const sortedDue = normDue.sort((a, b) => a.nextReview - b.nextReview);
-    // 切出最需要救火的前 10 個字，然後再把它們的順序打亂，增加測驗的新鮮感
     const selected = shuffleArray(sortedDue.slice(0, SRS_MAX_WORDS));
     
     let questions = [];
@@ -331,21 +358,16 @@ async function showSrsResults() {
         freshWord = normalizeW(freshWord);
 
         const r = srsState.results[word.id];
-        // 計算這三個題型(en2zh, zh2en, listen)對了幾題，範圍是 0 ~ 3
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
         totalCorrect += cc;
         
         let newLevel = freshWord.level;
         
-        // 🌟 核心升級 2：人性化寬容計分制 (Graduated Scoring)
         if (cc === 3) {
-            // 完美掌握：升 1 級
             newLevel = Math.min(freshWord.level + 1, SRS_INTERVALS.length - 1);
         } else if (cc === 2) {
-            // 稍微不熟：等級不變 (維持現狀，不會遭受被降級的打擊)
             newLevel = freshWord.level;
         } else {
-            // 錯了 2 題以上 (忘了)：降 1 級重新加強
             newLevel = Math.max(freshWord.level - 1, 0);
         }
         
@@ -365,10 +387,11 @@ async function showSrsResults() {
         let cls = 'same', txt = `Lv.${wr.oldLevel}`;
         if (diff > 0) { cls = 'up'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
         else if (diff < 0) { cls = 'down'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
-        else { txt = `Lv.${wr.oldLevel} (維持)`; } // 如果維持原等級，UI 上給予明確的回饋
+        else { txt = `Lv.${wr.oldLevel} (維持)`; }
 
         const item = document.createElement('div');
         item.className = 'srs-result-item';
+        // 給予相對定位，方便我們把刪除按鈕放在絕對位置
         item.style.cssText = 'display: block; width: 100%; box-sizing: border-box; background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative;';
 
         const displayEn = toLowerWord(freshWord.en);
@@ -381,6 +404,9 @@ async function showSrsResults() {
         const rawDeriv = freshWord.deriv?.trim() || freshWord.derivatives?.trim() || '';
         const derivText = formatDerivText(rawDeriv);
         
+        // 🌟 核心升級 2：渲染同反義字微標籤
+        const relHtml = formatRelWordsHtml(freshWord.synonyms || freshWord.syn, freshWord.antonyms || freshWord.ant);
+
         let derivHtml = '';
         if (derivText) {
             derivHtml = `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:12px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`;
@@ -416,6 +442,7 @@ async function showSrsResults() {
             
             <div class="saved-word-zh" style="font-size: 15px; color: #374151; margin-bottom: 12px; line-height: 1.5;">${zhText}</div>
             
+            ${relHtml}
             ${derivHtml}
             
             <div style="font-size:14px; color:${exColor}; margin-bottom:4px; font-style:italic; display: flex; align-items: flex-start; gap: 6px;">
@@ -424,8 +451,11 @@ async function showSrsResults() {
             </div>
             <div style="font-size:13px; color:${exZhColor}; margin-bottom: 12px;">${exZhText || '(暫無中文翻譯)'}</div>
             
-            <div style="font-size: 12px; color: #8b5cf6; font-weight: 500; padding-top: 10px; border-top: 1px dashed #e5e7eb;">
-                <span>⏰ 下次複習：<span class="srs-next-date">${wr.nextDate}</span></span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px dashed #e5e7eb;">
+                <div style="font-size: 12px; color: #8b5cf6; font-weight: 500;">
+                    <span>⏰ 下次複習：<span class="srs-next-date">${wr.nextDate}</span></span>
+                </div>
+                <button class="srs-delete-btn" data-id="${freshWord.id}" style="background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 0 8px; transition: transform 0.2s;" title="徹底刪除此單字">❌</button>
             </div>
         `;
 
@@ -448,6 +478,20 @@ async function showSrsResults() {
             item.querySelector('.srs-next-date').textContent = new Date(resetNext).toLocaleDateString();
         };
 
+        // 🌟 綁定刪除按鈕事件
+        const deleteBtn = item.querySelector('.srs-delete-btn');
+        deleteBtn.onclick = async (e) => {
+            e.stopPropagation();
+            if (confirm(`確定要將「${displayEn}」從單字本徹底刪除嗎？\n此動作無法復原。`)) {
+                await DB.deleteSavedWord(freshWord.id);
+                // 刪除後將卡片變灰並顯示已刪除
+                item.style.opacity = '0.4';
+                item.style.pointerEvents = 'none';
+                deleteBtn.innerHTML = '🗑️ 已刪除';
+                deleteBtn.style.fontSize = '12px';
+            }
+        };
+
         oArea.appendChild(item);
     });
 
@@ -460,14 +504,12 @@ async function showSrsResults() {
     doneBtn.className = 'srs-done-btn';
     doneBtn.textContent = t('srsDone');
     
-    // 🌟 在這裡呼叫渲染，然後關閉彈窗
     doneBtn.onclick = () => {
         finishSrsReview();
     };
     oArea.appendChild(doneBtn);
 }
 
-// 🌟 將 finishSrsReview 獨立出來，方便外部（如 vocab.js 裡的 onFinish 閉包）知道何時該重新載入列表
 export function finishSrsReview() {
     document.getElementById('srsOverlay').classList.add('hidden');
     if (_onFinish) _onFinish();
