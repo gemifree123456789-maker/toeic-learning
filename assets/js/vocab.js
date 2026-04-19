@@ -12,6 +12,9 @@ let _lookupResult = null;
 let _filterLv0 = false; 
 let _filterPinned = false; 
 
+// 🌟 核心升級：加入全域的清洗狀態開關，用來控制暫停
+let _isUpgrading = false; 
+
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
 
 function getRandomToeicVoice() {
@@ -58,7 +61,6 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
-// 🌟 核心升級：同反義字標籤解析器
 function formatRelWordsHtml(synonyms, antonyms) {
     const synStr = String(synonyms || '').trim();
     const antStr = String(antonyms || '').trim();
@@ -85,7 +87,6 @@ function formatRelWordsHtml(synonyms, antonyms) {
     return html;
 }
 
-// 🌟 Google 試算表欄位打包擴充
 async function syncToGoogleSheet(item) {
     const payload = {
         action: "add",
@@ -201,7 +202,6 @@ function showWordModal(word) {
 
             document.getElementById('wmDef').innerText = vocabItem.def || vocabItem.zh || '';
             
-            // 🌟 渲染字典內的同反義字微標籤
             const relHtml = formatRelWordsHtml(vocabItem.synonyms || vocabItem.syn, vocabItem.antonyms || vocabItem.ant);
             if (relHtml) {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${relHtml}</div>`);
@@ -250,7 +250,6 @@ function showWordModal(word) {
 
                     document.getElementById('wmDef').innerText = info.def;
                     
-                    // 🌟 自動生成時，渲染同反義字微標籤
                     const newRelHtml = formatRelWordsHtml(info.synonyms, info.antonyms);
                     if (newRelHtml) {
                         document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${newRelHtml}</div>`);
@@ -294,7 +293,6 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
-// 🌟 payload 增加 syn 和 ant 欄位
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.en || vocabItem.word || word);
     return {
@@ -404,7 +402,6 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
-    // 🌟 在 lookup 結果卡片中渲染同反義字
     const relHtml = formatRelWordsHtml(item.synonyms || item.syn, item.antonyms || item.ant);
 
     const derivText = formatDerivText(item.derivatives || item.deriv);
@@ -498,28 +495,45 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
+// 🌟 全自動清洗機 (極速防斷線與暫停版)
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('#btnBatchUpgradeDeriv');
     if (btn) {
+        // 如果正在執行中，再次點擊就是「要求暫停」
+        if (_isUpgrading) {
+            _isUpgrading = false;
+            btn.innerHTML = `🛑 正在中斷...`;
+            btn.disabled = true;
+            return;
+        }
+
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        // 🌟 清洗條件加上檢查是否有同反義字 (如果都沒有，就抓去重洗)
-        let targets = words.filter(w => !(w.deriv || w.derivatives) || String(w.deriv || w.derivatives).trim() === '' || !(w.ipa || w.kk) || String(w.ipa || w.kk).trim() === '' || (!w.synonyms && !w.syn));
+        // 🌟 核心修復 1：嚴格判斷「屬性是否存在(typeof === 'undefined')」，
+        // 這樣就算 AI 找不到同義字回傳空字串("")，下次也不會被當作沒洗過而重洗！
+        let targets = words.filter(w => typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined');
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字 (缺少音標、衍生字或同義字)。\n\n確定要開始升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個尚未升級微標籤的舊單字。\n\n⚠️ 系統已啟動「極速清洗模式」：\n1. 過程中隨時可以再點擊按鈕「暫停」。\n2. 為了避免 1400 多字導致 Google 斷線，系統【不會自動備份】。\n\n確定要開始嗎？`;
         if (!confirm(confirmMsg)) return;
 
-        btn.disabled = true;
+        _isUpgrading = true;
+        btn.disabled = false; // 保持按鈕可點擊，用來觸發暫停
         let successCount = 0;
 
         for (let i = 0; i < targets.length; i++) {
+            // 每次迴圈檢查使用者是否按下了暫停
+            if (!_isUpgrading) {
+                alert(`🛑 已手動暫停清洗！\n本次成功升級了 ${successCount} 個單字。\n下次按升級會直接從進度接續。\n\n⚠️ 請務必前往「紀錄」頁面點擊【立即備份】！`);
+                break;
+            }
+
             const w = targets[i];
-            btn.innerHTML = `🚀 清洗中 (${i + 1}/${targets.length})...`;
+            btn.innerHTML = `⏳ 清洗中 (${i + 1}/${targets.length}) - 點擊可暫停`;
             
             try {
                 const targetWord = w.en || w.word;
@@ -532,32 +546,41 @@ document.addEventListener('click', async (event) => {
                 w.zh = info.def || w.zh || w.def || '-';
                 w.ex = info.ex || w.ex || w.exEn || '';
                 w.ex_zh = info.ex_zh || w.ex_zh || w.exZh || '';
-                w.deriv = info.derivatives || w.deriv || w.derivatives || '(查無衍生字)'; 
+                w.deriv = info.derivatives || w.deriv || w.derivatives || ''; 
+                
+                // 🌟 確保這兩個屬性一定會被建立，即使是空字串，下次就不會再被抓去洗
                 w.synonyms = info.synonyms || '';
                 w.antonyms = info.antonyms || '';
                 
+                // 🌟 核心修復 2：只存本機，切斷 Google 試算表連續 POST 以防斷線
                 await DB.addSavedWord(w);
-                syncFullUpdateToCloud(w); 
                 
                 successCount++;
                 await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (e) {
                 if (e.message === "HTTP_429" || String(e).includes("429") || String(e).includes("quota")) {
-                    console.warn(`觸發 API 限速，啟動 30 秒冷卻...`);
-                    btn.innerHTML = `⏳ 限速冷卻 30 秒...`;
-                    await new Promise(resolve => setTimeout(resolve, 30000)); 
+                    console.warn(`觸發 API 限速，啟動 15 秒冷卻...`);
+                    btn.innerHTML = `⏳ API 冷卻中 (15s)...`;
+                    await new Promise(resolve => setTimeout(resolve, 15000)); 
                     i--; 
                 } else {
                     console.error('遇到毒瘤單字，強制蓋章逃脫:', w.en || w.word, e);
-                    w.deriv = w.deriv || w.derivatives || '(查無衍生字)';
+                    w.deriv = w.deriv || w.derivatives || '';
                     w.ipa = w.ipa || w.kk || '(查無音標)';
+                    w.synonyms = ''; // 強制蓋章為已處理
+                    w.antonyms = '';
                     await DB.addSavedWord(w);
-                    syncFullUpdateToCloud(w);
                 }
             }
         }
-        alert(`✅ 清洗任務結束！成功標準化並回寫了 ${successCount} 個單字。`);
+        
+        // 如果是自然跑完（不是被手動暫停的）
+        if (_isUpgrading) {
+            _isUpgrading = false;
+            alert(`✅ 清洗任務徹底結束！\n共升級了 ${successCount} 個單字。\n\n⚠️ 請立刻前往「紀錄」頁面點擊【立即備份】將進度存上雲端！`);
+        }
+        
         btn.innerHTML = `🚀 升級舊單字`;
         btn.disabled = false;
         renderVocabTab();
@@ -688,7 +711,6 @@ export async function renderVocabTab() {
         const star3 = w.level >= 3 ? '★' : '☆';
         const pinOpacity = w.pinned ? '1' : '0.2'; 
 
-        // 🌟 渲染單字本列表卡片中的同反義字
         const relHtml = formatRelWordsHtml(w.synonyms || w.syn, w.antonyms || w.ant);
 
         const derivText = formatDerivText(w.deriv || w.derivatives);
