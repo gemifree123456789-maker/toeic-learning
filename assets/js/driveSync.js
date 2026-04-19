@@ -7,7 +7,7 @@ let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: n
 
 export const DriveSync = {
     // 🌟 保持你原本的 GAS 網址
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbx64QDDfzneI4sNoal4nmpdiWeEjNjS55q8VN7YsWNu7WcFkkIF0MyV9vbMimArrAii/exec',
+    GAS_URL: 'https://script.google.com/macros/s/AKfycby7qtD8nym6_4yBbyLdj81VAUIsKJR4kfgG6bubqSaiCPwmuGajrMoM-IFi6iXYw3a8/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',

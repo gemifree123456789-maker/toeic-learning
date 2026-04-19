@@ -15,7 +15,7 @@ let _filterPinned = false;
 // 🌟 核心升級：加入全域的清洗狀態開關，用來控制暫停
 let _isUpgrading = false; 
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby7qtD8nym6_4yBbyLdj81VAUIsKJR4kfgG6bubqSaiCPwmuGajrMoM-IFi6iXYw3a8/exec";
 
 function getRandomToeicVoice() {
     const voices = window.speechSynthesis.getVoices();
