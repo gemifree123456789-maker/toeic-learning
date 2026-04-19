@@ -58,6 +58,34 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
+// 🌟 核心升級：同反義字標籤解析器
+function formatRelWordsHtml(synonyms, antonyms) {
+    const synStr = String(synonyms || '').trim();
+    const antStr = String(antonyms || '').trim();
+    if (!synStr && !antStr) return '';
+
+    let html = `<div style="margin-bottom:12px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                    <span style="font-size:12px; color:#4b5563; font-weight:bold; margin-right:4px;">🔗 同反義字：</span>`;
+    
+    if (synStr) {
+        const synList = synStr.split(',').map(s => s.trim()).filter(s => s);
+        synList.forEach(s => {
+            html += `<span style="background-color: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #bbf7d0;">= ${s}</span>`;
+        });
+    }
+
+    if (antStr) {
+        const antList = antStr.split(',').map(a => a.trim()).filter(a => a);
+        antList.forEach(a => {
+            html += `<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #fecaca;">↔ ${a}</span>`;
+        });
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// 🌟 Google 試算表欄位打包擴充
 async function syncToGoogleSheet(item) {
     const payload = {
         action: "add",
@@ -72,7 +100,9 @@ async function syncToGoogleSheet(item) {
             exZh: item.ex_zh || item.exZh || "",
             col: item.col || "",
             phrase: item.phrase || "",
-            deriv: item.deriv || item.derivatives || ""
+            deriv: item.deriv || item.derivatives || "",
+            syn: item.synonyms || item.syn || "",
+            ant: item.antonyms || item.ant || ""
         }
     };
     try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
@@ -90,7 +120,9 @@ async function syncFullUpdateToCloud(item) {
             zh: item.zh || item.def,
             exEn: item.ex || item.exEn,
             exZh: item.ex_zh || item.exZh,
-            deriv: item.deriv || item.derivatives
+            deriv: item.deriv || item.derivatives,
+            syn: item.synonyms || item.syn,
+            ant: item.antonyms || item.ant
         }
     };
     try { fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) }); } catch(err) {}
@@ -130,11 +162,9 @@ export function addLongPressListener(element, wordText) {
 
 function showWordModal(word) {
     const modal = document.getElementById('wordModal');
-    
-    // 🌟 核心修復：強制將字典視窗的圖層推到最高點，避免被考試視窗蓋住！
     modal.style.zIndex = '9999999'; 
-    
     const actionArea = document.getElementById('wmActionArea');
+    
     (async () => {
         let vocabItem = null;
         if (state.currentData && state.currentData.vocabulary)
@@ -146,7 +176,7 @@ function showWordModal(word) {
         }
         if (!vocabItem) {
             const saved = await DB.getSavedWord(normalizeWordId(word));
-            if (saved) vocabItem = { word: saved.en || saved.word, pos: saved.pos, ipa: saved.ipa || saved.kk, category: saved.cat, def: saved.zh || saved.def, ex: saved.ex || saved.exEn, ex_zh: saved.ex_zh || saved.exZh, derivatives: saved.deriv || saved.derivatives || '' };
+            if (saved) vocabItem = { word: saved.en || saved.word, pos: saved.pos, ipa: saved.ipa || saved.kk, category: saved.cat, def: saved.zh || saved.def, ex: saved.ex || saved.exEn, ex_zh: saved.ex_zh || saved.exZh, derivatives: saved.deriv || saved.derivatives || '', synonyms: saved.synonyms || saved.syn || '', antonyms: saved.antonyms || saved.ant || '' };
         }
 
         document.getElementById('wmWord').innerText = word;
@@ -155,6 +185,8 @@ function showWordModal(word) {
 
         let oldDeriv = document.getElementById('wmDeriv');
         if (oldDeriv) oldDeriv.remove();
+        let oldRel = document.getElementById('wmRelWords');
+        if (oldRel) oldRel.remove();
 
         if (vocabItem) {
             await backfillSavedWordExample(word, vocabItem);
@@ -169,6 +201,12 @@ function showWordModal(word) {
 
             document.getElementById('wmDef').innerText = vocabItem.def || vocabItem.zh || '';
             
+            // 🌟 渲染字典內的同反義字微標籤
+            const relHtml = formatRelWordsHtml(vocabItem.synonyms || vocabItem.syn, vocabItem.antonyms || vocabItem.ant);
+            if (relHtml) {
+                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${relHtml}</div>`);
+            }
+
             const derivText = formatDerivText(vocabItem.derivatives || vocabItem.deriv);
             if (derivText) {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`);
@@ -212,6 +250,12 @@ function showWordModal(word) {
 
                     document.getElementById('wmDef').innerText = info.def;
                     
+                    // 🌟 自動生成時，渲染同反義字微標籤
+                    const newRelHtml = formatRelWordsHtml(info.synonyms, info.antonyms);
+                    if (newRelHtml) {
+                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${newRelHtml}</div>`);
+                    }
+
                     const derivGenText = formatDerivText(info.derivatives);
                     if (derivGenText) {
                         document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivGenText}</div>`);
@@ -250,6 +294,7 @@ function renderLookupMessage(message) {
     resultEl.innerHTML = `<div class="vocab-lookup-empty">${message}</div>`;
 }
 
+// 🌟 payload 增加 syn 和 ant 欄位
 export function buildSavedWordPayload(word, vocabItem = {}) {
     const normalizedEn = normalizeWordId(vocabItem.en || vocabItem.word || word);
     return {
@@ -264,6 +309,8 @@ export function buildSavedWordPayload(word, vocabItem = {}) {
         col: vocabItem.col || '',
         phrase: vocabItem.phrase || '',
         deriv: vocabItem.derivatives || vocabItem.deriv || '',
+        synonyms: vocabItem.synonyms || vocabItem.syn || '',
+        antonyms: vocabItem.antonyms || vocabItem.ant || '',
         createdAt: Date.now(),
         nextReview: getNextReviewTime(0),
         level: 0,
@@ -357,6 +404,9 @@ function renderLookupResultCard() {
     const card = document.createElement('div');
     card.className = 'vocab-lookup-result-card';
     
+    // 🌟 在 lookup 結果卡片中渲染同反義字
+    const relHtml = formatRelWordsHtml(item.synonyms || item.syn, item.antonyms || item.ant);
+
     const derivText = formatDerivText(item.derivatives || item.deriv);
     const derivHtml = derivText 
         ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` 
@@ -373,6 +423,7 @@ function renderLookupResultCard() {
             ${item.category ? `<span style="display:inline-block; background:#eaf4ff; color:#007aff; padding:2px 8px; border-radius:6px; font-size:12px; margin-left:8px; font-weight:600;">${item.category}</span>` : ''}
         </div>
         <div class="saved-word-zh">${item.def || item.zh || ''}</div>
+        ${relHtml}
         ${derivHtml}
         ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
@@ -429,7 +480,9 @@ export async function handleLookupSearch() {
             def: info.def || '',
             ex: info.ex || '',
             ex_zh: info.ex_zh || '',
-            derivatives: info.derivatives || ''
+            derivatives: info.derivatives || '',
+            synonyms: info.synonyms || '',
+            antonyms: info.antonyms || ''
         };
         await backfillSavedWordExample(_lookupResult.word, _lookupResult);
         await renderVocabTab();
@@ -451,13 +504,14 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        let targets = words.filter(w => !(w.deriv || w.derivatives) || String(w.deriv || w.derivatives).trim() === '' || !(w.ipa || w.kk) || String(w.ipa || w.kk).trim() === '');
+        // 🌟 清洗條件加上檢查是否有同反義字 (如果都沒有，就抓去重洗)
+        let targets = words.filter(w => !(w.deriv || w.derivatives) || String(w.deriv || w.derivatives).trim() === '' || !(w.ipa || w.kk) || String(w.ipa || w.kk).trim() === '' || (!w.synonyms && !w.syn));
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字。\n\n確定要開始升級嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個格式不完整的舊單字 (缺少音標、衍生字或同義字)。\n\n確定要開始升級嗎？`;
         if (!confirm(confirmMsg)) return;
 
         btn.disabled = true;
@@ -479,6 +533,8 @@ document.addEventListener('click', async (event) => {
                 w.ex = info.ex || w.ex || w.exEn || '';
                 w.ex_zh = info.ex_zh || w.ex_zh || w.exZh || '';
                 w.deriv = info.derivatives || w.deriv || w.derivatives || '(查無衍生字)'; 
+                w.synonyms = info.synonyms || '';
+                w.antonyms = info.antonyms || '';
                 
                 await DB.addSavedWord(w);
                 syncFullUpdateToCloud(w); 
@@ -632,6 +688,9 @@ export async function renderVocabTab() {
         const star3 = w.level >= 3 ? '★' : '☆';
         const pinOpacity = w.pinned ? '1' : '0.2'; 
 
+        // 🌟 渲染單字本列表卡片中的同反義字
+        const relHtml = formatRelWordsHtml(w.synonyms || w.syn, w.antonyms || w.ant);
+
         const derivText = formatDerivText(w.deriv || w.derivatives);
         const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
         
@@ -640,10 +699,10 @@ export async function renderVocabTab() {
         const exHtml = rawEx ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${rawEx}</div>` : '';
         const exZhHtml = rawExZh ? `<div style="font-size:12px; color:#6b7280;">${rawExZh}</div>` : '';
         
-        const hasExtraInfo = derivHtml || exHtml || exZhHtml;
+        const hasExtraInfo = relHtml || derivHtml || exHtml || exZhHtml;
         const expandedArea = hasExtraInfo 
             ? `<div class="vocab-card-expanded" style="display:none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; width: 100%;">
-                 ${derivHtml}${exHtml}${exZhHtml}
+                 ${relHtml}${derivHtml}${exHtml}${exZhHtml}
                </div>` 
             : '';
 
@@ -727,7 +786,6 @@ if (!aiFloatingBtn) {
     aiFloatingBtn.id = 'global-ai-lookup-btn';
     aiFloatingBtn.innerHTML = '✨ AI 即時解析<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #4f46e5;"></div>';
     
-    // 🌟 核心修復：強制將浮動按鈕也推到最高圖層，絕對不被蓋住！
     aiFloatingBtn.style.cssText = `
         position: absolute;
         z-index: 9999999;
