@@ -18,7 +18,6 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
-// 🌟 核心防護：相容舊版/試算表匯入的資料欄位 (word vs en, def vs zh 等)
 function normalizeW(w) {
     if (!w) return w;
     return {
@@ -78,11 +77,14 @@ function getDistractorWords(correctWord, allWords) {
 }
 
 export function startSrsReview(dueWords, allWords) {
-    // 🌟 在測驗一開始，全面淨化所有單字資料格式
     const normDue = dueWords.map(normalizeW);
     const normAll = allWords.map(normalizeW);
     
-    const selected = shuffleArray(normDue).slice(0, SRS_MAX_WORDS);
+    // 🌟 核心升級 1：不再純隨機盲抽。先依照 nextReview (欠最久的) 排序，再切出前 N 個來複習！
+    const sortedDue = normDue.sort((a, b) => a.nextReview - b.nextReview);
+    // 切出最需要救火的前 10 個字，然後再把它們的順序打亂，增加測驗的新鮮感
+    const selected = shuffleArray(sortedDue.slice(0, SRS_MAX_WORDS));
+    
     let questions = [];
     selected.forEach(w => {
         questions.push({ word: w, type: 'en2zh' });
@@ -325,18 +327,27 @@ async function showSrsResults() {
     const wordResults = [];
     
     for (const word of srsState.words) {
-        // 🌟 在結算時也套用防護，確保從資料庫抓出的字也有正常的 en/zh 屬性
         let freshWord = await DB.getSavedWord(word.id) || word;
         freshWord = normalizeW(freshWord);
 
         const r = srsState.results[word.id];
+        // 計算這三個題型(en2zh, zh2en, listen)對了幾題，範圍是 0 ~ 3
         const cc = [r.en2zh, r.zh2en, r.listen].filter(Boolean).length;
         totalCorrect += cc;
-        const allCorrect = cc === 3;
+        
         let newLevel = freshWord.level;
         
-        if (allCorrect) newLevel = Math.min(freshWord.level + 1, SRS_INTERVALS.length - 1);
-        else newLevel = Math.max(freshWord.level - 1, 0);
+        // 🌟 核心升級 2：人性化寬容計分制 (Graduated Scoring)
+        if (cc === 3) {
+            // 完美掌握：升 1 級
+            newLevel = Math.min(freshWord.level + 1, SRS_INTERVALS.length - 1);
+        } else if (cc === 2) {
+            // 稍微不熟：等級不變 (維持現狀，不會遭受被降級的打擊)
+            newLevel = freshWord.level;
+        } else {
+            // 錯了 2 題以上 (忘了)：降 1 級重新加強
+            newLevel = Math.max(freshWord.level - 1, 0);
+        }
         
         const newNext = getNextReviewTime(newLevel);
         await DB.updateWordSRS(freshWord.id, newLevel, newNext);
@@ -354,6 +365,7 @@ async function showSrsResults() {
         let cls = 'same', txt = `Lv.${wr.oldLevel}`;
         if (diff > 0) { cls = 'up'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
         else if (diff < 0) { cls = 'down'; txt = `Lv.${wr.oldLevel} → ${wr.newLevel}`; }
+        else { txt = `Lv.${wr.oldLevel} (維持)`; } // 如果維持原等級，UI 上給予明確的回饋
 
         const item = document.createElement('div');
         item.className = 'srs-result-item';
@@ -447,10 +459,15 @@ async function showSrsResults() {
     doneBtn.type = 'button';
     doneBtn.className = 'srs-done-btn';
     doneBtn.textContent = t('srsDone');
-    doneBtn.onclick = () => finishSrsReview();
+    
+    // 🌟 在這裡呼叫渲染，然後關閉彈窗
+    doneBtn.onclick = () => {
+        finishSrsReview();
+    };
     oArea.appendChild(doneBtn);
 }
 
+// 🌟 將 finishSrsReview 獨立出來，方便外部（如 vocab.js 裡的 onFinish 閉包）知道何時該重新載入列表
 export function finishSrsReview() {
     document.getElementById('srsOverlay').classList.add('hidden');
     if (_onFinish) _onFinish();
