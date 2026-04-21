@@ -88,7 +88,7 @@ function setLearnRuntimeMode(mode) {
     updatePlayerBarVisibility();
 }
 
-/* ── 🌟 新增：每日任務面板渲染邏輯 ── */
+/* ── 🌟 新增：每日任務面板渲染邏輯 (圓環華麗版) ── */
 async function renderDailyDashboard() {
     const dashboard = document.getElementById('dailyTaskDashboard');
     if (!dashboard) return;
@@ -99,15 +99,16 @@ async function renderDailyDashboard() {
     state.dailyGoals = goals;
     state.dailyProgress = prog;
     
-    // 計算達成率 (限制最高 100%)
+    // 計算單項達成率 (最高 100%)
     const srsPct = Math.min(100, Math.floor((prog.srs / goals.srs) * 100));
     const specialPct = Math.min(100, Math.floor((prog.special / goals.special) * 100));
     const articlePct = Math.min(100, Math.floor((prog.article / goals.article) * 100));
     
+    // 總進度
     const overallPct = Math.floor((srsPct + specialPct + articlePct) / 3);
-    const isCompleted = overallPct === 100;
+    const isCompleted = overallPct >= 100;
     
-    // 更新紅點 (如果未達標則顯示，如果已達標則隱藏)
+    // 更新紅點
     const badge = document.getElementById('learnTabBadge');
     if (badge) {
         badge.style.display = isCompleted ? 'none' : 'block';
@@ -116,41 +117,60 @@ async function renderDailyDashboard() {
     const primaryColor = isCompleted ? '#10b981' : '#5856d6';
     const headerMsg = isCompleted ? '🎉 今日目標已達成！' : '💪 堅持下去，完成今日目標！';
 
+    // SVG 圓環周長計算 (半徑 r=50，周長 2*PI*r)
+    const circumference = 314.159;
+    const offset = circumference - (overallPct / 100) * circumference;
+
     dashboard.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 16px; color: #111827; font-weight: 700;">每日任務進度</h3>
-            <span style="font-size: 12px; font-weight: bold; color: ${primaryColor}; background: ${isCompleted ? '#dcfce7' : '#eef2ff'}; padding: 4px 8px; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0; font-size: 16px; color: #111827; font-weight: 700;">每日學習進度</h3>
+            <span style="font-size: 12px; font-weight: bold; color: ${primaryColor}; background: ${isCompleted ? '#dcfce7' : '#eef2ff'}; padding: 4px 8px; border-radius: 12px; transition: all 0.3s;">
                 ${headerMsg}
             </span>
         </div>
         
-        <div style="background: #f3f4f6; border-radius: 8px; height: 12px; width: 100%; overflow: hidden; margin-bottom: 16px;">
-            <div style="background: ${primaryColor}; width: ${overallPct}%; height: 100%; transition: width 0.5s ease-out;"></div>
+        <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 24px;">
+            <div style="position: relative; width: 140px; height: 140px;">
+                <svg width="140" height="140" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#f3f4f6" stroke-width="10" stroke-linecap="round"></circle>
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="${primaryColor}" stroke-width="10" stroke-linecap="round"
+                        stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+                        style="transition: stroke-dashoffset 1s ease-out, stroke 0.5s;"></circle>
+                </svg>
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <span style="font-size: 32px; font-weight: 800; color: ${primaryColor}; line-height: 1.2; transition: color 0.5s;">${overallPct}<span style="font-size:16px;">%</span></span>
+                    <span style="font-size: 13px; font-weight: 600; color: #6b7280;">${isCompleted ? '已達標' : '進行中'}</span>
+                </div>
+            </div>
         </div>
         
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${srsPct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${srsPct===100 ? '#bbf7d0' : '#e5e7eb'};">
-                <span style="color: ${srsPct===100 ? '#166534' : '#374151'}; font-weight: 500;">📖 SRS 單字複習</span>
-                <span style="color: ${srsPct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.srs} / ${goals.srs}</span>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px; padding: 12px 16px; background: ${srsPct>=100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 12px; border: 1px solid ${srsPct>=100 ? '#bbf7d0' : '#e5e7eb'}; transition: all 0.3s;">
+                <span style="color: ${srsPct>=100 ? '#166534' : '#374151'}; font-weight: 600; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">📖</span> SRS 單字複習
+                </span>
+                <span style="color: ${srsPct>=100 ? '#15803d' : '#6b7280'}; font-weight: 700; font-size: 16px;">${prog.srs} <span style="font-size:13px; opacity:0.7;">/ ${goals.srs}</span></span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${specialPct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${specialPct===100 ? '#bbf7d0' : '#e5e7eb'};">
-                <span style="color: ${specialPct===100 ? '#166534' : '#374151'}; font-weight: 500;">🎯 專項特訓</span>
-                <span style="color: ${specialPct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.special} / ${goals.special}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px; padding: 12px 16px; background: ${specialPct>=100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 12px; border: 1px solid ${specialPct>=100 ? '#bbf7d0' : '#e5e7eb'}; transition: all 0.3s;">
+                <span style="color: ${specialPct>=100 ? '#166534' : '#374151'}; font-weight: 600; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">🎯</span> 專項特訓
+                </span>
+                <span style="color: ${specialPct>=100 ? '#15803d' : '#6b7280'}; font-weight: 700; font-size: 16px;">${prog.special} <span style="font-size:13px; opacity:0.7;">/ ${goals.special}</span></span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${articlePct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${articlePct===100 ? '#bbf7d0' : '#e5e7eb'};">
-                <span style="color: ${articlePct===100 ? '#166534' : '#374151'}; font-weight: 500;">📚 文章閱讀</span>
-                <span style="color: ${articlePct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.article} / ${goals.article}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px; padding: 12px 16px; background: ${articlePct>=100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 12px; border: 1px solid ${articlePct>=100 ? '#bbf7d0' : '#e5e7eb'}; transition: all 0.3s;">
+                <span style="color: ${articlePct>=100 ? '#166534' : '#374151'}; font-weight: 600; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">📚</span> 文章閱讀
+                </span>
+                <span style="color: ${articlePct>=100 ? '#15803d' : '#6b7280'}; font-weight: 700; font-size: 16px;">${prog.article} <span style="font-size:13px; opacity:0.7;">/ ${goals.article}</span></span>
             </div>
         </div>
     `;
     
-    // 只在學習頁籤 (learn) 下顯示面板
     if (activeTab === 'learn') {
         dashboard.classList.remove('hidden');
     }
 }
 
-// 註冊全域監聽器，當資料庫進度有變，自動重繪畫面
 window.addEventListener('daily-progress-updated', () => {
     renderDailyDashboard();
 });
@@ -162,7 +182,7 @@ function switchTab(tabName) {
     document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.remove('hidden');
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
     
-    // 🌟 切換頁籤時處理每日面板顯示
+    // 切換頁籤時處理每日面板顯示
     const dbEl = document.getElementById('dailyTaskDashboard');
     if (dbEl) {
         if (tabName === 'learn') dbEl.classList.remove('hidden');
@@ -190,7 +210,6 @@ function setPracticeMode(mode) {
     document.getElementById('practicePanelSpeaking').classList.toggle('hidden', mode !== 'speaking');
     document.getElementById('practicePanelExam').classList.toggle('hidden', mode !== 'exam');
     
-    // 專項特訓的面板控制
     const specialEl = document.getElementById('practicePanelSpecial');
     if(specialEl) specialEl.classList.toggle('hidden', mode !== 'special');
 
@@ -342,7 +361,6 @@ document.getElementById('btnSettings').onclick = async () => {
     document.getElementById('btnCloseKeyModal').style.display = state.apiKey ? 'flex' : 'none';
     if (localeSelect) localeSelect.value = getLocale();
     
-    // 🌟 開啟設定時，讀取並填入每日目標數值
     const goals = await DB.getDailyGoals();
     document.getElementById('goalInputSrs').value = goals.srs;
     document.getElementById('goalInputSpecial').value = goals.special;
@@ -361,14 +379,13 @@ async function saveApiKey() {
     state.apiKey = v;
     await DB.setSetting('gemini_api_key', v);
     
-    // 🌟 儲存時，一併儲存每日任務目標
     const newGoals = {
         srs: Number(document.getElementById('goalInputSrs').value) || 20,
         special: Number(document.getElementById('goalInputSpecial').value) || 1,
         article: Number(document.getElementById('goalInputArticle').value) || 1
     };
     await DB.setDailyGoals(newGoals);
-    renderDailyDashboard(); // 儲存後立即更新面板
+    renderDailyDashboard();
     
     keyModal.classList.remove('active');
 }
@@ -1006,7 +1023,6 @@ GENERATE_BTN.onclick = async () => {
         const articleRecord = await saveToHistory(contentData, audioBase64, voiceName, customTopic);
         markLearnRecord(articleRecord?.id ? { id: articleRecord.id, type: 'article', fromHistory: false } : null);
         
-        // 🌟 觸發每日任務進度：文章閱讀 +1
         await DB.addDailyProgress('article', 1);
 
         switchTab('learn');
@@ -1025,10 +1041,8 @@ GENERATE_BTN.onclick = async () => {
     try {
         await DB.init();
         
-        // 🌟 初始化每日任務面板，並綁定全域事件以接收子模組 (srs, special) 來的更新訊號
         await renderDailyDashboard();
         window.addEventListener('daily-progress-updated', renderDailyDashboard);
-        // 將 DB 操作開放給其他 js (給 srs 結算時用)
         window.DB = DB;
 
         const savedLocale = await DB.getSetting('app_locale');
