@@ -75,20 +75,16 @@ function buildExplanationHtml(explanation) {
     if (typeof explanation === 'string') {
         return `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${explanation}</div>`;
     }
-    let html = `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;">${explanation.core || ''}</div>`;
-    if (explanation.skills) {
+    let html = `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;">${explanation?.core || ''}</div>`;
+    if (explanation?.skills) {
         html += `<div style="margin-top: 10px; padding: 10px; background: #dcfce7; border-left: 4px solid #22c55e; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #166534; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">🎯 答題技巧：</strong>${explanation.skills}</div>`;
     }
-    if (explanation.warnings) {
+    if (explanation?.warnings) {
         html += `<div style="margin-top: 10px; padding: 10px; background: #fef9c3; border-left: 4px solid #eab308; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #854d0e; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">⚠️ 注意事項：</strong>${explanation.warnings}</div>`;
     }
     return html;
 }
 
-// ==========================================
-// 🌟 核心修復：拔除 DOMContentLoaded 外殼
-// 讓代碼一載入就立刻綁定按鈕，徹底解決按了沒反應的死機問題！
-// ==========================================
 const tabSpecial = document.getElementById('tabSpecial');
 const practicePanels = document.querySelectorAll('.practice-mode-panel');
 const practiceModeBtns = document.querySelectorAll('.practice-mode-btn');
@@ -225,45 +221,57 @@ if (btnGenerateSecrets) {
         let hasNewFormat = false;
 
         allMistakes.forEach(q => {
-            let exp = q.explanation;
-            
-            // 🌟 核心防呆：強制將被壓縮成字串的解析物件還原
-            if (typeof exp === 'string') {
-                try { exp = JSON.parse(exp); } catch(err) {}
-            }
-            
-            // 若解析為空或非物件，跳過這題不讓程式崩潰
-            if (!exp || typeof exp !== 'object') return; 
-            
-            hasNewFormat = true;
-            
-            const topic = normalizeTopic(q.topic);
-            
-            if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
-            
-            // 確保 skills 跟 warnings 能被正確提取並轉為字串
-            if (exp.skills) {
-                const sStr = typeof exp.skills === 'string' ? exp.skills : JSON.stringify(exp.skills);
-                if (sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}') {
-                    secretsByTopic[topic].skills.add(sStr.trim());
+            // 🌟 終極防呆：不管 explanation 是什麼鬼東西，我都包在 try...catch 裡面！
+            try {
+                let exp = q.explanation;
+                
+                // 如果是字串，試著解壓縮
+                if (typeof exp === 'string') {
+                    try { exp = JSON.parse(exp); } catch(err) {}
                 }
-            }
-            if (exp.warnings) {
-                const wStr = typeof exp.warnings === 'string' ? exp.warnings : JSON.stringify(exp.warnings);
-                if (wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}') {
-                    secretsByTopic[topic].warnings.add(wStr.trim());
+                
+                // 如果解析不存在或是純字串，直接跳過這題不整理，保證不死機
+                if (!exp || typeof exp !== 'object') return; 
+                
+                const topic = normalizeTopic(q.topic);
+                if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
+                
+                // 安全提取 skills
+                if (exp.skills) {
+                    hasNewFormat = true;
+                    // 強制轉字串，防止 AI 亂塞陣列
+                    let sStr = String(exp.skills);
+                    if (sStr && sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}' && sStr !== 'undefined') {
+                        secretsByTopic[topic].skills.add(sStr.trim());
+                    }
                 }
+                
+                // 安全提取 warnings
+                if (exp.warnings) {
+                    hasNewFormat = true;
+                    // 強制轉字串，防止 AI 亂塞陣列
+                    let wStr = String(exp.warnings);
+                    if (wStr && wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}' && wStr !== 'undefined') {
+                        secretsByTopic[topic].warnings.add(wStr.trim());
+                    }
+                }
+            } catch (err) {
+                // 如果這題真的壞到無可救藥，就默默印在 console，絕對不中斷整個迴圈
+                console.warn(`跳過損壞的題目 ${q.id}:`, err);
             }
         });
 
         const contentEl = document.getElementById('grammarSecretsContent');
+        if (!contentEl) return;
         contentEl.innerHTML = '';
 
         if (!hasNewFormat) {
             contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中的題目皆為舊版解析格式。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
         } else {
+            let addedAny = false;
             for (const [topic, data] of Object.entries(secretsByTopic)) {
                 if (data.skills.size === 0 && data.warnings.size === 0) continue;
+                addedAny = true;
                 
                 let topicHtml = `
                     <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
@@ -288,17 +296,25 @@ if (btnGenerateSecrets) {
                 topicHtml += `</div></div>`;
                 contentEl.innerHTML += topicHtml;
             }
+            if (!addedAny) {
+                 contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中暫無可供整理的技巧與陷阱。<br>請多挑戰新版特訓來收集精華！</div>';
+            }
         }
         
-        grammarSecretsModal.style.display = 'flex';
-        grammarSecretsModal.classList.remove('hidden');
+        // 🌟 再次強制確保彈窗出現
+        if (grammarSecretsModal) {
+            grammarSecretsModal.style.display = 'flex';
+            grammarSecretsModal.classList.remove('hidden');
+        }
     });
 }
 
 if (btnCloseSecrets) {
     btnCloseSecrets.addEventListener('click', () => {
-        grammarSecretsModal.style.display = '';
-        grammarSecretsModal.classList.add('hidden');
+        if (grammarSecretsModal) {
+            grammarSecretsModal.style.display = '';
+            grammarSecretsModal.classList.add('hidden');
+        }
     });
 }
 
@@ -363,7 +379,7 @@ export async function renderMistakesList() {
             </div>
         `).join('');
 
-        // 🌟 確保舊版資料庫字串也被安全還原
+        // 同樣的安全機制套用在列表渲染
         let expObj = q.explanation;
         if (typeof expObj === 'string') {
             try { expObj = JSON.parse(expObj); } catch(e) {}
