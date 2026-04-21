@@ -216,14 +216,34 @@ document.addEventListener('DOMContentLoaded', () => {
             let hasNewFormat = false;
 
             allMistakes.forEach(q => {
-                if (!q.explanation || typeof q.explanation === 'string') return; 
-                hasNewFormat = true;
+                let exp = q.explanation;
+                
+                // 🌟 核心修正：強制把被轉成字串的解析解壓縮回物件
+                if (typeof exp === 'string') {
+                    try { exp = JSON.parse(exp); } catch(err) {}
+                }
+                
+                // 如果解析不存在或依然不是物件，直接跳過這題不整理
+                if (!exp || typeof exp !== 'object') return; 
                 
                 const topic = normalizeTopic(q.topic);
-                
                 if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
-                if (q.explanation.skills) secretsByTopic[topic].skills.add(q.explanation.skills.trim());
-                if (q.explanation.warnings) secretsByTopic[topic].warnings.add(q.explanation.warnings.trim());
+                
+                // 安全提取並寫入技巧與警告
+                if (exp.skills) {
+                    hasNewFormat = true;
+                    const sStr = typeof exp.skills === 'string' ? exp.skills : JSON.stringify(exp.skills);
+                    if (sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}') {
+                        secretsByTopic[topic].skills.add(sStr.trim());
+                    }
+                }
+                if (exp.warnings) {
+                    hasNewFormat = true;
+                    const wStr = typeof exp.warnings === 'string' ? exp.warnings : JSON.stringify(exp.warnings);
+                    if (wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}') {
+                        secretsByTopic[topic].warnings.add(wStr.trim());
+                    }
+                }
             });
 
             const contentEl = document.getElementById('grammarSecretsContent');
@@ -259,12 +279,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     contentEl.innerHTML += topicHtml;
                 }
             }
+            
+            // 🌟 強制加上 display: flex，打破潛在的 CSS 阻擋
+            grammarSecretsModal.style.display = 'flex';
             grammarSecretsModal.classList.remove('hidden');
         });
     }
 
     if (btnCloseSecrets) {
         btnCloseSecrets.addEventListener('click', () => {
+            grammarSecretsModal.style.display = '';
             grammarSecretsModal.classList.add('hidden');
         });
     }
@@ -289,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(printStyle);
 });
 
-async function renderMistakesList() {
+export async function renderMistakesList() {
     const listEl = document.getElementById('mistakesList');
     if (!listEl) return;
     
@@ -325,7 +349,12 @@ async function renderMistakesList() {
             </div>
         `).join('');
 
-        const expHtml = buildExplanationHtml(q.explanation);
+        // 🌟 核心修復：在單題顯示時，同樣加入字串解壓縮的防呆機制
+        let expObj = q.explanation;
+        if (typeof expObj === 'string') {
+            try { expObj = JSON.parse(expObj); } catch(e) {}
+        }
+        const expHtml = buildExplanationHtml(expObj);
         
         const displayTopic = normalizeTopic(q.topic);
 
@@ -546,12 +575,20 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     oArea.appendChild(nextBtn);
 }
 
-function showResults() {
+async function showResults() {
     const qArea = document.getElementById('specialQuestionArea');
     const oArea = document.getElementById('specialOptionsArea');
     
     document.getElementById('specialProgressText').textContent = '完成';
     document.getElementById('specialTopicBadge').textContent = '結算';
+
+    if (window.DB) {
+        try {
+            await window.DB.addDailyProgress('special', 1);
+        } catch (e) {
+            console.error("Failed to add special progress", e);
+        }
+    }
 
     qArea.innerHTML = `
         <div style="text-align: center; padding: 32px 0;">
