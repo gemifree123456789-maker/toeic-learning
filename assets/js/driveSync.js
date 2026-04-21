@@ -6,8 +6,8 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 👇👇👇 請貼上你的 GAS 部署網址 👇👇👇
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbx8bZPwSl6NokamKdyecaigvOvYSn6Nm8NdEtdzSqUiYfqtqV-2LVq_VWCla0iI3KIZ/exec',
+    // 👇👇👇 請貼上你的 GAS 部署新網址 👇👇👇
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -187,14 +187,18 @@ export const DriveSync = {
             const dailyProgress = await DB.getDailyProgress();
             const generalHistory = await DB.getHistory();
 
-            // 🌟 核心修復：幫學習紀錄「減肥」，拔除肥大的音檔字串，避免 Google 試算表被撐破！
+            // 🌟 核心修復 3：上傳前徹底剔除巨型 Base64 音檔，幫紀錄瘋狂減肥
             const safeHistory = generalHistory.map(h => {
-                const copy = { ...h };
-                delete copy.audio; // 移除文章語音
-                if (copy.examSnapshot && copy.examSnapshot.listeningAudioByQuestion) {
-                    copy.examSnapshot.listeningAudioByQuestion = {}; // 移除考題語音
-                }
-                return copy;
+                try {
+                    const copy = JSON.parse(JSON.stringify(h));
+                    delete copy.audio;
+                    delete copy.audioBase64;
+                    delete copy.audioData;
+                    if (copy.examSnapshot && copy.examSnapshot.listeningAudioByQuestion) {
+                        copy.examSnapshot.listeningAudioByQuestion = {};
+                    }
+                    return copy;
+                } catch(e) { return h; }
             });
 
             const payload = {
@@ -202,7 +206,7 @@ export const DriveSync = {
                 vocab: vocabWords,
                 mistakes: mistakes,
                 dailyTasks: { goals: dailyGoals, progress: dailyProgress },
-                history: safeHistory // 🌟 送出減肥成功的包裹
+                history: safeHistory
             };
 
             const res = await fetch(this.GAS_URL, {

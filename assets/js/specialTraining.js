@@ -76,9 +76,7 @@ function buildExplanationHtml(explanation) {
     return html;
 }
 
-// 🌟 核心修復：使用 Event Delegation 全域綁定點擊事件，徹底解決按鈕失效問題
 document.addEventListener('click', async (e) => {
-    // 1. 處理「開始特訓」按鈕
     const btnStartSpecial = e.target.closest('#btnStartSpecial');
     if (btnStartSpecial && !btnStartSpecial.disabled) {
         const specialConfigArea = document.getElementById('practicePanelSpecial');
@@ -105,7 +103,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 2. 處理「退出特訓」按鈕
     const btnCloseSpecial = e.target.closest('#btnCloseSpecial');
     if (btnCloseSpecial) {
         if (confirm('確定要退出特訓嗎？目前進度將不會保存。')) {
@@ -114,7 +111,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 3. 處理「專項特訓標籤切換」
     const tabSpecial = e.target.closest('#tabSpecial');
     if (tabSpecial) {
         document.querySelectorAll('.practice-mode-btn').forEach(btn => btn.classList.remove('active'));
@@ -125,7 +121,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 4. 處理「紀錄分頁切換」
     const btnHistoryGeneral = e.target.closest('[data-history-subtab="general"]');
     const btnHistoryMistakes = e.target.closest('[data-history-subtab="mistakes"]');
     const panelHistoryGeneral = document.getElementById('historyMainPanel');
@@ -156,7 +151,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 5. 處理「錯題篩選器」
     const filterBtn = e.target.closest('.mistake-filter-btn');
     if (filterBtn) {
         const topic = filterBtn.dataset.topic;
@@ -181,7 +175,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 6. 處理「列印 PDF」
     const btnPrintPDF = e.target.closest('#btnPrintPDF');
     if (btnPrintPDF) {
         document.body.classList.add('print-mistakes-mode');
@@ -190,7 +183,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 7. 處理「列印秘笈」
     const btnPrintSecrets = e.target.closest('#btnPrintSecrets');
     if (btnPrintSecrets) {
         document.body.classList.add('print-secrets-mode');
@@ -199,7 +191,7 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 8. 🌟 處理「產生文法秘笈」
+    // 🌟 核心修復 2：極度嚴格的字串轉型，防止 AI 回傳怪異陣列格式導致腳本崩潰
     const btnGenerateSecrets = e.target.closest('#btnGenerateSecrets');
     if (btnGenerateSecrets) {
         const grammarSecretsModal = document.getElementById('grammarSecretsModal');
@@ -215,10 +207,17 @@ document.addEventListener('click', async (e) => {
             hasNewFormat = true;
             
             const topic = normalizeTopic(q.topic);
-            
             if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
-            if (q.explanation.skills) secretsByTopic[topic].skills.add(q.explanation.skills.trim());
-            if (q.explanation.warnings) secretsByTopic[topic].warnings.add(q.explanation.warnings.trim());
+            
+            // 安全防護：將內容強制轉成字串再做 trim
+            if (q.explanation.skills) {
+                const sStr = typeof q.explanation.skills === 'string' ? q.explanation.skills : JSON.stringify(q.explanation.skills);
+                if (sStr.trim()) secretsByTopic[topic].skills.add(sStr.trim());
+            }
+            if (q.explanation.warnings) {
+                const wStr = typeof q.explanation.warnings === 'string' ? q.explanation.warnings : JSON.stringify(q.explanation.warnings);
+                if (wStr.trim()) secretsByTopic[topic].warnings.add(wStr.trim());
+            }
         });
 
         const contentEl = document.getElementById('grammarSecretsContent');
@@ -260,7 +259,6 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // 9. 處理「關閉秘笈彈窗」
     const btnCloseSecrets = e.target.closest('#btnCloseSecrets');
     if (btnCloseSecrets) {
         const grammarSecretsModal = document.getElementById('grammarSecretsModal');
