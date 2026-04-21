@@ -62,21 +62,35 @@ function normalizeTopic(rawTopic) {
     return rawTopic; 
 }
 
+// 🌟 核心修復 1：強化 buildExplanationHtml 的容錯能力
 function buildExplanationHtml(explanation) {
+    if (!explanation) return ''; // 如果沒有解釋，直接回傳空
+
+    // 如果存進來的解釋只是單純的字串，就直接印出來
     if (typeof explanation === 'string') {
         return `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6;">${explanation}</div>`;
     }
-    let html = `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;">${explanation.core || ''}</div>`;
+
+    // 如果是一個物件，就照著新版的格式渲染
+    let html = '';
+    if (explanation.core) {
+        html += `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;">${explanation.core}</div>`;
+    }
     if (explanation.skills) {
         html += `<div style="margin-top: 10px; padding: 10px; background: #dcfce7; border-left: 4px solid #22c55e; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #166534; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">🎯 答題技巧：</strong>${explanation.skills}</div>`;
     }
     if (explanation.warnings) {
         html += `<div style="margin-top: 10px; padding: 10px; background: #fef9c3; border-left: 4px solid #eab308; border-radius: 4px 8px 8px 4px; font-size: 13.5px; color: #854d0e; box-shadow: 0 1px 2px rgba(0,0,0,0.02);"><strong style="font-size: 14px; display:block; margin-bottom:4px;">⚠️ 注意事項：</strong>${explanation.warnings}</div>`;
     }
+    
+    // 如果物件裡面什麼都沒有，給一個預設文字防呆
+    if (!html) {
+        return `<div style="font-size: 14px; color: #6b7280; font-style: italic;">(暫無詳細解析)</div>`;
+    }
     return html;
 }
 
-// 🌟 核心升級：將所有綁定與邏輯封裝在 initSpecialTraining 內，由 main.js 統一穩定觸發
+// 🌟 匯出初始化函數給 main.js 呼叫，徹底擊碎快取綁定問題
 export function initSpecialTraining() {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
@@ -86,17 +100,17 @@ export function initSpecialTraining() {
     const btnCloseSpecial = document.getElementById('btnCloseSpecial');
 
     if (tabSpecial) {
-        tabSpecial.addEventListener('click', (e) => {
+        tabSpecial.onclick = (e) => {
             e.preventDefault();
             practiceModeBtns.forEach(btn => btn.classList.remove('active'));
             tabSpecial.classList.add('active');
             practicePanels.forEach(panel => panel.classList.add('hidden'));
             if(specialConfigArea) specialConfigArea.classList.remove('hidden');
-        });
+        };
     }
 
     if (btnStartSpecial) {
-        btnStartSpecial.addEventListener('click', async (e) => {
+        btnStartSpecial.onclick = async (e) => {
             e.preventDefault();
             const checkedBoxes = Array.from(specialConfigArea.querySelectorAll('input[type="checkbox"]:checked'));
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
@@ -116,16 +130,16 @@ export function initSpecialTraining() {
                 btnStartSpecial.disabled = false;
                 btnStartSpecial.innerHTML = '🚀 開始 10 題專項特訓';
             }
-        });
+        };
     }
 
     if (btnCloseSpecial) {
-        btnCloseSpecial.addEventListener('click', (e) => {
+        btnCloseSpecial.onclick = (e) => {
             e.preventDefault();
             if (confirm('確定要退出特訓嗎？目前進度將不會保存。')) {
                 document.getElementById('specialQuizOverlay').classList.add('hidden');
             }
-        });
+        };
     }
 
     const btnHistoryGeneral = document.querySelector('[data-history-subtab="general"]');
@@ -160,9 +174,11 @@ export function initSpecialTraining() {
         });
     }
 
-    const filterBtns = document.querySelectorAll('.mistake-filter-btn');
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    const mistakesFilterArea = document.getElementById('mistakesFilterArea');
+    if (mistakesFilterArea) {
+        mistakesFilterArea.onclick = (e) => {
+            const btn = e.target.closest('.mistake-filter-btn');
+            if (!btn) return;
             e.preventDefault();
             const topic = btn.dataset.topic;
             if (topic === 'all') {
@@ -172,10 +188,9 @@ export function initSpecialTraining() {
                 else activeMistakeFilters.add(topic);
             }
 
-            filterBtns.forEach(b => {
+            document.querySelectorAll('.mistake-filter-btn').forEach(b => {
                 const t = b.dataset.topic;
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
-                
                 if (isActive) {
                     b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
@@ -183,40 +198,40 @@ export function initSpecialTraining() {
                 }
             });
             renderMistakesList();
-        });
-    });
+        };
+    }
 
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
-        btnPrintPDF.addEventListener('click', (e) => {
+        btnPrintPDF.onclick = (e) => {
             e.preventDefault();
             document.body.classList.add('print-mistakes-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-mistakes-mode'), 500);
-        });
+        };
     }
 
     const btnPrintSecrets = document.getElementById('btnPrintSecrets');
     if (btnPrintSecrets) {
-        btnPrintSecrets.addEventListener('click', (e) => {
+        btnPrintSecrets.onclick = (e) => {
             e.preventDefault();
             document.body.classList.add('print-secrets-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-secrets-mode'), 500);
-        });
+        };
     }
 
-    // 🌟 核心修復：強制防呆的「秘笈匯總」按鈕邏輯
+    // 🌟 核心修復 2：極限防呆的「秘笈匯總」功能
     const btnGenerateSecrets = document.getElementById('btnGenerateSecrets');
     if (btnGenerateSecrets) {
-        btnGenerateSecrets.addEventListener('click', async (e) => {
+        btnGenerateSecrets.onclick = async (e) => {
             e.preventDefault();
-            e.stopPropagation(); // 防止干擾其他點擊事件
+            e.stopPropagation();
 
             try {
                 const grammarSecretsModal = document.getElementById('grammarSecretsModal');
                 if (!grammarSecretsModal) {
-                    alert('找不到彈窗元件，請重新整理網頁！');
+                    alert('系統找不到彈窗元件，請重新整理網頁！');
                     return;
                 }
 
@@ -232,29 +247,29 @@ export function initSpecialTraining() {
                 allMistakes.forEach(q => {
                     let exp = q.explanation;
                     
-                    // 防呆 1：如果 explanation 是被壓縮的字串，強制解開
+                    // 解開被壓縮成字串的 JSON
                     if (typeof exp === 'string') {
                         try { exp = JSON.parse(exp); } catch(err) {}
                     }
                     
-                    // 防呆 2：如果還是解不開，或根本不是物件，直接跳過這題
+                    // 如果解析不存在或是個空殼，直接跳過這題，不讓它弄崩程式
                     if (!exp || typeof exp !== 'object') return; 
-                    
-                    hasNewFormat = true;
                     
                     const topic = normalizeTopic(q.topic);
                     if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
                     
-                    // 防呆 3：極度嚴格解析 skills，防止 trim() 崩潰
+                    // 安全提取 skills
                     if (exp.skills) {
+                        hasNewFormat = true;
                         const sStr = typeof exp.skills === 'string' ? exp.skills : JSON.stringify(exp.skills);
                         if (sStr && sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}') {
                             secretsByTopic[topic].skills.add(sStr.trim());
                         }
                     }
                     
-                    // 防呆 4：極度嚴格解析 warnings
+                    // 安全提取 warnings
                     if (exp.warnings) {
+                        hasNewFormat = true;
                         const wStr = typeof exp.warnings === 'string' ? exp.warnings : JSON.stringify(exp.warnings);
                         if (wStr && wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}') {
                             secretsByTopic[topic].warnings.add(wStr.trim());
@@ -304,7 +319,6 @@ export function initSpecialTraining() {
                     }
                 }
                 
-                // 強制突破所有 CSS 隱藏，直接顯示彈窗
                 grammarSecretsModal.classList.remove('hidden');
                 grammarSecretsModal.style.display = 'flex'; 
 
@@ -312,19 +326,19 @@ export function initSpecialTraining() {
                 console.error("產生秘笈時發生錯誤:", error);
                 alert('系統遇到未預期狀況：' + error.message);
             }
-        });
+        };
     }
 
     const btnCloseSecrets = document.getElementById('btnCloseSecrets');
     if (btnCloseSecrets) {
-        btnCloseSecrets.addEventListener('click', (e) => {
+        btnCloseSecrets.onclick = (e) => {
             e.preventDefault();
             const grammarSecretsModal = document.getElementById('grammarSecretsModal');
-            if (grammarSecretsModal) {
+            if(grammarSecretsModal) {
                 grammarSecretsModal.style.display = ''; 
                 grammarSecretsModal.classList.add('hidden');
             }
-        });
+        };
     }
 }
 
@@ -389,7 +403,17 @@ export async function renderMistakesList() {
             </div>
         `).join('');
 
-        const expHtml = buildExplanationHtml(q.explanation);
+        // 🌟 核心修復 3：安全讀取解析區塊，就算舊版資料沒有 core，也能保證不崩潰
+        let exp = q.explanation;
+        if (typeof exp === 'string') {
+            try { exp = JSON.parse(exp); } catch(err) {}
+        }
+        let expHtml = '';
+        if (exp) {
+            expHtml = buildExplanationHtml(exp);
+        } else {
+            expHtml = '<div style="font-size: 13px; color: #9ca3af; font-style: italic;">(此題無詳細解析)</div>';
+        }
         
         const displayTopic = normalizeTopic(q.topic);
 
