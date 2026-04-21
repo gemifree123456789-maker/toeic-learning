@@ -5,7 +5,7 @@ let activeMistakeFilters = new Set();
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
-            // 🌟 終極修復：強制升級版本 3，與 driveSync.js 保持一致！
+            // 🌟 核心修復：強制升級到版本 3，洗掉所有舊的衝突鎖定！
             const req = indexedDB.open('ToeicMistakesDB', 3);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
@@ -40,6 +40,16 @@ export const MistakesDB = {
         return new Promise((resolve, reject) => {
             const tx = db.transaction('mistakes', 'readwrite');
             tx.objectStore('mistakes').delete(id);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+    // 🌟 新增：給雲端還原專用的清空指令
+    async clearAll() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('mistakes', 'readwrite');
+            tx.objectStore('mistakes').clear();
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
@@ -216,15 +226,14 @@ document.addEventListener('DOMContentLoaded', () => {
             allMistakes.forEach(q => {
                 let exp = q.explanation;
                 
-                // 🌟 JSON 壓縮格式防呆解析
+                // 🌟 JSON 壓縮防呆，防止 AI 舊資料格式錯誤
                 if (typeof exp === 'string') {
                     try { exp = JSON.parse(exp); } catch(err) {}
                 }
-                
-                // 排除解析無法還原的舊題，保護程式不崩潰
                 if (!exp || typeof exp !== 'object') return; 
                 
                 const topic = normalizeTopic(q.topic);
+                
                 if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
                 
                 if (exp.skills) {
@@ -276,15 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     contentEl.innerHTML += topicHtml;
                 }
             }
-            
-            grammarSecretsModal.style.display = 'flex';
             grammarSecretsModal.classList.remove('hidden');
         });
     }
 
     if (btnCloseSecrets) {
         btnCloseSecrets.addEventListener('click', () => {
-            grammarSecretsModal.style.display = '';
             grammarSecretsModal.classList.add('hidden');
         });
     }
@@ -351,7 +357,6 @@ export async function renderMistakesList() {
             </div>
         `).join('');
 
-        // 🌟 同步防呆：單題顯示時解壓縮 JSON
         let expObj = q.explanation;
         if (typeof expObj === 'string') {
             try { expObj = JSON.parse(expObj); } catch(e) {}

@@ -2,10 +2,13 @@
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
+// 🌟 核心修復：直接引入 specialTraining 裡的資料庫樞紐，保證全球只有一個開門鑰匙！
+import { MistakesDB } from './specialTraining.js'; 
 
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
+    // 🌟 使用乾淨的純字串網址
     GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
@@ -91,6 +94,7 @@ export const DriveSync = {
 
     async _fetchUserInfo() {
         try {
+            // 🌟 移除被污染的 Markdown 括號，恢復純淨網址
             const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${this.accessToken}` }
             });
@@ -102,78 +106,6 @@ export const DriveSync = {
         } catch (e) { console.warn('Failed to fetch user info:', e); }
     },
 
-    // 🌟 終極修復：強制升級版本 3，破解降級鎖死！
-    async _getMistakesFromDB() {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 3);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve([]);
-                try {
-                    const tx = db.transaction('mistakes', 'readonly');
-                    const reqAll = tx.objectStore('mistakes').getAll();
-                    reqAll.onsuccess = () => resolve(reqAll.result);
-                    reqAll.onerror = () => resolve([]);
-                } catch (err) {
-                    resolve([]);
-                }
-            };
-            req.onerror = () => resolve([]);
-        });
-    },
-
-    async _saveMistakeToDB(mistake) {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 3);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                try {
-                    const tx = db.transaction('mistakes', 'readwrite');
-                    tx.objectStore('mistakes').put(mistake);
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => resolve();
-                } catch (err) { resolve(); }
-            };
-            req.onerror = () => resolve();
-        });
-    },
-
-    async _clearMistakesDB() {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 3);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                try {
-                    const tx = db.transaction('mistakes', 'readwrite');
-                    tx.objectStore('mistakes').clear();
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => resolve();
-                } catch (err) { resolve(); }
-            };
-            req.onerror = () => resolve();
-        });
-    },
-
     async backupNow() {
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
         
@@ -182,7 +114,7 @@ export const DriveSync = {
         
         try {
             const vocabWords = await DB.getSavedWords();
-            const mistakes = await this._getMistakesFromDB();
+            const mistakes = await MistakesDB.getAll(); 
             const dailyGoals = await DB.getDailyGoals();
             const dailyProgress = await DB.getDailyProgress();
             const generalHistory = await DB.getHistory();
@@ -251,8 +183,8 @@ export const DriveSync = {
             }
 
             if (data.mistakes && data.mistakes.length > 0) {
-                await this._clearMistakesDB(); 
-                for (const m of data.mistakes) { await this._saveMistakeToDB(m); mCount++; }
+                await MistakesDB.clearAll(); 
+                for (const m of data.mistakes) { await MistakesDB.save(m); mCount++; }
             }
 
             if (data.dailyTasks) {
