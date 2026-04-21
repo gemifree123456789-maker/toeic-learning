@@ -2,12 +2,13 @@
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
+import { MistakesDB } from './specialTraining.js'; // 🌟 核心修復：統一匯入共用大腦！
 
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 👇👇👇 請貼上你的 GAS 部署新網址 👇👇👇
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
+    // 👇👇👇 請確認這是你最新部署的 GAS 網址 👇👇👇
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -15,9 +16,7 @@ export const DriveSync = {
     accessToken: null,
     _pendingLoginResolve: null,
 
-    setCallbacks(cbs) {
-        _callbacks = { ..._callbacks, ...cbs };
-    },
+    setCallbacks(cbs) { _callbacks = { ..._callbacks, ...cbs }; },
 
     init() {
         if (typeof google === 'undefined' || !google.accounts) return;
@@ -26,7 +25,6 @@ export const DriveSync = {
             scope: this.SCOPES,
             callback: (resp) => {
                 if (resp.error) {
-                    console.error('GIS auth error:', resp);
                     if (this._pendingLoginResolve) this._pendingLoginResolve(false);
                     this._pendingLoginResolve = null;
                     return;
@@ -48,11 +46,10 @@ export const DriveSync = {
             this.init();
             if (!this.tokenClient) { alert(t('driveGisNotLoaded')); return false; }
         }
-        const ok = await new Promise((resolve) => {
+        return new Promise((resolve) => {
             this._pendingLoginResolve = resolve;
             this.tokenClient.requestAccessToken({ prompt: 'consent' });
         });
-        return ok;
     },
 
     async silentLogin() {
@@ -64,7 +61,7 @@ export const DriveSync = {
                 this.updateUI();
                 return true;
             }
-        } catch (e) { /* ignore cache read errors */ }
+        } catch (e) {}
         if (!this.tokenClient) {
             this.init();
             if (!this.tokenClient) return false;
@@ -76,9 +73,7 @@ export const DriveSync = {
     },
 
     async logout() {
-        if (this.accessToken) {
-            google.accounts.oauth2.revoke(this.accessToken);
-        }
+        if (this.accessToken) google.accounts.oauth2.revoke(this.accessToken);
         this.accessToken = null;
         await DB.setSetting('cloud_sync_enabled', false);
         await DB.setSetting('cloud_user_email', null);
@@ -92,86 +87,13 @@ export const DriveSync = {
 
     async _fetchUserInfo() {
         try {
-            const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${this.accessToken}` }
-            });
+            const resp = await fetch('[https://www.googleapis.com/oauth2/v3/userinfo](https://www.googleapis.com/oauth2/v3/userinfo)', { headers: { Authorization: `Bearer ${this.accessToken}` } });
             const info = await resp.json();
             await DB.setSetting('cloud_user_email', info.email || '');
             await DB.setSetting('cloud_user_name', info.name || info.email || '');
             await DB.setSetting('cloud_sync_enabled', true);
             this.updateUI();
-        } catch (e) { console.warn('Failed to fetch user info:', e); }
-    },
-
-    async _getMistakesFromDB() {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 2);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve([]);
-                try {
-                    const tx = db.transaction('mistakes', 'readonly');
-                    const reqAll = tx.objectStore('mistakes').getAll();
-                    reqAll.onsuccess = () => resolve(reqAll.result);
-                    reqAll.onerror = () => resolve([]);
-                } catch (err) {
-                    resolve([]);
-                }
-            };
-            req.onerror = () => resolve([]);
-        });
-    },
-
-    async _saveMistakeToDB(mistake) {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 2);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                try {
-                    const tx = db.transaction('mistakes', 'readwrite');
-                    tx.objectStore('mistakes').put(mistake);
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => resolve();
-                } catch (err) { resolve(); }
-            };
-            req.onerror = () => resolve();
-        });
-    },
-
-    async _clearMistakesDB() {
-        return new Promise((resolve) => {
-            const req = indexedDB.open('ToeicMistakesDB', 2);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) return resolve();
-                try {
-                    const tx = db.transaction('mistakes', 'readwrite');
-                    tx.objectStore('mistakes').clear();
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => resolve();
-                } catch (err) { resolve(); }
-            };
-            req.onerror = () => resolve();
-        });
+        } catch (e) {}
     },
 
     async backupNow() {
@@ -182,23 +104,22 @@ export const DriveSync = {
         
         try {
             const vocabWords = await DB.getSavedWords();
-            const mistakes = await this._getMistakesFromDB();
+            
+            // 🌟 透過唯一大腦抓取資料，保證不塞車！
+            const mistakes = await MistakesDB.getAll();
+            
             const dailyGoals = await DB.getDailyGoals();
             const dailyProgress = await DB.getDailyProgress();
             const generalHistory = await DB.getHistory();
 
-            // 🌟 核心修復 3：上傳前徹底剔除巨型 Base64 音檔，幫紀錄瘋狂減肥
             const safeHistory = generalHistory.map(h => {
-                try {
-                    const copy = JSON.parse(JSON.stringify(h));
-                    delete copy.audio;
-                    delete copy.audioBase64;
-                    delete copy.audioData;
-                    if (copy.examSnapshot && copy.examSnapshot.listeningAudioByQuestion) {
-                        copy.examSnapshot.listeningAudioByQuestion = {};
-                    }
-                    return copy;
-                } catch(e) { return h; }
+                return {
+                    id: h.id, createdAt: h.createdAt, type: h.type, date: h.date, title: h.title, score: h.score,
+                    article: h.article, translation: h.translation, vocabulary: h.vocabulary, grammar: h.grammar, phrases: h.phrases, voiceName: h.voiceName,
+                    speakingLevel: h.speakingLevel, topic: h.topic, startedAt: h.startedAt, endedAt: h.endedAt, durationMs: h.durationMs, finalStatus: h.finalStatus, logs: h.logs,
+                    recordStage: h.recordStage, attemptId: h.attemptId, examSummary: h.examSummary, explanations: h.explanations,
+                    examSnapshot: h.examSnapshot ? { questions: h.examSnapshot.questions, answers: h.examSnapshot.answers, result: h.examSnapshot.result, voiceName: h.examSnapshot.voiceName } : null
+                };
             });
 
             const payload = {
@@ -209,18 +130,14 @@ export const DriveSync = {
                 history: safeHistory
             };
 
-            const res = await fetch(this.GAS_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-
+            const res = await fetch(this.GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
             const result = await res.json();
             
             if (result.status === 'success') {
                 const now = new Date().toLocaleString();
                 await DB.setSetting('cloud_last_sync', now);
                 this.updateUI();
-                alert(`✅ 雲端備份成功！\n已同步單字、錯題本、每日進度與 ${safeHistory.length} 筆學習紀錄。`);
+                alert(`✅ 雲端備份成功！\n已上傳：\n單字 ${vocabWords.length} 個\n錯題 ${mistakes.length} 題\n紀錄 ${result.historySaved || safeHistory.length} 筆。`);
             } else {
                 throw new Error('伺服器回傳錯誤狀態');
             }
@@ -233,7 +150,6 @@ export const DriveSync = {
 
     async restore() {
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
-        
         if (!confirm('⚠️ 警告：還原將會完全覆蓋本機目前的「單字本」、「錯題本」、「學習紀錄」與「今日任務進度」。\n確定要還原嗎？')) return;
 
         const btn = document.getElementById('btnRestore');
@@ -251,9 +167,10 @@ export const DriveSync = {
                 for (const w of data.vocab) { await DB.addSavedWord(w); vCount++; }
             }
 
+            // 🌟 使用統一的通道逐筆存入，絕不當機！
             if (data.mistakes && data.mistakes.length > 0) {
-                await this._clearMistakesDB(); 
-                for (const m of data.mistakes) { await this._saveMistakeToDB(m); mCount++; }
+                await MistakesDB.clearAll(); 
+                for (const m of data.mistakes) { await MistakesDB.save(m); mCount++; }
             }
 
             if (data.dailyTasks) {
