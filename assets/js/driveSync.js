@@ -6,8 +6,8 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 🌟 保持你原本的 GAS 網址
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbwviQPFD4mpuK1w-nOjJe2Oeo_WAL2le_xLevZLY1Z2hJK8UWpJUctjihTLKLNU21Wh/exec',
+    // 👇👇👇 請將下方網址替換為你剛剛最新部署的 GAS 網址 👇👇👇
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbx8bZPwSl6NokamKdyecaigvOvYSn6Nm8NdEtdzSqUiYfqtqV-2LVq_VWCla0iI3KIZ/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -183,16 +183,16 @@ export const DriveSync = {
         try {
             const vocabWords = await DB.getSavedWords();
             const mistakes = await this._getMistakesFromDB();
-            
-            // 🌟 核心升級 1：打包每日進度與目標設定
             const dailyGoals = await DB.getDailyGoals();
             const dailyProgress = await DB.getDailyProgress();
+            const generalHistory = await DB.getHistory(); // 🌟 抓取一般學習紀錄
 
             const payload = {
                 action: "backup",
                 vocab: vocabWords,
                 mistakes: mistakes,
-                dailyTasks: { goals: dailyGoals, progress: dailyProgress } // 📦 塞入第三個包裹
+                dailyTasks: { goals: dailyGoals, progress: dailyProgress },
+                history: generalHistory // 🌟 放上備份卡車
             };
 
             const res = await fetch(this.GAS_URL, {
@@ -206,7 +206,7 @@ export const DriveSync = {
                 const now = new Date().toLocaleString();
                 await DB.setSetting('cloud_last_sync', now);
                 this.updateUI();
-                alert(`✅ 雲端備份成功！\n已同步單字進度與本日的任務達成率。`);
+                alert(`✅ 雲端備份成功！\n已同步單字、錯題本、每日進度與學習紀錄。`);
             } else {
                 throw new Error('伺服器回傳錯誤狀態');
             }
@@ -220,7 +220,7 @@ export const DriveSync = {
     async restore() {
         if (!this.isLoggedIn()) { alert(t('driveLoginRequired')); return; }
         
-        if (!confirm('⚠️ 警告：還原將會完全覆蓋本機目前的「單字本」、「錯題本」與「今日任務進度」。\n確定要還原嗎？')) return;
+        if (!confirm('⚠️ 警告：還原將會完全覆蓋本機目前的「單字本」、「錯題本」、「學習紀錄」與「今日任務進度」。\n確定要還原嗎？')) return;
 
         const btn = document.getElementById('btnRestore');
         if (btn) { btn.disabled = true; btn.textContent = '☁️ 雙軌還原下載中...'; }
@@ -229,8 +229,7 @@ export const DriveSync = {
             const res = await fetch(this.GAS_URL + '?action=sync_all');
             const data = await res.json();
 
-            let vCount = 0;
-            let mCount = 0;
+            let vCount = 0, mCount = 0, hCount = 0;
 
             if (data.vocab && data.vocab.length > 0) {
                 const existing = await DB.getSavedWords();
@@ -243,13 +242,18 @@ export const DriveSync = {
                 for (const m of data.mistakes) { await this._saveMistakeToDB(m); mCount++; }
             }
 
-            // 🌟 核心升級 2：解開每日進度包裹並寫入本地端資料庫
             if (data.dailyTasks) {
                 if (data.dailyTasks.goals) await DB.setDailyGoals(data.dailyTasks.goals);
                 if (data.dailyTasks.progress) await DB.setSetting('daily_progress', data.dailyTasks.progress);
             }
 
-            alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字，與 ${mCount} 題錯題。\n系統即將重新整理以套用每日進度。`);
+            // 🌟 卸下學習紀錄包裹，並寫入手機資料庫
+            if (data.history && data.history.length > 0) {
+                await DB.clearHistory();
+                for (const h of data.history) { await DB.addHistory(h); hCount++; }
+            }
+
+            alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字、${mCount} 題錯題與 ${hCount} 筆學習紀錄。\n系統即將重新整理。`);
             location.reload(); 
         } catch (e) {
             alert('還原失敗，請檢查網路或 API 狀態：' + e.message);
