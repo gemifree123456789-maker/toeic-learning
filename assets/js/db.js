@@ -1,14 +1,11 @@
 // IndexedDB data layer: history, wordCache, settings, savedWords CRUD.
 
-// ====== 新增：背景同步 SRS 進度至 Google 試算表的函數 ======
+// ====== 背景同步 SRS 進度至 Google 試算表 ======
 function syncSrsToCloud(item) {
-    // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
     const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
     
-    // 防呆：確保網址有填寫
     if (!gasUrl || gasUrl.includes('請在此')) return; 
 
-    // 封裝上傳的 Payload，指定 action 為 update
     const payload = {
         action: "update",
         data: {
@@ -20,7 +17,6 @@ function syncSrsToCloud(item) {
     };
 
     try {
-        // 以背景模式發送 POST 請求，不阻擋使用者繼續下一個測驗
         fetch(gasUrl, {
             method: 'POST',
             body: JSON.stringify(payload)
@@ -75,6 +71,41 @@ export const DB = {
             tx.onerror = () => j(tx.error);
         });
     },
+
+    // 🌟 新增：每日目標與進度的專屬存取方法
+    async getDailyGoals() {
+        const goals = await this.getSetting('daily_goals');
+        return goals || { srs: 20, special: 1, article: 1 };
+    },
+
+    async setDailyGoals(goalsObj) {
+        await this.setSetting('daily_goals', goalsObj);
+    },
+
+    async getDailyProgress() {
+        const today = new Date().toLocaleDateString();
+        const progress = await this.getSetting('daily_progress');
+        
+        // 🌟 跨日防呆：如果日期不是今天，自動清零重置
+        if (!progress || progress.date !== today) {
+            const newProgress = { date: today, srs: 0, special: 0, article: 0 };
+            await this.setSetting('daily_progress', newProgress);
+            return newProgress;
+        }
+        return progress;
+    },
+
+    async addDailyProgress(type, amount = 1) {
+        const progress = await this.getDailyProgress();
+        if (progress[type] !== undefined) {
+            progress[type] += amount;
+            await this.setSetting('daily_progress', progress);
+            
+            // 觸發全域事件，讓 UI (main.js) 知道進度更新了
+            window.dispatchEvent(new CustomEvent('daily-progress-updated'));
+        }
+    },
+    // ------------------------------------------
 
     async addHistory(item) {
         if (!this.db) await this.init();
@@ -181,13 +212,11 @@ export const DB = {
         return all.filter(w => w.nextReview <= now);
     },
 
-    // 修改處：攔截此函數，將更新的進度同步至雲端
     async updateWordSRS(id, level, nextReview) {
         if (!this.db) await this.init();
         const existing = await this.getSavedWord(id);
         if (!existing) return;
         
-        // 更新本地端的進度參數
         existing.level = level;
         existing.nextReview = nextReview;
         
@@ -195,7 +224,6 @@ export const DB = {
             const tx = this.db.transaction('savedWords', 'readwrite');
             tx.objectStore('savedWords').put(existing);
             
-            // 當本地端寫入完成時，觸發雲端同步
             tx.oncomplete = () => {
                 syncSrsToCloud(existing);
                 r();

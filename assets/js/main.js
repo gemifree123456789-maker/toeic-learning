@@ -28,7 +28,6 @@ setHistoryDeps({
 });
 DriveSync.setCallbacks({ renderHistory, loadLastSession, renderVocabTab });
 
-/* ── Expose minimal globals needed by dynamic innerHTML onclick ── */
 window.speakText = speakText;
 window.finishSrsReview = finishSrsReview;
 window.DriveSync = DriveSync;
@@ -89,12 +88,87 @@ function setLearnRuntimeMode(mode) {
     updatePlayerBarVisibility();
 }
 
+/* ── 🌟 新增：每日任務面板渲染邏輯 ── */
+async function renderDailyDashboard() {
+    const dashboard = document.getElementById('dailyTaskDashboard');
+    if (!dashboard) return;
+    
+    const goals = await DB.getDailyGoals();
+    const prog = await DB.getDailyProgress();
+    
+    state.dailyGoals = goals;
+    state.dailyProgress = prog;
+    
+    // 計算達成率 (限制最高 100%)
+    const srsPct = Math.min(100, Math.floor((prog.srs / goals.srs) * 100));
+    const specialPct = Math.min(100, Math.floor((prog.special / goals.special) * 100));
+    const articlePct = Math.min(100, Math.floor((prog.article / goals.article) * 100));
+    
+    const overallPct = Math.floor((srsPct + specialPct + articlePct) / 3);
+    const isCompleted = overallPct === 100;
+    
+    // 更新紅點 (如果未達標則顯示，如果已達標則隱藏)
+    const badge = document.getElementById('learnTabBadge');
+    if (badge) {
+        badge.style.display = isCompleted ? 'none' : 'block';
+    }
+
+    const primaryColor = isCompleted ? '#10b981' : '#5856d6';
+    const headerMsg = isCompleted ? '🎉 今日目標已達成！' : '💪 堅持下去，完成今日目標！';
+
+    dashboard.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; color: #111827; font-weight: 700;">每日任務進度</h3>
+            <span style="font-size: 12px; font-weight: bold; color: ${primaryColor}; background: ${isCompleted ? '#dcfce7' : '#eef2ff'}; padding: 4px 8px; border-radius: 12px;">
+                ${headerMsg}
+            </span>
+        </div>
+        
+        <div style="background: #f3f4f6; border-radius: 8px; height: 12px; width: 100%; overflow: hidden; margin-bottom: 16px;">
+            <div style="background: ${primaryColor}; width: ${overallPct}%; height: 100%; transition: width 0.5s ease-out;"></div>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${srsPct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${srsPct===100 ? '#bbf7d0' : '#e5e7eb'};">
+                <span style="color: ${srsPct===100 ? '#166534' : '#374151'}; font-weight: 500;">📖 SRS 單字複習</span>
+                <span style="color: ${srsPct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.srs} / ${goals.srs}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${specialPct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${specialPct===100 ? '#bbf7d0' : '#e5e7eb'};">
+                <span style="color: ${specialPct===100 ? '#166534' : '#374151'}; font-weight: 500;">🎯 專項特訓</span>
+                <span style="color: ${specialPct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.special} / ${goals.special}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 8px 12px; background: ${articlePct===100 ? '#f0fdf4' : '#f9fafb'}; border-radius: 8px; border: 1px solid ${articlePct===100 ? '#bbf7d0' : '#e5e7eb'};">
+                <span style="color: ${articlePct===100 ? '#166534' : '#374151'}; font-weight: 500;">📚 文章閱讀</span>
+                <span style="color: ${articlePct===100 ? '#15803d' : '#6b7280'}; font-weight: 600;">${prog.article} / ${goals.article}</span>
+            </div>
+        </div>
+    `;
+    
+    // 只在學習頁籤 (learn) 下顯示面板
+    if (activeTab === 'learn') {
+        dashboard.classList.remove('hidden');
+    }
+}
+
+// 註冊全域監聽器，當資料庫進度有變，自動重繪畫面
+window.addEventListener('daily-progress-updated', () => {
+    renderDailyDashboard();
+});
+
 /* ── Tab switching ── */
 function switchTab(tabName) {
     activeTab = tabName;
     ['tabLearn', 'tabPractice', 'tabVocab', 'tabHistory', 'tabAbout'].forEach(id => document.getElementById(id).classList.add('hidden'));
     document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.remove('hidden');
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
+    
+    // 🌟 切換頁籤時處理每日面板顯示
+    const dbEl = document.getElementById('dailyTaskDashboard');
+    if (dbEl) {
+        if (tabName === 'learn') dbEl.classList.remove('hidden');
+        else dbEl.classList.add('hidden');
+    }
+
     if (tabName === 'practice' && state.practiceMode === 'speaking') resetSpeakingPracticeView();
     if (tabName === 'practice' && state.practiceMode === 'exam') resetExamPracticeView();
     if (tabName === 'history') renderHistory();
@@ -115,6 +189,11 @@ function setPracticeMode(mode) {
     document.getElementById('practicePanelArticle').classList.toggle('hidden', mode !== 'article');
     document.getElementById('practicePanelSpeaking').classList.toggle('hidden', mode !== 'speaking');
     document.getElementById('practicePanelExam').classList.toggle('hidden', mode !== 'exam');
+    
+    // 專項特訓的面板控制
+    const specialEl = document.getElementById('practicePanelSpecial');
+    if(specialEl) specialEl.classList.toggle('hidden', mode !== 'special');
+
     if (mode === 'speaking') resetSpeakingPracticeView();
     if (mode === 'exam') resetExamPracticeView();
 }
@@ -258,10 +337,17 @@ async function persistLocaleSelection(locale) {
     await DB.setSetting('app_locale_history', list.slice(0, 30));
 }
 
-document.getElementById('btnSettings').onclick = () => {
+document.getElementById('btnSettings').onclick = async () => {
     document.getElementById('apiKeyInput').value = state.apiKey;
     document.getElementById('btnCloseKeyModal').style.display = state.apiKey ? 'flex' : 'none';
     if (localeSelect) localeSelect.value = getLocale();
+    
+    // 🌟 開啟設定時，讀取並填入每日目標數值
+    const goals = await DB.getDailyGoals();
+    document.getElementById('goalInputSrs').value = goals.srs;
+    document.getElementById('goalInputSpecial').value = goals.special;
+    document.getElementById('goalInputArticle').value = goals.article;
+
     DriveSync.updateUI();
     keyModal.classList.add('active');
 };
@@ -274,6 +360,16 @@ async function saveApiKey() {
     }
     state.apiKey = v;
     await DB.setSetting('gemini_api_key', v);
+    
+    // 🌟 儲存時，一併儲存每日任務目標
+    const newGoals = {
+        srs: Number(document.getElementById('goalInputSrs').value) || 20,
+        special: Number(document.getElementById('goalInputSpecial').value) || 1,
+        article: Number(document.getElementById('goalInputArticle').value) || 1
+    };
+    await DB.setDailyGoals(newGoals);
+    renderDailyDashboard(); // 儲存後立即更新面板
+    
     keyModal.classList.remove('active');
 }
 
@@ -310,7 +406,6 @@ function initAnnouncementContent() {
 }
 
 function initPostLocalePrompts() {
-    // Keep this order: locale is already applied, then show prompt UIs.
     initAnnouncementContent();
     initUpdater();
     initInstallPrompt();
@@ -546,7 +641,7 @@ function appendSpeakingLog(role, text) {
     const logEl = document.getElementById('speakingLog');
     const row = document.createElement('div');
     row.className = 'speaking-log-item';
-    row.innerHTML = `<span class="speaking-log-role">${role.toUpperCase()}</span>${text}`;
+    row.innerHTML = `<span class="speaking-log-role">${String(role || 'log').toUpperCase()}</span>${text}`;
     logEl.prepend(row);
     if (activeSpeakingRecord) {
         activeSpeakingRecord.logs.push({
@@ -910,6 +1005,10 @@ GENERATE_BTN.onclick = async () => {
         setupAudio(audioBase64);
         const articleRecord = await saveToHistory(contentData, audioBase64, voiceName, customTopic);
         markLearnRecord(articleRecord?.id ? { id: articleRecord.id, type: 'article', fromHistory: false } : null);
+        
+        // 🌟 觸發每日任務進度：文章閱讀 +1
+        await DB.addDailyProgress('article', 1);
+
         switchTab('learn');
     } catch (error) {
         console.error(error);
@@ -925,6 +1024,13 @@ GENERATE_BTN.onclick = async () => {
 
     try {
         await DB.init();
+        
+        // 🌟 初始化每日任務面板，並綁定全域事件以接收子模組 (srs, special) 來的更新訊號
+        await renderDailyDashboard();
+        window.addEventListener('daily-progress-updated', renderDailyDashboard);
+        // 將 DB 操作開放給其他 js (給 srs 結算時用)
+        window.DB = DB;
+
         const savedLocale = await DB.getSetting('app_locale');
         const initialLocale = savedLocale || detectBrowserLocale();
         setLocale(initialLocale);
@@ -957,11 +1063,10 @@ GENERATE_BTN.onclick = async () => {
     finally { window.dispatchEvent(new CustomEvent('toeic-app-ready')); }
 })();
 
-// ====== Google 試算表一鍵匯入邏輯 (支援 SRS 跨平台進度同步版) ======
+// ====== Google 試算表一鍵匯入邏輯 ======
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        // 👇👇👇 請將下方網址替換為您的 Google Apps Script 部署網址 👇👇👇
         const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
         
         btnImport.disabled = true;
@@ -993,26 +1098,22 @@ if (btnImport) {
                     ex_zh: item.exZh || '',
                     col: item.col || '',
                     phrase: item.phrase || '',
-                    deriv: item.deriv || '', // <--- 新增這行，讓 App 匯入時能抓到 M 欄的衍生字
+                    deriv: item.deriv || '',
                     createdAt: Date.now(),
                     level: item.level !== undefined ? item.level : 0,
                     nextReview: item.nextReview !== undefined ? item.nextReview : Date.now()
                 };
                 
-                // 檢查單字是否已存在本地端
                 const existing = await DB.getSavedWord(wordId);
                 
                 if (existing) {
-                    // 若存在，強制用雲端的進度覆寫本地端，達成各裝置一致
                     existing.level = payload.level;
                     existing.nextReview = payload.nextReview;
-                    // 同步其他可能修改的欄位
                     existing.zh = payload.zh;
                     existing.cat = payload.cat;
                     await DB.addSavedWord(existing); 
                     updateCount++;
                 } else {
-                    // 若不存在，以新單字加入
                     await DB.addSavedWord(payload);
                     importCount++;
                 }
@@ -1038,7 +1139,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const userName = document.getElementById('cloudUserName');
     const userEmail = document.getElementById('cloudUserEmail');
 
-    // 1. 頁面載入時，從 LocalStorage 讀取並還原畫面
     const savedProfile = localStorage.getItem('google_saved_profile');
     if (savedProfile && authArea && userArea) {
         try {
@@ -1051,11 +1151,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {}
     }
 
-    // 2. 監聽畫面變化，當使用者手動登入成功時，自動儲存資料
     if (userArea) {
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
-                // 當登入區域顯示，且抓到正確的使用者名稱時執行儲存
                 if (!userArea.classList.contains('hidden') && userName && userName.innerText !== 'User') {
                     const profileToSave = {
                         avatar: avatar ? avatar.innerText : 'G',

@@ -5,7 +5,6 @@ let activeMistakeFilters = new Set();
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
-            // 🌟 核心修復：版本號升級為 2，觸發 iOS/Safari 重新檢查資料庫結構
             const req = indexedDB.open('ToeicMistakesDB', 2);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
@@ -551,12 +550,22 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     oArea.appendChild(nextBtn);
 }
 
-function showResults() {
+// 🌟 核心升級：在結算畫面寫入進度
+async function showResults() {
     const qArea = document.getElementById('specialQuestionArea');
     const oArea = document.getElementById('specialOptionsArea');
     
     document.getElementById('specialProgressText').textContent = '完成';
     document.getElementById('specialTopicBadge').textContent = '結算';
+
+    // 寫入特訓進度 + 1
+    if (window.DB) {
+        try {
+            await window.DB.addDailyProgress('special', 1);
+        } catch (e) {
+            console.error("Failed to add special progress", e);
+        }
+    }
 
     qArea.innerHTML = `
         <div style="text-align: center; padding: 32px 0;">

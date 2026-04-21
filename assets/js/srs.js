@@ -18,7 +18,6 @@ function formatDerivText(text) {
     return tStr.replace(/\), ?/g, ')\n');
 }
 
-// 🌟 核心升級 1：加入同反義字標籤解析器 (與 vocab.js 保持一致)
 function formatRelWordsHtml(synonyms, antonyms) {
     const synStr = String(synonyms || '').trim();
     const antStr = String(antonyms || '').trim();
@@ -375,6 +374,13 @@ async function showSrsResults() {
         await DB.updateWordSRS(freshWord.id, newLevel, newNext);
         wordResults.push({ word: freshWord, oldLevel: freshWord.level, newLevel, cc, nextDate: new Date(newNext).toLocaleDateString() });
     }
+
+    // 🌟 核心升級：將本次複習的單字數量加入每日進度
+    try {
+        await DB.addDailyProgress('srs', srsState.words.length);
+    } catch (e) {
+        console.error('Failed to update daily SRS progress:', e);
+    }
     
     srsState.active = false;
     const total = srsState.words.length * 3;
@@ -391,7 +397,6 @@ async function showSrsResults() {
 
         const item = document.createElement('div');
         item.className = 'srs-result-item';
-        // 給予相對定位，方便我們把刪除按鈕放在絕對位置
         item.style.cssText = 'display: block; width: 100%; box-sizing: border-box; background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative;';
 
         const displayEn = toLowerWord(freshWord.en);
@@ -404,7 +409,6 @@ async function showSrsResults() {
         const rawDeriv = freshWord.deriv?.trim() || freshWord.derivatives?.trim() || '';
         const derivText = formatDerivText(rawDeriv);
         
-        // 🌟 核心升級 2：渲染同反義字微標籤
         const relHtml = formatRelWordsHtml(freshWord.synonyms || freshWord.syn, freshWord.antonyms || freshWord.ant);
 
         let derivHtml = '';
@@ -478,13 +482,11 @@ async function showSrsResults() {
             item.querySelector('.srs-next-date').textContent = new Date(resetNext).toLocaleDateString();
         };
 
-        // 🌟 綁定刪除按鈕事件
         const deleteBtn = item.querySelector('.srs-delete-btn');
         deleteBtn.onclick = async (e) => {
             e.stopPropagation();
             if (confirm(`確定要將「${displayEn}」從單字本徹底刪除嗎？\n此動作無法復原。`)) {
                 await DB.deleteSavedWord(freshWord.id);
-                // 刪除後將卡片變灰並顯示已刪除
                 item.style.opacity = '0.4';
                 item.style.pointerEvents = 'none';
                 deleteBtn.innerHTML = '🗑️ 已刪除';

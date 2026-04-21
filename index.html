@@ -13,113 +13,34 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-      html.app-booting body > * {
-        visibility: hidden;
-      }
-      html.app-booting #bootLoading {
-        visibility: visible;
-      }
-      #bootLoading {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #f2f2f7;
-        z-index: 99999;
-      }
-      #bootLoading .boot-loading-card {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        color: #5856d6;
-        font-weight: 600;
-      }
-      #bootLoading .boot-loading-spinner {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        border: 3px solid rgba(88, 86, 214, 0.2);
-        border-top-color: #5856d6;
-        animation: boot-spin 0.8s linear infinite;
-      }
-      @keyframes boot-spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
+      html.app-booting body > * { visibility: hidden; }
+      html.app-booting #bootLoading { visibility: visible; }
+      #bootLoading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #f2f2f7; z-index: 99999; }
+      #bootLoading .boot-loading-card { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #5856d6; font-weight: 600; }
+      #bootLoading .boot-loading-spinner { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(88, 86, 214, 0.2); border-top-color: #5856d6; animation: boot-spin 0.8s linear infinite; }
+      @keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
       (function bootstrapAppAssets() {
         document.documentElement.classList.add('app-booting');
-        var cssReady = false;
-        var appReady = false;
-        var revealed = false;
-        var revealTimer = null;
-
-        function revealApp() {
-          if (revealed) return;
-          revealed = true;
-          if (revealTimer) clearTimeout(revealTimer);
-          document.documentElement.classList.remove('app-booting');
-          var loadingEl = document.getElementById('bootLoading');
-          if (loadingEl) loadingEl.remove();
-        }
-
-        function checkReady() {
-          if (cssReady && appReady) {
-            revealApp();
-          }
-        }
-
-        window.addEventListener('toeic-app-ready', function () {
-          appReady = true;
-          checkReady();
-        }, { once: true });
-
+        var cssReady = false, appReady = false, revealed = false, revealTimer = null;
+        function revealApp() { if (revealed) return; revealed = true; if (revealTimer) clearTimeout(revealTimer); document.documentElement.classList.remove('app-booting'); var loadingEl = document.getElementById('bootLoading'); if (loadingEl) loadingEl.remove(); }
+        function checkReady() { if (cssReady && appReady) revealApp(); }
+        window.addEventListener('toeic-app-ready', function () { appReady = true; checkReady(); }, { once: true });
         revealTimer = setTimeout(revealApp, 5000);
-
         function mountAssets(version) {
           var suffix = version ? ("?v=" + encodeURIComponent(version)) : "";
-          var style = document.createElement('link');
-          style.rel = 'stylesheet';
-          style.href = "./assets/css/styles.css" + suffix;
-          style.onload = function () {
-            cssReady = true;
-            checkReady();
-          };
-          style.onerror = function () {
-            cssReady = true;
-            checkReady();
-          };
-          document.head.appendChild(style);
-
-          var entry = document.createElement('script');
-          entry.type = 'module';
-          entry.src = "./assets/js/main.js" + suffix;
-          entry.onerror = revealApp;
-          document.head.appendChild(entry);
+          var style = document.createElement('link'); style.rel = 'stylesheet'; style.href = "./assets/css/styles.css" + suffix;
+          style.onload = function () { cssReady = true; checkReady(); }; style.onerror = function () { cssReady = true; checkReady(); }; document.head.appendChild(style);
+          var entry = document.createElement('script'); entry.type = 'module'; entry.src = "./assets/js/main.js" + suffix; entry.onerror = revealApp; document.head.appendChild(entry);
         }
-
-        fetch("./version.json?t=" + Date.now())
-          .then(function (res) { return res.ok ? res.json() : null; })
-          .then(function (data) {
-            mountAssets(data && data.version ? data.version : "");
-          })
-          .catch(function () {
-            mountAssets("");
-          });
+        fetch("./version.json?t=" + Date.now()).then(function (res) { return res.ok ? res.json() : null; }).then(function (data) { mountAssets(data && data.version ? data.version : ""); }).catch(function () { mountAssets(""); });
       })();
     </script>
 </head>
 <body>
-    <div id="bootLoading" aria-live="polite" aria-label="Loading">
-        <div class="boot-loading-card">
-            <div class="boot-loading-spinner"></div>
-            <div>Loading...</div>
-        </div>
-    </div>
+    <div id="bootLoading" aria-live="polite" aria-label="Loading"><div class="boot-loading-card"><div class="boot-loading-spinner"></div><div>Loading...</div></div></div>
 
     <header>
         <h1 data-i18n="appTitle">TOEIC AI Tutor</h1>
@@ -130,6 +51,8 @@
     </header>
 
     <div id="tabLearn" class="container">
+        <div id="dailyTaskDashboard" class="hidden" style="background: white; border-radius: 16px; padding: 16px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;"></div>
+
         <div id="emptyState" class="empty-state">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
             <p data-i18n="emptyTitle">還沒有學習內容</p>
@@ -170,19 +93,16 @@
         <div class="practice-container">
             <h2 data-i18n="practiceModeTitle">練習模式</h2>
             <p class="subtitle" data-i18n="practiceModeSubtitle">選擇文章、口說或模擬考試</p>
-
             <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px;">
                 <button class="practice-mode-btn active" data-mode="article" data-i18n="practiceModeArticle">文章練習</button>
                 <button class="practice-mode-btn" data-mode="speaking" data-i18n="practiceModeSpeaking">口說對話</button>
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
             </div>
-
             <div class="practice-mode-panel" id="practicePanelArticle">
                 <h3 class="practice-label" data-i18n="targetScoreLabel">目標分數</h3>
                 <p class="practice-note" data-i18n="targetScoreNote">根據你的多益程度選擇適合難度</p>
                 <div class="score-selector" id="scoreSelector"></div>
-
                 <div class="practice-section">
                     <h3 class="practice-label" data-i18n="customTopicLabel">自訂主題（選填）</h3>
                     <input type="text" class="topic-input" id="customTopic" data-i18n-placeholder="customTopicPlaceholder" placeholder="例如：機場報到、商業會議、餐廳點餐...">
@@ -193,7 +113,6 @@
                 </div>
                 <button class="generate-btn" id="btnGenerate" data-i18n="startLearningBtn">開始學習</button>
             </div>
-
             <div class="practice-mode-panel hidden" id="practicePanelSpecial">
                 <div id="specialConfigArea">
                     <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇特訓難度</h3>
@@ -206,36 +125,19 @@
                             <option value="多益 800 分以上程度 (使用多益 800 分以上的艱澀單字、複雜長難句與倒裝等特殊結構)">⭐⭐⭐⭐⭐ 多益 800 分 (魔王挑戰)</option>
                         </select>
                     </div>
-
                     <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">2. 選擇特訓考點 (可複選)</h3>
-                    
                     <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px;">
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="時態" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 時態
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="詞性判斷" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 詞性判斷
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="介系詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 介系詞
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="代名詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 代名詞
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="單複數" style="accent-color: var(--accent); width: 16px; height: 16px;"> 單複數
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="比較級" style="accent-color: var(--accent); width: 16px; height: 16px;"> 比較級
-                        </label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <input type="checkbox" value="假設語氣" style="accent-color: var(--accent); width: 16px; height: 16px;"> 假設語氣
-                        </label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="時態" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 時態</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="詞性判斷" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 詞性判斷</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="介系詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 介系詞</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="代名詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 代名詞</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="單複數" style="accent-color: var(--accent); width: 16px; height: 16px;"> 單複數</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="比較級" style="accent-color: var(--accent); width: 16px; height: 16px;"> 比較級</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="假設語氣" style="accent-color: var(--accent); width: 16px; height: 16px;"> 假設語氣</label>
                     </div>
                     <button class="generate-btn" id="btnStartSpecial">🚀 開始 10 題專項特訓</button>
                 </div>
             </div>
-
             <div class="practice-mode-panel hidden" id="practicePanelSpeaking">
                 <div id="speakingConfigView">
                     <h3 class="practice-label" data-i18n="speakingLevelLabel">口說等級</h3>
@@ -262,7 +164,6 @@
                     <button class="generate-btn" id="btnStartSpeaking" data-i18n="startSpeakingBtn">開始口說對話</button>
                 </div>
             </div>
-
             <div class="practice-mode-panel hidden" id="practicePanelExam">
                 <div id="examConfigView">
                     <h3 class="practice-label" data-i18n="examConfigTitle">考試設定</h3>
@@ -285,30 +186,18 @@
         </div>
         <div id="vocabNotebookPanel">
             <div id="srsReviewEntry"></div>
-            
             <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
                 <div style="display: flex; gap: 8px; flex: 1; min-width: 220px;">
-                    <button id="btnBatchUpgradeDeriv" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f3f4f6; color: #4b5563; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; white-space: nowrap; transition: all 0.2s;">
-                        🚀 升級舊單字
-                    </button>
+                    <button id="btnBatchUpgradeDeriv" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f3f4f6; color: #4b5563; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; white-space: nowrap; transition: all 0.2s;">🚀 升級舊單字</button>
                     <div style="position: relative; flex: 1;">
                         <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 13px; opacity: 0.5;">🔍</span>
                         <input type="text" id="vocabSearchInput" placeholder="搜尋單字或中文..." style="width: 100%; padding: 6px 10px 6px 30px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #fff; font-size: 14px; color: #374151; outline: none; box-sizing: border-box; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); transition: border-color 0.2s;">
                     </div>
                 </div>
-                
                 <select id="posFilterSelect" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #d1d5db; background-color: #f9fafb; font-size: 14px; color: #374151; font-weight: 500; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    <option value="all">全詞性</option>
-                    <option value="n">名詞 (n.)</option>
-                    <option value="v">動詞 (v.)</option>
-                    <option value="adj">形容詞 (adj.)</option>
-                    <option value="adv">副詞 (adv.)</option>
-                    <option value="prep">介係詞 (prep.)</option>
-                    <option value="conj">連接詞 (conj.)</option>
-                    <option value="other">其他</option>
+                    <option value="all">全詞性</option><option value="n">名詞 (n.)</option><option value="v">動詞 (v.)</option><option value="adj">形容詞 (adj.)</option><option value="adv">副詞 (adv.)</option><option value="prep">介係詞 (prep.)</option><option value="conj">連接詞 (conj.)</option><option value="other">其他</option>
                 </select>
             </div>
-            
             <div id="savedWordsList"></div>
         </div>
         <div id="vocabLookupPanel" class="hidden">
@@ -325,20 +214,16 @@
         <div class="vocab-tab-header" style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
             <h3 class="section-title" style="margin: 0;" data-i18n="historyTitle">紀錄與錯題</h3>
         </div>
-        
         <div class="vocab-subtab-switch" id="historySubtabSwitch" style="margin-bottom: 16px;">
             <button class="vocab-subtab-btn active" data-history-subtab="general">學習紀錄</button>
             <button class="vocab-subtab-btn" data-history-subtab="mistakes">特訓錯題本 📌</button>
         </div>
-
         <div id="historyMainPanel">
             <div id="historyList"></div>
             <button id="btnClearHistory" style="font-size:13px; color:red; background:none; border:none; margin-top:10px;" data-i18n="clearAllHistoryBtn">清除全部紀錄</button>
         </div>
-
         <div id="historyMistakesPanel" class="hidden">
             <p style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-align: center;">收錄您在「專項特訓」中答錯或手動釘選的文法考題。</p>
-            
             <div id="mistakesFilterArea" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 16px;">
                 <button class="mistake-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
                 <button class="mistake-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
@@ -349,75 +234,32 @@
                 <button class="mistake-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
                 <button class="mistake-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
             </div>
-            
             <div style="text-align: center; margin-bottom: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
                 <button id="btnPrintPDF" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📄 儲存錯題為 PDF</button>
                 <button id="btnGenerateSecrets" style="background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📘 匯總專屬文法秘笈</button>
             </div>
-
             <div id="mistakesList"></div>
         </div>
     </div>
 
     <div id="tabAbout" class="container hidden">
         <div class="about-page">
-            <div class="about-icon-circle">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
+            <div class="about-icon-circle"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
             <h2 class="about-name">Bruce Yang</h2>
             <p class="about-bio" data-i18n-html="aboutBio">TOEIC AI Tutor 開發者<br>熱愛用技術解決學習問題，希望讓每個人都能輕鬆學英文。<br>如果這個工具對你有幫助，歡迎給我一點鼓勵！</p>
-
             <div class="about-links">
-                <a href="https://www.facebook.com/bruce.yang.94" target="_blank" rel="noopener" class="about-link-card">
-                    <span class="about-link-icon fb"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span>
-                    <span class="about-link-text">
-                        <span class="about-link-title">Facebook</span>
-                        <span class="about-link-desc" data-i18n="aboutFacebookDesc">追蹤我的動態</span>
-                    </span>
-                    <span class="about-link-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                </a>
-                <a href="https://www.linkedin.com/in/chun-hsiang-yang-b17238165" target="_blank" rel="noopener" class="about-link-card">
-                    <span class="about-link-icon linkedin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></span>
-                    <span class="about-link-text">
-                        <span class="about-link-title">LinkedIn</span>
-                        <span class="about-link-desc" data-i18n="aboutLinkedinDesc">了解我的專業背景</span>
-                    </span>
-                    <span class="about-link-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                </a>
-                <a href="https://github.com/brucefay1115/toeic-learning" target="_blank" rel="noopener" class="about-link-card">
-                    <span class="about-link-icon github"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></span>
-                    <span class="about-link-text">
-                        <span class="about-link-title">GitHub</span>
-                        <span class="about-link-desc" data-i18n="aboutGithubDesc">查看開源程式碼，歡迎 Star ⭐</span>
-                    </span>
-                    <span class="about-link-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                </a>
-                <a href="mailto:brucefay1115@gmail.com" class="about-link-card">
-                    <span class="about-link-icon email"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
-                    <span class="about-link-text">
-                        <span class="about-link-title" data-i18n="aboutFeedbackTitle">Bug 回報 / 建議</span>
-                        <span class="about-link-desc">brucefay1115@gmail.com</span>
-                    </span>
-                    <span class="about-link-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                </a>
-                <a href="https://buymeacoffee.com/brucefay110" target="_blank" rel="noopener" class="about-link-card coffee">
-                    <span class="about-link-icon coffee"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg></span>
-                    <span class="about-link-text">
-                        <span class="about-link-title">Buy Me a Coffee</span>
-                        <span class="about-link-desc" data-i18n="aboutCoffeeDesc">請我喝杯咖啡，支持持續開發 ☕</span>
-                    </span>
-                    <span class="about-link-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                </a>
+                <a href="https://www.facebook.com/bruce.yang.94" target="_blank" rel="noopener" class="about-link-card"><span class="about-link-icon fb"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span><span class="about-link-text"><span class="about-link-title">Facebook</span><span class="about-link-desc" data-i18n="aboutFacebookDesc">追蹤我的動態</span></span></a>
+                <a href="https://github.com/brucefay1115/toeic-learning" target="_blank" rel="noopener" class="about-link-card"><span class="about-link-icon github"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></span><span class="about-link-text"><span class="about-link-title">GitHub</span><span class="about-link-desc" data-i18n="aboutGithubDesc">查看開源程式碼，歡迎 Star ⭐</span></span></a>
             </div>
-
             <p class="about-version" id="appVersion"></p>
             <p class="about-footer" data-i18n="aboutFooter">Made with ❤️ by Bruce Yang</p>
         </div>
     </div>
 
     <nav class="tab-bar">
-        <button class="tab-btn active" data-tab="learn">
+        <button class="tab-btn active" data-tab="learn" style="position:relative;">
             <span class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+            <span id="learnTabBadge" style="position:absolute; top:4px; right:20px; width:8px; height:8px; background:#ef4444; border-radius:50%; display:none; box-shadow: 0 0 0 2px white;"></span>
             <span class="tab-label" data-i18n="tabsLearn">學習</span>
         </button>
         <button class="tab-btn" data-tab="practice">
@@ -466,15 +308,26 @@
 
             <section class="settings-section">
                 <h3 class="practice-label settings-label-center" data-i18n="settingsApiLabel">Gemini API Key</h3>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-guide-link settings-api-guide-link">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78Zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-                    <span><span data-i18n="settingsGetApiKey">點此取得 Google API Key</span><br><span style="font-size:11px; font-weight:400;" data-i18n="settingsGoogleLoginHint">(需登入 Google 帳號)</span></span>
-                </a>
                 <div class="input-group">
                     <input type="password" id="apiKeyInput" placeholder="Paste API Key here...">
                     <button type="button" class="api-clear-btn" id="btnClearApiKey" data-i18n="settingsClear">一鍵清除</button>
                 </div>
-                <p style="font-size: 12px; color: #999; margin-top: 10px;" data-i18n="settingsLocalStorageNote">Key 僅儲存於本地裝置 (IndexedDB)，不會備份到 Google Drive</p>
+            </section>
+
+            <section class="settings-section" style="margin-top: 20px;">
+                <h3 class="practice-label settings-label-center">🎯 每日任務設定</h3>
+                <div class="input-group" style="display:flex; justify-content:space-between; margin-bottom:10px; background:#f9fafb; padding:10px; border-radius:8px;">
+                    <span style="font-size:14px; font-weight:600; color:#374151;">📖 單字複習 (個)</span>
+                    <input type="number" id="goalInputSrs" min="1" max="200" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
+                </div>
+                <div class="input-group" style="display:flex; justify-content:space-between; margin-bottom:10px; background:#f9fafb; padding:10px; border-radius:8px;">
+                    <span style="font-size:14px; font-weight:600; color:#374151;">🎯 專項特訓 (次)</span>
+                    <input type="number" id="goalInputSpecial" min="1" max="10" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
+                </div>
+                <div class="input-group" style="display:flex; justify-content:space-between; background:#f9fafb; padding:10px; border-radius:8px;">
+                    <span style="font-size:14px; font-weight:600; color:#374151;">📚 文章閱讀 (篇)</span>
+                    <input type="number" id="goalInputArticle" min="1" max="10" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
+                </div>
             </section>
 
             <section class="settings-section">
@@ -489,12 +342,8 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
                     <span data-i18n="cloudBackupTitle">雲端備份 Cloud Backup</span>
                 </h4>
-                <p style="font-size:12px; color:#999; margin: 0 0 10px;" data-i18n="cloudBackupNote">雲端僅同步學習紀錄與單字，不包含 API Key。</p>
                 <div id="cloudAuthArea">
-                    <button class="cloud-login-btn" id="btnCloudLogin">
-                        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                        <span data-i18n="cloudLoginBtn">使用 Google 帳號登入</span>
-                    </button>
+                    <button class="cloud-login-btn" id="btnCloudLogin">登入</button>
                 </div>
                 <div id="cloudUserArea" class="hidden">
                     <div class="cloud-user-info">
@@ -509,13 +358,6 @@
                         <button class="cloud-action-btn" id="btnRestore" data-i18n="cloudRestoreBtn">從雲端還原</button>
                         <button class="cloud-action-btn danger" id="btnCloudLogout" data-i18n="cloudLogoutBtn">登出</button>
                     </div>
-                    <div class="cloud-actions" style="margin-top: 10px;">
-                        <button class="cloud-action-btn" id="btnImportFromSheet" style="background:#34A853; color:white; width:100%; border:none;">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px; vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                            從 Google 試算表一鍵匯入
-                        </button>
-                    </div>
-                    <div class="cloud-last-sync" id="cloudLastSync"></div>
                 </div>
             </div>
             </section>
@@ -527,54 +369,10 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="announcementModal">
-        <div class="modal-card announcement-modal-card">
-            <h3 id="announcementTitle">公告</h3>
-            <p id="announcementMessage" class="announcement-message">載入中...</p>
-            <button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button>
-        </div>
-    </div>
-
-    <div class="srs-overlay hidden" id="srsOverlay">
-        <div class="srs-content">
-            <div class="srs-top-bar">
-                <button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                <span class="srs-progress-text" id="srsProgressText">1 / 9</span>
-                <span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span>
-            </div>
-            <div class="srs-question-area" id="srsQuestionArea"></div>
-            <div class="srs-options-area" id="srsOptionsArea"></div>
-        </div>
-    </div>
-
-    <div class="srs-overlay hidden" id="specialQuizOverlay">
-        <div class="srs-content" style="max-height: 90vh; overflow-y: auto;">
-            <div class="srs-top-bar">
-                <button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                <span class="srs-progress-text" id="specialProgressText">1 / 10</span>
-                <span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span>
-            </div>
-            <div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div>
-            <div class="srs-options-area" id="specialOptionsArea"></div>
-        </div>
-    </div>
-
+    <div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
+    <div class="srs-overlay hidden" id="srsOverlay"><div class="srs-content"><div class="srs-top-bar"><button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="srsProgressText">1 / 9</span><span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span></div><div class="srs-question-area" id="srsQuestionArea"></div><div class="srs-options-area" id="srsOptionsArea"></div></div></div>
+    <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
     <audio id="mainAudio"></audio>
-    <div class="srs-overlay hidden" id="grammarSecretsModal" style="z-index: 100000; background: rgba(243, 244, 246, 0.95); backdrop-filter: blur(4px);">
-        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1); padding: 0;">
-            <div class="srs-top-bar" style="border-bottom: 1px solid #e5e7eb; padding: 16px 20px; background: #f8fafc; border-radius: 24px 24px 0 0;">
-                <button class="srs-close-btn" id="btnCloseSecrets" style="background: #e2e8f0; color: #4b5563;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                <span class="srs-progress-text" style="font-size: 18px; font-weight: 800; color: #4338ca; display: flex; align-items: center; gap: 8px;"><span>📘</span> 專屬文法秘笈</span>
-                <span class="srs-phase-badge" style="background-color: #4338ca; color: white;">精華匯總</span>
-            </div>
-            <div id="grammarSecretsContent" style="padding: 20px;">
-                </div>
-            <div style="text-align: center; padding: 20px; border-top: 1px dashed #e5e7eb; background: #f8fafc; border-radius: 0 0 24px 24px;">
-                <button id="btnPrintSecrets" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 8px;">🖨️ 單獨列印此份秘笈</button>
-            </div>
-        </div>
-    </div>
-
     <script type="module" src="assets/js/specialTraining.js"></script>
 </body>
 </html>
