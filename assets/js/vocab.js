@@ -16,7 +16,7 @@ let _isUpgrading = false;
 // 🌟 新增：全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
 let _searchQuery = ''; 
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycby7qtD8nym6_4yBbyLdj81VAUIsKJR4kfgG6bubqSaiCPwmuGajrMoM-IFi6iXYw3a8/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwviQPFD4mpuK1w-nOjJe2Oeo_WAL2le_xLevZLY1Z2hJK8UWpJUctjihTLKLNU21Wh/exec";
 
 function getRandomToeicVoice() {
     const voices = window.speechSynthesis.getVoices();
