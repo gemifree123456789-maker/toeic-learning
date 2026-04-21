@@ -16,6 +16,9 @@ import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
 
+// 🌟 核心修復：強制從 main.js 引入特訓模組，讓它跟著 main.js 一起更新，徹底擊碎 Safari 的過期快取！
+import './specialTraining.js';
+
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
 setOnFinish(renderVocabTab);
@@ -88,7 +91,6 @@ function setLearnRuntimeMode(mode) {
     updatePlayerBarVisibility();
 }
 
-/* ── 🌟 新增：每日任務面板渲染邏輯 (圓環華麗版) ── */
 async function renderDailyDashboard() {
     const dashboard = document.getElementById('dailyTaskDashboard');
     if (!dashboard) return;
@@ -99,16 +101,13 @@ async function renderDailyDashboard() {
     state.dailyGoals = goals;
     state.dailyProgress = prog;
     
-    // 計算單項達成率 (最高 100%)
     const srsPct = Math.min(100, Math.floor((prog.srs / goals.srs) * 100));
     const specialPct = Math.min(100, Math.floor((prog.special / goals.special) * 100));
     const articlePct = Math.min(100, Math.floor((prog.article / goals.article) * 100));
     
-    // 總進度
     const overallPct = Math.floor((srsPct + specialPct + articlePct) / 3);
     const isCompleted = overallPct >= 100;
     
-    // 更新紅點
     const badge = document.getElementById('learnTabBadge');
     if (badge) {
         badge.style.display = isCompleted ? 'none' : 'block';
@@ -117,7 +116,6 @@ async function renderDailyDashboard() {
     const primaryColor = isCompleted ? '#10b981' : '#5856d6';
     const headerMsg = isCompleted ? '🎉 今日目標已達成！' : '💪 堅持下去，完成今日目標！';
 
-    // SVG 圓環周長計算 (半徑 r=50，周長 2*PI*r)
     const circumference = 314.159;
     const offset = circumference - (overallPct / 100) * circumference;
 
@@ -182,7 +180,6 @@ function switchTab(tabName) {
     document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.remove('hidden');
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
     
-    // 切換頁籤時處理每日面板顯示
     const dbEl = document.getElementById('dailyTaskDashboard');
     if (dbEl) {
         if (tabName === 'learn') dbEl.classList.remove('hidden');

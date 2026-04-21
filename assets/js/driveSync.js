@@ -6,7 +6,7 @@ import { t } from './i18n.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 👇👇👇 請將下方網址替換為你剛剛最新部署的 GAS 網址 👇👇👇
+    // 👇👇👇 請貼上你的 GAS 部署網址 👇👇👇
     GAS_URL: 'https://script.google.com/macros/s/AKfycbx8bZPwSl6NokamKdyecaigvOvYSn6Nm8NdEtdzSqUiYfqtqV-2LVq_VWCla0iI3KIZ/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
@@ -185,14 +185,24 @@ export const DriveSync = {
             const mistakes = await this._getMistakesFromDB();
             const dailyGoals = await DB.getDailyGoals();
             const dailyProgress = await DB.getDailyProgress();
-            const generalHistory = await DB.getHistory(); // 🌟 抓取一般學習紀錄
+            const generalHistory = await DB.getHistory();
+
+            // 🌟 核心修復：幫學習紀錄「減肥」，拔除肥大的音檔字串，避免 Google 試算表被撐破！
+            const safeHistory = generalHistory.map(h => {
+                const copy = { ...h };
+                delete copy.audio; // 移除文章語音
+                if (copy.examSnapshot && copy.examSnapshot.listeningAudioByQuestion) {
+                    copy.examSnapshot.listeningAudioByQuestion = {}; // 移除考題語音
+                }
+                return copy;
+            });
 
             const payload = {
                 action: "backup",
                 vocab: vocabWords,
                 mistakes: mistakes,
                 dailyTasks: { goals: dailyGoals, progress: dailyProgress },
-                history: generalHistory // 🌟 放上備份卡車
+                history: safeHistory // 🌟 送出減肥成功的包裹
             };
 
             const res = await fetch(this.GAS_URL, {
@@ -206,7 +216,7 @@ export const DriveSync = {
                 const now = new Date().toLocaleString();
                 await DB.setSetting('cloud_last_sync', now);
                 this.updateUI();
-                alert(`✅ 雲端備份成功！\n已同步單字、錯題本、每日進度與學習紀錄。`);
+                alert(`✅ 雲端備份成功！\n已同步單字、錯題本、每日進度與 ${safeHistory.length} 筆學習紀錄。`);
             } else {
                 throw new Error('伺服器回傳錯誤狀態');
             }
@@ -247,7 +257,6 @@ export const DriveSync = {
                 if (data.dailyTasks.progress) await DB.setSetting('daily_progress', data.dailyTasks.progress);
             }
 
-            // 🌟 卸下學習紀錄包裹，並寫入手機資料庫
             if (data.history && data.history.length > 0) {
                 await DB.clearHistory();
                 for (const h of data.history) { await DB.addHistory(h); hCount++; }
