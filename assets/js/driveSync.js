@@ -7,7 +7,7 @@ import { MistakesDB, SecretsDB } from './specialTraining.js';
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    GAS_URL: 'https://script.google.com/macros/s/AKfycby7PilaDew9YC-D8OPGGn2PQbUa4J5LWDxWzEG7VhZGYSLmJ-oLJoFDkCbP4BiUddJf/exec',
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbwuHbB3hvzuEqSps2Aj0baEMTgY_32p7mqr4-_vg7v0HWljWDvrLl78-_5pMtDAHDes/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',

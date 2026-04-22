@@ -2,6 +2,7 @@ import { state } from './state.js';
 
 let activeMistakeFilters = new Set();
 let activeSecretFilter = 'all'; 
+let currentSecretsData = {}; // 🌟 用於暫存給 AI 濃縮的資料
 
 export const MistakesDB = {
     async open() {
@@ -63,7 +64,6 @@ export const MistakesDB = {
     }
 };
 
-// 🌟 核心升級：建立全新的秘笈金庫 (SecretsDB)，專門吸收所有題目的養分
 export const SecretsDB = {
     async open() {
         return new Promise((resolve, reject) => {
@@ -120,7 +120,6 @@ const stState = { active: false, questions: [], currentQ: 0, answered: false };
 function normalizeTopic(rawTopic) {
     if (!rawTopic) return '其他';
     const t = String(rawTopic).toLowerCase();
-    
     if (t.includes('代名詞')) return '代名詞';
     if (t.includes('時態') || t.includes('現在') || t.includes('過去') || t.includes('未來') || t.includes('完成') || t.includes('進行')) return '時態';
     if (t.includes('詞性') || t.includes('名詞') || t.includes('動詞') || t.includes('形容詞') || t.includes('副詞')) return '詞性判斷';
@@ -128,7 +127,6 @@ function normalizeTopic(rawTopic) {
     if (t.includes('單複數') || t.includes('可數')) return '單複數';
     if (t.includes('比較級') || t.includes('最高級')) return '比較級';
     if (t.includes('假設')) return '假設語氣';
-    
     return rawTopic; 
 }
 
@@ -181,7 +179,6 @@ export function initSpecialTraining() {
             const checkedBoxes = Array.from(specialConfigArea.querySelectorAll('input[type="checkbox"]:checked'));
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
-
             const difficultySelect = document.getElementById('specialDifficultySelect');
             const difficulty = difficultySelect ? difficultySelect.value : '國中程度 (使用最簡單的單字)';
 
@@ -245,13 +242,11 @@ export function initSpecialTraining() {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const topic = btn.dataset.topic;
-            if (topic === 'all') {
-                activeMistakeFilters.clear();
-            } else {
+            if (topic === 'all') activeMistakeFilters.clear();
+            else {
                 if (activeMistakeFilters.has(topic)) activeMistakeFilters.delete(topic);
                 else activeMistakeFilters.add(topic);
             }
-
             filterBtns.forEach(b => {
                 const t = b.dataset.topic;
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
@@ -275,70 +270,97 @@ export function initSpecialTraining() {
         });
     }
 
-    // 🌟 核心升級：文法秘笈改從 SecretsDB 讀取，不再受限於錯題本
     async function renderSecrets() {
         const contentEl = document.getElementById('grammarSecretsContent');
         if (!contentEl) return;
         
         let allSecrets = await SecretsDB.getAll();
+
+        // 🌟 核心修復：防止舊錯題因為缺少 ID 或欄位而導致搬家崩潰
+        if (!allSecrets || allSecrets.length === 0) {
+            const oldMistakes = await MistakesDB.getAll();
+            if (oldMistakes && oldMistakes.length > 0) {
+                const safeMistakes = oldMistakes.map(m => ({
+                    id: m.id || 'sp_' + Date.now() + Math.random().toString(36).substr(2, 5),
+                    topic: m.topic || '其他',
+                    en: m.en || '',
+                    zh: m.zh || '',
+                    options: m.options || [],
+                    explanation: m.explanation || {},
+                    savedAt: m.savedAt || Date.now()
+                }));
+                try {
+                    await SecretsDB.saveBatch(safeMistakes); 
+                    allSecrets = await SecretsDB.getAll();  
+                } catch(err) {
+                    console.error("Auto-migration failed:", err);
+                }
+            }
+        }
+
         if (!allSecrets || allSecrets.length === 0) {
             contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">您還沒有做過專項特訓，快去挑戰收集文法精華吧！</div>';
             return;
         }
 
         const secretsByTopic = {};
-        let hasContent = false;
+        let totalContentCount = 0;
 
         allSecrets.forEach(q => {
             let exp = q.explanation;
-            if (typeof exp === 'string') {
-                try { exp = JSON.parse(exp); } catch(err) {}
-            }
+            if (typeof exp === 'string') { try { exp = JSON.parse(exp); } catch(err) {} }
             if (!exp || typeof exp !== 'object') return; 
 
             const topic = normalizeTopic(q.topic);
-            
-            if (activeSecretFilter !== 'all' && topic !== activeSecretFilter) return;
-
             if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
             
             const extractedSkills = safeExtract(exp.skills);
             const extractedWarnings = safeExtract(exp.warnings);
             
-            extractedSkills.forEach(s => { secretsByTopic[topic].skills.add(s); hasContent = true; });
-            extractedWarnings.forEach(w => { secretsByTopic[topic].warnings.add(w); hasContent = true; });
+            extractedSkills.forEach(s => { secretsByTopic[topic].skills.add(s); totalContentCount++; });
+            extractedWarnings.forEach(w => { secretsByTopic[topic].warnings.add(w); totalContentCount++; });
         });
 
+        currentSecretsData = secretsByTopic;
         contentEl.innerHTML = '';
-        if (!hasContent) {
-            contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前所選分類，暫無可供整理的技巧與陷阱。</div>';
-        } else {
-            for (const [topic, data] of Object.entries(secretsByTopic)) {
-                if (data.skills.size === 0 && data.warnings.size === 0) continue;
-                
-                let topicHtml = `
-                    <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); page-break-inside: avoid;">
-                        <div style="background: #eef2ff; color: #3730a3; padding: 12px 20px; font-weight: 800; font-size: 16px; border-bottom: 2px solid #c7d2fe; display: flex; align-items: center; gap: 8px;">
-                            🏷️ ${topic}
-                        </div>
-                        <div style="padding: 20px;">
-                `;
+        
+        if (totalContentCount === 0) {
+            contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中暫無可供整理的技巧與陷阱。(可能都是舊版考題)</div>';
+            return;
+        }
 
-                if (data.skills.size > 0) {
-                    topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
-                    data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
-                    topicHtml += `</ol></div>`;
-                }
+        let renderedAny = false;
+        for (const [topic, data] of Object.entries(secretsByTopic)) {
+            if (activeSecretFilter !== 'all' && topic !== activeSecretFilter) continue;
+            if (data.skills.size === 0 && data.warnings.size === 0) continue;
+            
+            renderedAny = true;
+            let topicHtml = `
+                <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); page-break-inside: avoid;">
+                    <div style="background: #eef2ff; color: #3730a3; padding: 12px 20px; font-weight: 800; font-size: 16px; border-bottom: 2px solid #c7d2fe; display: flex; align-items: center; gap: 8px;">
+                        🏷️ ${topic}
+                    </div>
+                    <div style="padding: 20px;">
+            `;
 
-                if (data.warnings.size > 0) {
-                    topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
-                    data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
-                    topicHtml += `</ol></div>`;
-                }
-
-                topicHtml += `</div></div>`;
-                contentEl.innerHTML += topicHtml;
+            if (data.skills.size > 0) {
+                topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
+                topicHtml += `</ol></div>`;
             }
+
+            if (data.warnings.size > 0) {
+                topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
+                topicHtml += `</ol></div>`;
+            }
+
+            topicHtml += `</div></div>`;
+            contentEl.innerHTML += topicHtml;
+        }
+
+        if (!renderedAny) {
+            contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前所選分類，暫無可供整理的技巧與陷阱。</div>';
         }
     }
 
@@ -403,6 +425,92 @@ export function initSpecialTraining() {
             setTimeout(() => document.body.classList.remove('print-secrets-mode'), 500);
         });
     }
+
+    // 🌟 AI 智慧濃縮核心邏輯
+    const btnAiSummarize = document.getElementById('btnAiSummarize');
+    if (btnAiSummarize) {
+        btnAiSummarize.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!state.apiKey) return alert('請先在設定中輸入 Gemini API Key！');
+            
+            let dataToSummarize = '';
+            
+            if (activeSecretFilter === 'all') {
+                for (const [t, d] of Object.entries(currentSecretsData)) {
+                    if (d.skills.size > 0 || d.warnings.size > 0) {
+                        dataToSummarize += `\n【${t}】\n技巧：\n${Array.from(d.skills).join('\n')}\n陷阱：\n${Array.from(d.warnings).join('\n')}`;
+                    }
+                }
+            } else {
+                const d = currentSecretsData[activeSecretFilter];
+                if (d && (d.skills.size > 0 || d.warnings.size > 0)) {
+                    dataToSummarize += `\n【${activeSecretFilter}】\n技巧：\n${Array.from(d.skills).join('\n')}\n陷阱：\n${Array.from(d.warnings).join('\n')}`;
+                }
+            }
+
+            if (!dataToSummarize.trim()) return alert('目前沒有資料可以濃縮喔！');
+
+            const originalText = btnAiSummarize.innerHTML;
+            btnAiSummarize.innerHTML = '✨ AI 濃縮中(約10秒)...';
+            btnAiSummarize.disabled = true;
+
+            try {
+                const bestModelName = await getBestModel(state.apiKey);
+                const prompt = `你是一位專業的多益(TOEIC)文法名師。
+請幫我將以下學生在做題時積累的零散、重複的文法筆記進行「去蕪存菁、分類統整」。
+請將相似的觀念合併，去除重複的敘述，並用最精煉、好記的方式整理成一份「多益精華講義」。
+
+要求：
+1. 嚴格輸出 HTML 格式（只包含內容，不含 <html><body> 等外框，也不要用 \`\`\`html 標記包裝）。
+2. 盡量使用 <h4>, <ul>, <ol>, <li>, <strong> 等標籤讓排版美觀易讀。
+3. 針對重要的陷阱，可以用 <span style="color: #e84118;"> 等加上顏色強調。
+4. 不要回傳任何問候語或額外解釋，直接給 HTML。
+
+以下是需要整理的原始筆記：
+${dataToSummarize}`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${bestModelName}:generateContent?key=${state.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.3 }
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || '未知錯誤');
+                
+                let rawText = data.candidates[0].content.parts[0].text.trim();
+                rawText = rawText.replace(/^```html/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
+
+                const contentEl = document.getElementById('grammarSecretsContent');
+                contentEl.innerHTML = `
+                    <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); page-break-inside: avoid;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #bbf7d0; padding-bottom: 10px; margin-bottom: 16px;">
+                            <h3 style="color: #166534; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px;">✨ AI 智慧濃縮精華 (${activeSecretFilter === 'all' ? '全部' : activeSecretFilter})</h3>
+                            <button id="btnRestoreOriginalSecrets" style="background: #fff; border: 1px solid #22c55e; color: #166534; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: background 0.2s;">切換回原始筆記</button>
+                        </div>
+                        <div style="font-size: 15px; line-height: 1.8; color: #1f2937;">
+                            ${rawText}
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('btnRestoreOriginalSecrets').onclick = (e) => {
+                    e.preventDefault();
+                    renderSecrets(); 
+                };
+
+            } catch (err) {
+                alert('AI 濃縮失敗：' + err.message);
+                renderSecrets();
+            } finally {
+                btnAiSummarize.innerHTML = originalText;
+                btnAiSummarize.disabled = false;
+            }
+        });
+    }
 }
 
 const printStyle = document.createElement('style');
@@ -420,7 +528,7 @@ printStyle.textContent = `
         body.print-secrets-mode #grammarSecretsModal { position: absolute; left: 0; top: 0; width: 100%; background: white !important; }
         body.print-secrets-mode .srs-close-btn, body.print-secrets-mode #btnPrintSecrets { display: none !important; }
         
-        body.print-secrets-mode #btnRealPrintSecrets, body.print-secrets-mode #secretsFilterArea { display: none !important; }
+        body.print-secrets-mode #btnRealPrintSecrets, body.print-secrets-mode #btnAiSummarize, body.print-secrets-mode #secretsFilterArea, body.print-secrets-mode #btnRestoreOriginalSecrets { display: none !important; }
         body.print-secrets-mode #grammarSecretsContent { padding: 0 !important; }
         body.print-secrets-mode .srs-content { box-shadow: none !important; overflow: visible !important; max-height: none !important; width: 100% !important; max-width: none !important; }
     }
@@ -664,7 +772,6 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     `;
     oArea.appendChild(explanationDiv);
 
-    // 🌟 核心升級：不管答對答錯，都將這題存入專屬文法秘笈金庫 (SecretsDB)
     questionObj.savedAt = Date.now();
     SecretsDB.save(questionObj).catch(e => console.log('SecretsDB save error:', e));
 
@@ -679,6 +786,7 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         btnPinMistake.style.color = isPinned ? '#854d0e' : '#4b5563';
         
         if (isPinned) {
+            questionObj.savedAt = Date.now();
             await MistakesDB.save(questionObj);
         }
     };
