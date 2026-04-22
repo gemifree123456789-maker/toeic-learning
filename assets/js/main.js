@@ -16,7 +16,7 @@ import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
 
-// 🌟 核心修復：匯入你的初始化函數
+// 🌟 核心保證：匯入特訓模組初始化器
 import { initSpecialTraining } from './specialTraining.js';
 
 /* ── Wire cross-module callbacks ── */
@@ -1081,7 +1081,7 @@ GENERATE_BTN.onclick = async () => {
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        const gasUrl = "https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec"; 
+        const gasUrl = "[https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec](https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec)"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;

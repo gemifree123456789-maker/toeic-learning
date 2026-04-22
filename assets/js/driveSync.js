@@ -2,17 +2,17 @@
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
-// 🌟 核心修復：直接引入 specialTraining 裡的資料庫樞紐，保證全球只有一個開門鑰匙！
+// 🌟 參數解釋：從 specialTraining 正確引入資料庫模組，避免 SyntaxError
 import { MistakesDB } from './specialTraining.js'; 
 
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 🌟 使用乾淨的純字串網址
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
+    // 👇👇👇 請貼上你的 GAS 部署新網址 👇👇👇
+    GAS_URL: '[https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec](https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec)',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
-    SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    SCOPES: '[https://www.googleapis.com/auth/userinfo.profile](https://www.googleapis.com/auth/userinfo.profile) [https://www.googleapis.com/auth/userinfo.email](https://www.googleapis.com/auth/userinfo.email)',
     tokenClient: null,
     accessToken: null,
     _pendingLoginResolve: null,
@@ -94,8 +94,7 @@ export const DriveSync = {
 
     async _fetchUserInfo() {
         try {
-            // 🌟 移除被污染的 Markdown 括號，恢復純淨網址
-            const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            const resp = await fetch('[https://www.googleapis.com/oauth2/v3/userinfo](https://www.googleapis.com/oauth2/v3/userinfo)', {
                 headers: { Authorization: `Bearer ${this.accessToken}` }
             });
             const info = await resp.json();
@@ -218,13 +217,22 @@ export const DriveSync = {
             userArea.classList.remove('hidden');
             const email = await DB.getSetting('cloud_user_email') || '';
             const name = await DB.getSetting('cloud_user_name') || email;
-            document.getElementById('cloudUserName').textContent = name;
-            document.getElementById('cloudUserEmail').textContent = email;
-            document.getElementById('cloudAvatar').textContent = (name || 'G')[0].toUpperCase();
-            const lastSync = await DB.getSetting('cloud_last_sync');
-            document.getElementById('cloudLastSync').textContent = lastSync
-                ? t('driveLastSync', { value: lastSync })
-                : t('driveNotSynced');
+            
+            const nameEl = document.getElementById('cloudUserName');
+            const emailEl = document.getElementById('cloudUserEmail');
+            const avatarEl = document.getElementById('cloudAvatar');
+            const syncEl = document.getElementById('cloudLastSync');
+            
+            if (nameEl) nameEl.textContent = name;
+            if (emailEl) emailEl.textContent = email;
+            if (avatarEl) avatarEl.textContent = (name || 'G')[0].toUpperCase();
+            
+            // 🌟 參數解釋：防呆過濾，如果 index.html 裡面沒有 cloudLastSync，就不要嘗試寫入，避免 TypeError 崩潰
+            if (syncEl) {
+                const lastSync = await DB.getSetting('cloud_last_sync');
+                syncEl.textContent = lastSync ? t('driveLastSync', { value: lastSync }) : t('driveNotSynced');
+            }
+
             actionsEl.innerHTML = `
                 <button class="cloud-action-btn primary" id="btnBackupNow" onclick="DriveSync.backupNow()">${t('cloudBackupNowBtn')}</button>
                 <button class="cloud-action-btn" id="btnRestore" onclick="DriveSync.restore()">${t('cloudRestoreBtn')}</button>
