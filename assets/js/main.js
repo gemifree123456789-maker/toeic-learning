@@ -1081,7 +1081,7 @@ GENERATE_BTN.onclick = async () => {
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        const gasUrl = "[https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec](https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec)"; 
+        const gasUrl = "https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;
