@@ -6,7 +6,7 @@ let activeSecretFilter = 'all'; // 🌟 新增：秘笈專用的篩選狀態
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('ToeicMistakesDB', 1);
+            const req = indexedDB.open('ToeicMistakesDB', 5);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) {
@@ -26,6 +26,16 @@ export const MistakesDB = {
             tx.onerror = () => reject(tx.error);
         });
     },
+    async saveBatch(questions) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('mistakes', 'readwrite');
+            const store = tx.objectStore('mistakes');
+            questions.forEach(q => store.put(q));
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
     async getAll() {
         const db = await this.open();
         return new Promise((resolve, reject) => {
@@ -40,6 +50,15 @@ export const MistakesDB = {
         return new Promise((resolve, reject) => {
             const tx = db.transaction('mistakes', 'readwrite');
             tx.objectStore('mistakes').delete(id);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+    async clearAll() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('mistakes', 'readwrite');
+            tx.objectStore('mistakes').clear();
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
@@ -88,17 +107,17 @@ function safeExtract(val) {
     try { return [JSON.stringify(val)]; } catch(e) { return []; }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+export function initSpecialTraining() {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
     const practiceModeBtns = document.querySelectorAll('.practice-mode-btn');
-    
     const specialConfigArea = document.getElementById('practicePanelSpecial');
     const btnStartSpecial = document.getElementById('btnStartSpecial');
     const btnCloseSpecial = document.getElementById('btnCloseSpecial');
 
     if (tabSpecial) {
         tabSpecial.addEventListener('click', (e) => {
+            e.preventDefault();
             practiceModeBtns.forEach(btn => btn.classList.remove('active'));
             tabSpecial.classList.add('active');
             practicePanels.forEach(panel => panel.classList.add('hidden'));
@@ -107,7 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (btnStartSpecial) {
-        btnStartSpecial.addEventListener('click', async () => {
+        btnStartSpecial.addEventListener('click', async (e) => {
+            e.preventDefault();
             const checkedBoxes = Array.from(specialConfigArea.querySelectorAll('input[type="checkbox"]:checked'));
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
@@ -120,8 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 await startTraining(topics, difficulty);
-            } catch (e) {
-                alert('生成失敗，請重試：' + e.message);
+            } catch (err) {
+                alert('生成失敗，請重試：' + err.message);
             } finally {
                 btnStartSpecial.disabled = false;
                 btnStartSpecial.innerHTML = '🚀 開始 10 題專項特訓';
@@ -130,7 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (btnCloseSpecial) {
-        btnCloseSpecial.addEventListener('click', () => {
+        btnCloseSpecial.addEventListener('click', (e) => {
+            e.preventDefault();
             if (confirm('確定要退出特訓嗎？目前進度將不會保存。')) {
                 document.getElementById('specialQuizOverlay').classList.add('hidden');
             }
@@ -141,26 +162,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnHistoryMistakes = document.querySelector('[data-history-subtab="mistakes"]');
     const panelHistoryGeneral = document.getElementById('historyMainPanel');
     const panelHistoryMistakes = document.getElementById('historyMistakesPanel');
-    const tabHistoryBtn = document.querySelector('button[data-tab="history"]'); 
 
     function switchHistorySubtab(tab) {
         if(tab === 'general') {
-            btnHistoryGeneral.classList.add('active');
-            btnHistoryMistakes.classList.remove('active');
-            panelHistoryGeneral.classList.remove('hidden');
-            panelHistoryMistakes.classList.add('hidden');
+            if(btnHistoryGeneral) btnHistoryGeneral.classList.add('active');
+            if(btnHistoryMistakes) btnHistoryMistakes.classList.remove('active');
+            if(panelHistoryGeneral) panelHistoryGeneral.classList.remove('hidden');
+            if(panelHistoryMistakes) panelHistoryMistakes.classList.add('hidden');
         } else {
-            btnHistoryMistakes.classList.add('active');
-            btnHistoryGeneral.classList.remove('active');
-            panelHistoryMistakes.classList.remove('hidden');
-            panelHistoryGeneral.classList.add('hidden');
+            if(btnHistoryMistakes) btnHistoryMistakes.classList.add('active');
+            if(btnHistoryGeneral) btnHistoryGeneral.classList.remove('active');
+            if(panelHistoryMistakes) panelHistoryMistakes.classList.remove('hidden');
+            if(panelHistoryGeneral) panelHistoryGeneral.classList.add('hidden');
             renderMistakesList(); 
         }
     }
 
-    if (btnHistoryGeneral) btnHistoryGeneral.onclick = () => switchHistorySubtab('general');
-    if (btnHistoryMistakes) btnHistoryMistakes.onclick = () => switchHistorySubtab('mistakes');
+    if (btnHistoryGeneral) btnHistoryGeneral.addEventListener('click', (e) => { e.preventDefault(); switchHistorySubtab('general'); });
+    if (btnHistoryMistakes) btnHistoryMistakes.addEventListener('click', (e) => { e.preventDefault(); switchHistorySubtab('mistakes'); });
 
+    const tabHistoryBtn = document.querySelector('button[data-tab="history"]');
     if (tabHistoryBtn) {
         tabHistoryBtn.addEventListener('click', () => {
             if (panelHistoryMistakes && !panelHistoryMistakes.classList.contains('hidden')) {
@@ -171,7 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const filterBtns = document.querySelectorAll('.mistake-filter-btn');
     filterBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
             const topic = btn.dataset.topic;
             if (topic === 'all') {
                 activeMistakeFilters.clear();
@@ -183,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
             filterBtns.forEach(b => {
                 const t = b.dataset.topic;
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
-                
                 if (isActive) {
                     b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
@@ -196,7 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
-        btnPrintPDF.addEventListener('click', () => {
+        btnPrintPDF.addEventListener('click', (e) => {
+            e.preventDefault();
             document.body.classList.add('print-mistakes-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-mistakes-mode'), 500);
@@ -208,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const contentEl = document.getElementById('grammarSecretsContent');
         if (!contentEl) return;
         
-        const allMistakes = await MistakesDB.getAll();
+        let allMistakes = await MistakesDB.getAll();
         if (!allMistakes || allMistakes.length === 0) {
             contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！</div>';
             return;
@@ -271,21 +293,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 打開秘笈按鈕
     const btnGenerateSecrets = document.getElementById('btnGenerateSecrets');
     const grammarSecretsModal = document.getElementById('grammarSecretsModal');
     const btnCloseSecrets = document.getElementById('btnCloseSecrets');
 
     if (btnGenerateSecrets) {
-        btnGenerateSecrets.onclick = async (e) => {
+        btnGenerateSecrets.addEventListener('click', async (e) => {
             e.preventDefault();
             if (!grammarSecretsModal) return;
             
             // 每次打開預設顯示「全部」
             activeSecretFilter = 'all';
             document.querySelectorAll('.secret-filter-btn').forEach(b => {
-                const isActive = b.dataset.topic === 'all';
-                if (isActive) {
+                if (b.dataset.topic === 'all') {
                     b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
                     b.style.background = '#fff'; b.style.borderColor = '#e5e7eb'; b.style.color = '#4b5563'; b.style.fontWeight = '500';
@@ -296,51 +316,50 @@ document.addEventListener('DOMContentLoaded', () => {
             
             grammarSecretsModal.style.display = 'flex';
             grammarSecretsModal.classList.remove('hidden');
-        };
+        });
     }
 
     if (btnCloseSecrets) {
-        btnCloseSecrets.onclick = (e) => {
+        btnCloseSecrets.addEventListener('click', (e) => {
             e.preventDefault();
             if(grammarSecretsModal) {
                 grammarSecretsModal.style.display = ''; 
                 grammarSecretsModal.classList.add('hidden');
             }
-        };
+        });
     }
 
     // 🌟 新增：秘笈專用的標籤切換監聽器
     const secretFilterBtns = document.querySelectorAll('.secret-filter-btn');
     secretFilterBtns.forEach(btn => {
-        btn.onclick = (e) => {
+        btn.addEventListener('click', (e) => {
             e.preventDefault();
             activeSecretFilter = btn.dataset.topic;
             
             secretFilterBtns.forEach(b => {
-                const isActive = b.dataset.topic === activeSecretFilter;
-                if (isActive) {
+                if (b.dataset.topic === activeSecretFilter) {
                     b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
                     b.style.background = '#fff'; b.style.borderColor = '#e5e7eb'; b.style.color = '#4b5563'; b.style.fontWeight = '500';
                 }
             });
-            renderSecrets(); // 點擊後重新渲染內容
-        };
+            renderSecrets(); 
+        });
     });
 
     // 🌟 新增：秘笈專用的列印按鈕
     const btnRealPrintSecrets = document.getElementById('btnRealPrintSecrets');
     if (btnRealPrintSecrets) {
-        btnRealPrintSecrets.onclick = (e) => {
+        btnRealPrintSecrets.addEventListener('click', (e) => {
             e.preventDefault();
             document.body.classList.add('print-secrets-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-secrets-mode'), 500);
-        };
+        });
     }
 }
 
-// 🌟 修正列印 CSS：確保列印時把上方篩選區和列印按鈕隱藏，版面更乾淨
+// 🌟 修正列印 CSS：隱藏彈窗內的過濾器和列印按鈕，讓列印版面更乾淨
 const printStyle = document.createElement('style');
 printStyle.textContent = `
     @media print {
@@ -356,7 +375,6 @@ printStyle.textContent = `
         body.print-secrets-mode #grammarSecretsModal { position: absolute; left: 0; top: 0; width: 100%; background: white !important; }
         body.print-secrets-mode .srs-close-btn, body.print-secrets-mode #btnPrintSecrets { display: none !important; }
         
-        /* 隱藏彈窗內的按鈕和篩選器 */
         body.print-secrets-mode #btnRealPrintSecrets, body.print-secrets-mode #secretsFilterArea { display: none !important; }
         body.print-secrets-mode #grammarSecretsContent { padding: 0 !important; }
         body.print-secrets-mode .srs-content { box-shadow: none !important; overflow: visible !important; max-height: none !important; width: 100% !important; max-width: none !important; }
