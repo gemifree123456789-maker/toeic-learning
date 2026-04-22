@@ -2,17 +2,15 @@
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
-// 🌟 參數解釋：從 specialTraining 正確引入資料庫模組，避免 SyntaxError
 import { MistakesDB } from './specialTraining.js'; 
 
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    // 👇👇👇 請貼上你的 GAS 部署新網址 👇👇👇
-    GAS_URL: '[https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec](https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec)',
+    GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
-    SCOPES: '[https://www.googleapis.com/auth/userinfo.profile](https://www.googleapis.com/auth/userinfo.profile) [https://www.googleapis.com/auth/userinfo.email](https://www.googleapis.com/auth/userinfo.email)',
+    SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     tokenClient: null,
     accessToken: null,
     _pendingLoginResolve: null,
@@ -94,7 +92,7 @@ export const DriveSync = {
 
     async _fetchUserInfo() {
         try {
-            const resp = await fetch('[https://www.googleapis.com/oauth2/v3/userinfo](https://www.googleapis.com/oauth2/v3/userinfo)', {
+            const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${this.accessToken}` }
             });
             const info = await resp.json();
@@ -227,7 +225,6 @@ export const DriveSync = {
             if (emailEl) emailEl.textContent = email;
             if (avatarEl) avatarEl.textContent = (name || 'G')[0].toUpperCase();
             
-            // 🌟 參數解釋：防呆過濾，如果 index.html 裡面沒有 cloudLastSync，就不要嘗試寫入，避免 TypeError 崩潰
             if (syncEl) {
                 const lastSync = await DB.getSetting('cloud_last_sync');
                 syncEl.textContent = lastSync ? t('driveLastSync', { value: lastSync }) : t('driveNotSynced');

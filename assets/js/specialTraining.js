@@ -3,7 +3,6 @@ import { state } from './state.js';
 let activeMistakeFilters = new Set();
 
 export const MistakesDB = {
-    // 🌟 參數解釋：拿掉數字版本號，讓瀏覽器自動開啟最新版本，徹底消滅 VersionError
     async open() {
         return new Promise((resolve, reject) => {
             const req = indexedDB.open('ToeicMistakesDB');
@@ -44,7 +43,6 @@ export const MistakesDB = {
             tx.onerror = () => reject(tx.error);
         });
     },
-    // 🌟 參數解釋：新增 clearAll，提供給雲端還原時一鍵清空使用
     async clearAll() {
         const db = await this.open();
         return new Promise((resolve, reject) => {
@@ -87,42 +85,30 @@ function buildExplanationHtml(explanation) {
     return html;
 }
 
-// 🌟 參數解釋：強制暴力提取函數，把字串或陣列通通洗乾淨提取出來
-function safeExtract(val) {
-    if (!val) return [];
-    if (typeof val === 'string') {
-        const s = val.trim();
-        if (s && s !== '[]' && s !== '{}' && s !== 'null') return [s];
-        return [];
-    }
-    if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
-    try { return [JSON.stringify(val)]; } catch(e) { return []; }
-}
-
 export function initSpecialTraining() {
     const tabSpecial = document.getElementById('tabSpecial');
     const practicePanels = document.querySelectorAll('.practice-mode-panel');
     const practiceModeBtns = document.querySelectorAll('.practice-mode-btn');
+    
     const specialConfigArea = document.getElementById('practicePanelSpecial');
     const btnStartSpecial = document.getElementById('btnStartSpecial');
     const btnCloseSpecial = document.getElementById('btnCloseSpecial');
 
     if (tabSpecial) {
-        tabSpecial.onclick = (e) => {
-            e.preventDefault();
+        tabSpecial.addEventListener('click', (e) => {
             practiceModeBtns.forEach(btn => btn.classList.remove('active'));
             tabSpecial.classList.add('active');
             practicePanels.forEach(panel => panel.classList.add('hidden'));
             if(specialConfigArea) specialConfigArea.classList.remove('hidden');
-        };
+        });
     }
 
     if (btnStartSpecial) {
-        btnStartSpecial.onclick = async (e) => {
-            e.preventDefault();
+        btnStartSpecial.addEventListener('click', async () => {
             const checkedBoxes = Array.from(specialConfigArea.querySelectorAll('input[type="checkbox"]:checked'));
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
+
             const difficultySelect = document.getElementById('specialDifficultySelect');
             const difficulty = difficultySelect ? difficultySelect.value : '國中程度 (使用最簡單的單字)';
 
@@ -131,48 +117,47 @@ export function initSpecialTraining() {
 
             try {
                 await startTraining(topics, difficulty);
-            } catch (err) {
-                alert('生成失敗，請重試：' + err.message);
+            } catch (e) {
+                alert('生成失敗，請重試：' + e.message);
             } finally {
                 btnStartSpecial.disabled = false;
                 btnStartSpecial.innerHTML = '🚀 開始 10 題專項特訓';
             }
-        };
+        });
     }
 
     if (btnCloseSpecial) {
-        btnCloseSpecial.onclick = (e) => {
-            e.preventDefault();
+        btnCloseSpecial.addEventListener('click', () => {
             if (confirm('確定要退出特訓嗎？目前進度將不會保存。')) {
                 document.getElementById('specialQuizOverlay').classList.add('hidden');
             }
-        };
+        });
     }
 
     const btnHistoryGeneral = document.querySelector('[data-history-subtab="general"]');
     const btnHistoryMistakes = document.querySelector('[data-history-subtab="mistakes"]');
     const panelHistoryGeneral = document.getElementById('historyMainPanel');
     const panelHistoryMistakes = document.getElementById('historyMistakesPanel');
+    const tabHistoryBtn = document.querySelector('button[data-tab="history"]'); 
 
     function switchHistorySubtab(tab) {
         if(tab === 'general') {
-            if(btnHistoryGeneral) btnHistoryGeneral.classList.add('active');
-            if(btnHistoryMistakes) btnHistoryMistakes.classList.remove('active');
-            if(panelHistoryGeneral) panelHistoryGeneral.classList.remove('hidden');
-            if(panelHistoryMistakes) panelHistoryMistakes.classList.add('hidden');
+            btnHistoryGeneral.classList.add('active');
+            btnHistoryMistakes.classList.remove('active');
+            panelHistoryGeneral.classList.remove('hidden');
+            panelHistoryMistakes.classList.add('hidden');
         } else {
-            if(btnHistoryMistakes) btnHistoryMistakes.classList.add('active');
-            if(btnHistoryGeneral) btnHistoryGeneral.classList.remove('active');
-            if(panelHistoryMistakes) panelHistoryMistakes.classList.remove('hidden');
-            if(panelHistoryGeneral) panelHistoryGeneral.classList.add('hidden');
+            btnHistoryMistakes.classList.add('active');
+            btnHistoryGeneral.classList.remove('active');
+            panelHistoryMistakes.classList.remove('hidden');
+            panelHistoryGeneral.classList.add('hidden');
             renderMistakesList(); 
         }
     }
 
-    if (btnHistoryGeneral) btnHistoryGeneral.onclick = (e) => { e.preventDefault(); switchHistorySubtab('general'); };
-    if (btnHistoryMistakes) btnHistoryMistakes.onclick = (e) => { e.preventDefault(); switchHistorySubtab('mistakes'); };
+    if (btnHistoryGeneral) btnHistoryGeneral.onclick = () => switchHistorySubtab('general');
+    if (btnHistoryMistakes) btnHistoryMistakes.onclick = () => switchHistorySubtab('mistakes');
 
-    const tabHistoryBtn = document.querySelector('button[data-tab="history"]');
     if (tabHistoryBtn) {
         tabHistoryBtn.addEventListener('click', () => {
             if (panelHistoryMistakes && !panelHistoryMistakes.classList.contains('hidden')) {
@@ -181,12 +166,9 @@ export function initSpecialTraining() {
         });
     }
 
-    const mistakesFilterArea = document.getElementById('mistakesFilterArea');
-    if (mistakesFilterArea) {
-        mistakesFilterArea.onclick = (e) => {
-            const btn = e.target.closest('.mistake-filter-btn');
-            if (!btn) return;
-            e.preventDefault();
+    const filterBtns = document.querySelectorAll('.mistake-filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
             const topic = btn.dataset.topic;
             if (topic === 'all') {
                 activeMistakeFilters.clear();
@@ -195,9 +177,10 @@ export function initSpecialTraining() {
                 else activeMistakeFilters.add(topic);
             }
 
-            document.querySelectorAll('.mistake-filter-btn').forEach(b => {
+            filterBtns.forEach(b => {
                 const t = b.dataset.topic;
                 const isActive = (t === 'all' && activeMistakeFilters.size === 0) || activeMistakeFilters.has(t);
+                
                 if (isActive) {
                     b.style.background = '#e0e7ff'; b.style.borderColor = '#818cf8'; b.style.color = '#4338ca'; b.style.fontWeight = 'bold';
                 } else {
@@ -205,118 +188,117 @@ export function initSpecialTraining() {
                 }
             });
             renderMistakesList();
-        };
-    }
+        });
+    });
 
     const btnPrintPDF = document.getElementById('btnPrintPDF');
     if (btnPrintPDF) {
-        btnPrintPDF.onclick = (e) => {
-            e.preventDefault();
+        btnPrintPDF.addEventListener('click', () => {
             document.body.classList.add('print-mistakes-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-mistakes-mode'), 500);
-        };
+        });
     }
 
     const btnPrintSecrets = document.getElementById('btnPrintSecrets');
     if (btnPrintSecrets) {
-        btnPrintSecrets.onclick = (e) => {
-            e.preventDefault();
+        btnPrintSecrets.addEventListener('click', () => {
             document.body.classList.add('print-secrets-mode');
             window.print();
             setTimeout(() => document.body.classList.remove('print-secrets-mode'), 500);
-        };
+        });
     }
 
-    // 🌟 參數解釋：最嚴密的萃取引擎，保證 AI 的亂碼字串都能洗出秘笈
     const btnGenerateSecrets = document.getElementById('btnGenerateSecrets');
+    const grammarSecretsModal = document.getElementById('grammarSecretsModal');
+    const btnCloseSecrets = document.getElementById('btnCloseSecrets');
+
     if (btnGenerateSecrets) {
-        btnGenerateSecrets.onclick = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        btnGenerateSecrets.addEventListener('click', async () => {
+            const allMistakes = await MistakesDB.getAll();
+            if (allMistakes.length === 0) return alert('您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！');
 
-            try {
-                const grammarSecretsModal = document.getElementById('grammarSecretsModal');
-                if (!grammarSecretsModal) return;
+            const secretsByTopic = {};
+            let hasNewFormat = false;
 
-                let allMistakes = await MistakesDB.getAll();
-                if (!allMistakes || allMistakes.length === 0) {
-                    return alert('您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！');
-                }
-
-                const secretsByTopic = {};
-                let hasContent = false;
-
-                allMistakes.forEach(q => {
-                    let exp = q.explanation;
-                    if (typeof exp === 'string') {
-                        try { exp = JSON.parse(exp); } catch(err) {}
-                    }
-                    if (!exp || typeof exp !== 'object') return; 
-
-                    const topic = normalizeTopic(q.topic);
-                    if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
-                    
-                    const extractedSkills = safeExtract(exp.skills);
-                    const extractedWarnings = safeExtract(exp.warnings);
-                    
-                    extractedSkills.forEach(s => { secretsByTopic[topic].skills.add(s); hasContent = true; });
-                    extractedWarnings.forEach(w => { secretsByTopic[topic].warnings.add(w); hasContent = true; });
-                });
-
-                const contentEl = document.getElementById('grammarSecretsContent');
-                if (contentEl) {
-                    contentEl.innerHTML = '';
-                    if (!hasContent) {
-                        contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中暫無可供整理的技巧與陷阱。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
-                    } else {
-                        for (const [topic, data] of Object.entries(secretsByTopic)) {
-                            if (data.skills.size === 0 && data.warnings.size === 0) continue;
-                            
-                            let topicHtml = `
-                                <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                                    <div style="background: #eef2ff; color: #3730a3; padding: 12px 20px; font-weight: 800; font-size: 16px; border-bottom: 2px solid #c7d2fe; display: flex; align-items: center; gap: 8px;">
-                                        🏷️ ${topic}
-                                    </div>
-                                    <div style="padding: 20px;">
-                            `;
-
-                            if (data.skills.size > 0) {
-                                topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
-                                data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
-                                topicHtml += `</ol></div>`;
-                            }
-
-                            if (data.warnings.size > 0) {
-                                topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
-                                data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
-                                topicHtml += `</ol></div>`;
-                            }
-
-                            topicHtml += `</div></div>`;
-                            contentEl.innerHTML += topicHtml;
-                        }
-                    }
+            allMistakes.forEach(q => {
+                let exp = q.explanation;
+                
+                if (typeof exp === 'string') {
+                    try { exp = JSON.parse(exp); } catch(err) {}
                 }
                 
-                grammarSecretsModal.style.display = 'flex';
-                grammarSecretsModal.classList.remove('hidden');
-            } catch (error) {
-                alert('產生秘笈時發生錯誤：' + error.message);
+                if (!exp || typeof exp !== 'object') return; 
+                
+                const topic = normalizeTopic(q.topic);
+                if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
+                
+                if (exp.skills) {
+                    hasNewFormat = true;
+                    const sStr = typeof exp.skills === 'string' ? exp.skills : JSON.stringify(exp.skills);
+                    if (sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}') {
+                        secretsByTopic[topic].skills.add(sStr.trim());
+                    }
+                }
+                if (exp.warnings) {
+                    hasNewFormat = true;
+                    const wStr = typeof exp.warnings === 'string' ? exp.warnings : JSON.stringify(exp.warnings);
+                    if (wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}') {
+                        secretsByTopic[topic].warnings.add(wStr.trim());
+                    }
+                }
+            });
+
+            const contentEl = document.getElementById('grammarSecretsContent');
+            contentEl.innerHTML = '';
+
+            if (!hasNewFormat) {
+                contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中的題目皆為無技巧解析格式。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
+            } else {
+                let addedAny = false;
+                for (const [topic, data] of Object.entries(secretsByTopic)) {
+                    if (data.skills.size === 0 && data.warnings.size === 0) continue;
+                    addedAny = true;
+                    
+                    let topicHtml = `
+                        <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                            <div style="background: #eef2ff; color: #3730a3; padding: 12px 20px; font-weight: 800; font-size: 16px; border-bottom: 2px solid #c7d2fe; display: flex; align-items: center; gap: 8px;">
+                                🏷️ ${topic}
+                            </div>
+                            <div style="padding: 20px;">
+                    `;
+
+                    if (data.skills.size > 0) {
+                        topicHtml += `<div style="margin-bottom: 16px;"><h4 style="color: #166534; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>🎯</span> 核心答題技巧</h4><ol style="margin: 0; padding-left: 24px; color: #15803d; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                        data.skills.forEach(skill => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${skill}</li>`; });
+                        topicHtml += `</ol></div>`;
+                    }
+
+                    if (data.warnings.size > 0) {
+                        topicHtml += `<div><h4 style="color: #854d0e; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 6px;"><span>⚠️</span> 易混淆陷阱與注意</h4><ol style="margin: 0; padding-left: 24px; color: #a16207; font-size: 14.5px; line-height: 1.7; font-weight: 500; list-style-type: decimal;">`;
+                        data.warnings.forEach(warning => { topicHtml += `<li style="margin-bottom: 8px; padding-left: 4px;">${warning}</li>`; });
+                        topicHtml += `</ol></div>`;
+                    }
+
+                    topicHtml += `</div></div>`;
+                    contentEl.innerHTML += topicHtml;
+                }
+                
+                if (!addedAny) {
+                    contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中暫無可供整理的技巧與陷阱。</div>';
+                }
             }
-        };
+            
+            grammarSecretsModal.style.display = 'flex';
+            grammarSecretsModal.classList.remove('hidden');
+        });
     }
 
-    const btnCloseSecrets = document.getElementById('btnCloseSecrets');
     if (btnCloseSecrets) {
-        btnCloseSecrets.onclick = (e) => {
-            e.preventDefault();
-            const grammarSecretsModal = document.getElementById('grammarSecretsModal');
-            if(grammarSecretsModal) {
-                grammarSecretsModal.style.display = ''; 
-                grammarSecretsModal.classList.add('hidden');
-            }
-        };
+        btnCloseSecrets.addEventListener('click', () => {
+            grammarSecretsModal.style.display = '';
+            grammarSecretsModal.classList.add('hidden');
+        });
     }
 }
 
@@ -418,11 +400,13 @@ async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         if (!res.ok) return 'models/gemini-1.5-flash';
+        
         const data = await res.json();
         if (data.models) {
             const validModels = data.models
                 .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
                 .map(m => m.name); 
+            
             const preferred = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro", "models/gemini-pro"];
             for (const p of preferred) {
                 if (validModels.includes(p)) return p;
