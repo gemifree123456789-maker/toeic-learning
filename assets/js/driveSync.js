@@ -2,12 +2,12 @@
 
 import { DB } from './db.js';
 import { t } from './i18n.js';
-import { MistakesDB } from './specialTraining.js'; 
+import { MistakesDB, SecretsDB } from './specialTraining.js'; 
 
 let _callbacks = { renderHistory: null, loadLastSession: null, renderVocabTab: null };
 
 export const DriveSync = {
-    GAS_URL: 'https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec',
+    GAS_URL: 'https://script.google.com/macros/s/AKfycby7PilaDew9YC-D8OPGGn2PQbUa4J5LWDxWzEG7VhZGYSLmJ-oLJoFDkCbP4BiUddJf/exec',
 
     CLIENT_ID: '1033261498121-dp49gq696fh65rg0o6m32j1gine1ac4l.apps.googleusercontent.com',
     SCOPES: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -112,6 +112,7 @@ export const DriveSync = {
         try {
             const vocabWords = await DB.getSavedWords();
             const mistakes = await MistakesDB.getAll(); 
+            const secrets = await SecretsDB.getAll(); 
             const dailyGoals = await DB.getDailyGoals();
             const dailyProgress = await DB.getDailyProgress();
             const generalHistory = await DB.getHistory();
@@ -133,6 +134,7 @@ export const DriveSync = {
                 action: "backup",
                 vocab: vocabWords,
                 mistakes: mistakes,
+                secrets: secrets, 
                 dailyTasks: { goals: dailyGoals, progress: dailyProgress },
                 history: safeHistory
             };
@@ -148,7 +150,7 @@ export const DriveSync = {
                 const now = new Date().toLocaleString();
                 await DB.setSetting('cloud_last_sync', now);
                 this.updateUI();
-                alert(`✅ 雲端備份成功！\n已上傳：\n單字 ${vocabWords.length} 個\n錯題 ${mistakes.length} 題\n紀錄 ${result.historySaved || safeHistory.length} 筆。`);
+                alert(`✅ 雲端備份成功！\n已上傳：\n單字 ${vocabWords.length} 個\n錯題 ${mistakes.length} 題\n秘笈 ${secrets.length} 條\n紀錄 ${safeHistory.length} 筆。`);
             } else {
                 throw new Error('伺服器回傳錯誤狀態');
             }
@@ -171,7 +173,7 @@ export const DriveSync = {
             const res = await fetch(this.GAS_URL + '?action=sync_all');
             const data = await res.json();
 
-            let vCount = 0, mCount = 0, hCount = 0;
+            let vCount = 0, mCount = 0, sCount = 0, hCount = 0;
 
             if (data.vocab && data.vocab.length > 0) {
                 const existing = await DB.getSavedWords();
@@ -181,7 +183,14 @@ export const DriveSync = {
 
             if (data.mistakes && data.mistakes.length > 0) {
                 await MistakesDB.clearAll(); 
-                for (const m of data.mistakes) { await MistakesDB.save(m); mCount++; }
+                await MistakesDB.saveBatch(data.mistakes);
+                mCount = data.mistakes.length;
+            }
+
+            if (data.secrets && data.secrets.length > 0) {
+                await SecretsDB.clearAll(); 
+                await SecretsDB.saveBatch(data.secrets);
+                sCount = data.secrets.length;
             }
 
             if (data.dailyTasks) {
@@ -194,7 +203,7 @@ export const DriveSync = {
                 for (const h of data.history) { await DB.addHistory(h); hCount++; }
             }
 
-            alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字、${mCount} 題錯題與 ${hCount} 筆學習紀錄。\n系統即將重新整理。`);
+            alert(`✅ 雲端還原成功！\n成功載入 ${vCount} 個單字、${mCount} 題錯題、${sCount} 條秘笈與 ${hCount} 筆學習紀錄。\n系統即將重新整理。`);
             location.reload(); 
         } catch (e) {
             alert('還原失敗，請檢查網路或 API 狀態：' + e.message);

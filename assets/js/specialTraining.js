@@ -1,7 +1,7 @@
 import { state } from './state.js';
 
 let activeMistakeFilters = new Set();
-let activeSecretFilter = 'all'; // 🌟 新增：秘笈專用的篩選狀態
+let activeSecretFilter = 'all'; 
 
 export const MistakesDB = {
     async open() {
@@ -9,9 +9,7 @@ export const MistakesDB = {
             const req = indexedDB.open('ToeicMistakesDB', 5);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                if (!db.objectStoreNames.contains('mistakes')) {
-                    db.createObjectStore('mistakes', { keyPath: 'id' });
-                }
+                if (!db.objectStoreNames.contains('mistakes')) db.createObjectStore('mistakes', { keyPath: 'id' });
             };
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
@@ -59,6 +57,58 @@ export const MistakesDB = {
         return new Promise((resolve, reject) => {
             const tx = db.transaction('mistakes', 'readwrite');
             tx.objectStore('mistakes').clear();
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+};
+
+// 🌟 核心升級：建立全新的秘笈金庫 (SecretsDB)，專門吸收所有題目的養分
+export const SecretsDB = {
+    async open() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open('ToeicSecretsDB', 1);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('secrets')) db.createObjectStore('secrets', { keyPath: 'id' });
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    },
+    async save(question) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('secrets', 'readwrite');
+            tx.objectStore('secrets').put(question);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+    async saveBatch(questions) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('secrets', 'readwrite');
+            const store = tx.objectStore('secrets');
+            questions.forEach(q => store.put(q));
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+    async getAll() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('secrets', 'readonly');
+            const req = tx.objectStore('secrets').getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    },
+    async clearAll() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('secrets', 'readwrite');
+            tx.objectStore('secrets').clear();
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
@@ -225,21 +275,21 @@ export function initSpecialTraining() {
         });
     }
 
-    // 🌟 核心升級：將秘笈渲染邏輯獨立出來，方便篩選時重複呼叫
+    // 🌟 核心升級：文法秘笈改從 SecretsDB 讀取，不再受限於錯題本
     async function renderSecrets() {
         const contentEl = document.getElementById('grammarSecretsContent');
         if (!contentEl) return;
         
-        let allMistakes = await MistakesDB.getAll();
-        if (!allMistakes || allMistakes.length === 0) {
-            contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">您的錯題本目前是空的，快去挑戰特訓收集文法精華吧！</div>';
+        let allSecrets = await SecretsDB.getAll();
+        if (!allSecrets || allSecrets.length === 0) {
+            contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">您還沒有做過專項特訓，快去挑戰收集文法精華吧！</div>';
             return;
         }
 
         const secretsByTopic = {};
         let hasContent = false;
 
-        allMistakes.forEach(q => {
+        allSecrets.forEach(q => {
             let exp = q.explanation;
             if (typeof exp === 'string') {
                 try { exp = JSON.parse(exp); } catch(err) {}
@@ -248,7 +298,6 @@ export function initSpecialTraining() {
 
             const topic = normalizeTopic(q.topic);
             
-            // 💡 根據 activeSecretFilter 過濾要顯示的秘笈
             if (activeSecretFilter !== 'all' && topic !== activeSecretFilter) return;
 
             if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
@@ -302,7 +351,6 @@ export function initSpecialTraining() {
             e.preventDefault();
             if (!grammarSecretsModal) return;
             
-            // 每次打開預設顯示「全部」
             activeSecretFilter = 'all';
             document.querySelectorAll('.secret-filter-btn').forEach(b => {
                 if (b.dataset.topic === 'all') {
@@ -329,7 +377,6 @@ export function initSpecialTraining() {
         });
     }
 
-    // 🌟 新增：秘笈專用的標籤切換監聽器
     const secretFilterBtns = document.querySelectorAll('.secret-filter-btn');
     secretFilterBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -347,7 +394,6 @@ export function initSpecialTraining() {
         });
     });
 
-    // 🌟 新增：秘笈專用的列印按鈕
     const btnRealPrintSecrets = document.getElementById('btnRealPrintSecrets');
     if (btnRealPrintSecrets) {
         btnRealPrintSecrets.addEventListener('click', (e) => {
@@ -359,7 +405,6 @@ export function initSpecialTraining() {
     }
 }
 
-// 🌟 修正列印 CSS：隱藏彈窗內的過濾器和列印按鈕，讓列印版面更乾淨
 const printStyle = document.createElement('style');
 printStyle.textContent = `
     @media print {
@@ -619,6 +664,10 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     `;
     oArea.appendChild(explanationDiv);
 
+    // 🌟 核心升級：不管答對答錯，都將這題存入專屬文法秘笈金庫 (SecretsDB)
+    questionObj.savedAt = Date.now();
+    SecretsDB.save(questionObj).catch(e => console.log('SecretsDB save error:', e));
+
     const btnPinMistake = document.getElementById('btnPinMistake');
     let isPinned = false;
     btnPinMistake.onclick = async () => {
@@ -630,7 +679,6 @@ function handleAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         btnPinMistake.style.color = isPinned ? '#854d0e' : '#4b5563';
         
         if (isPinned) {
-            questionObj.savedAt = Date.now();
             await MistakesDB.save(questionObj);
         }
     };
@@ -668,7 +716,7 @@ async function showResults() {
         <div style="text-align: center; padding: 32px 0;">
             <div style="font-size: 48px; margin-bottom: 16px;">🎉</div>
             <h2 style="font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 8px;">特訓完成！</h2>
-            <p style="color: #6b7280; line-height: 1.5;">所有的錯題與您手動 📌 釘選的題目，<br>都已安全收錄在您的專屬錯題本中。</p>
+            <p style="color: #6b7280; line-height: 1.5;">您做過的題目精華已全數收錄至【專屬文法秘笈】<br>答錯與釘選的題目已收錄至【特訓錯題本】</p>
         </div>
     `;
     
