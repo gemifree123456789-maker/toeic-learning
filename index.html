@@ -374,14 +374,30 @@
     <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
     
     <div class="srs-overlay hidden" id="grammarSecretsModal">
-        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc;">
-            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 800px;">
+            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
                 <h3 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 700; display: flex; align-items: center; gap: 8px;">📘 專屬文法秘笈</h3>
-                <button class="srs-close-btn" id="btnCloseSecrets">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
+                
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button id="btnRealPrintSecrets" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">📄 列印秘笈</button>
+                    <button class="srs-close-btn" id="btnCloseSecrets">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                </div>
             </div>
-            <div id="grammarSecretsContent" style="padding: 20px 10px;"></div>
+
+            <div id="secretsFilterArea" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed #cbd5e1;">
+                <button class="secret-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
+                <button class="secret-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
+                <button class="secret-filter-btn" data-topic="詞性判斷" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">詞性判斷</button>
+                <button class="secret-filter-btn" data-topic="介系詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">介系詞</button>
+                <button class="secret-filter-btn" data-topic="代名詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">代名詞</button>
+                <button class="secret-filter-btn" data-topic="單複數" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">單複數</button>
+                <button class="secret-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
+                <button class="secret-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
+            </div>
+
+            <div id="grammarSecretsContent" style="padding: 0 5px 20px 5px;"></div>
         </div>
     </div>
 
