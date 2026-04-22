@@ -16,8 +16,8 @@ import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
 
-// 🌟 核心修復：強制從 main.js 引入特訓模組，讓它跟著 main.js 一起更新，徹底擊碎 Safari 的過期快取！
-import './specialTraining.js';
+// 🌟 核心修復：匯入你的初始化函數
+import { initSpecialTraining } from './specialTraining.js';
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
@@ -1038,6 +1038,9 @@ GENERATE_BTN.onclick = async () => {
     try {
         await DB.init();
         
+        // 🌟 呼叫完美回歸的初始化器
+        initSpecialTraining();
+
         await renderDailyDashboard();
         window.addEventListener('daily-progress-updated', renderDailyDashboard);
         window.DB = DB;
@@ -1078,7 +1081,7 @@ GENERATE_BTN.onclick = async () => {
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        const gasUrl = "https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec"; 
+        const gasUrl = "[https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec](https://script.google.com/macros/s/AKfycbyphrZPFIgVmEKmUMWhoZ2fbpHBuwRl00izZ6U4TnUoZulOpa27LBosZA8EYF8VvJkm/exec)"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;
