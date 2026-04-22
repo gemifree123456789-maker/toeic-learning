@@ -372,6 +372,19 @@
     <div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
     <div class="srs-overlay hidden" id="srsOverlay"><div class="srs-content"><div class="srs-top-bar"><button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="srsProgressText">1 / 9</span><span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span></div><div class="srs-question-area" id="srsQuestionArea"></div><div class="srs-options-area" id="srsOptionsArea"></div></div></div>
     <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
+    
+    <div class="srs-overlay hidden" id="grammarSecretsModal">
+        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc;">
+            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                <h3 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 700; display: flex; align-items: center; gap: 8px;">📘 專屬文法秘笈</h3>
+                <button class="srs-close-btn" id="btnCloseSecrets">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            <div id="grammarSecretsContent" style="padding: 20px 10px;"></div>
+        </div>
+    </div>
+
     <audio id="mainAudio"></audio> 
 </body>
 </html>

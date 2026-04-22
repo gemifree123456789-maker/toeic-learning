@@ -5,7 +5,7 @@ let activeMistakeFilters = new Set();
 export const MistakesDB = {
     async open() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('ToeicMistakesDB');
+            const req = indexedDB.open('ToeicMistakesDB', 1);
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains('mistakes')) {
@@ -39,15 +39,6 @@ export const MistakesDB = {
         return new Promise((resolve, reject) => {
             const tx = db.transaction('mistakes', 'readwrite');
             tx.objectStore('mistakes').delete(id);
-            tx.oncomplete = () => resolve(true);
-            tx.onerror = () => reject(tx.error);
-        });
-    },
-    async clearAll() {
-        const db = await this.open();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction('mistakes', 'readwrite');
-            tx.objectStore('mistakes').clear();
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
@@ -230,18 +221,18 @@ export function initSpecialTraining() {
                 
                 if (!exp || typeof exp !== 'object') return; 
                 
+                hasNewFormat = true;
                 const topic = normalizeTopic(q.topic);
+                
                 if (!secretsByTopic[topic]) secretsByTopic[topic] = { skills: new Set(), warnings: new Set() };
                 
                 if (exp.skills) {
-                    hasNewFormat = true;
                     const sStr = typeof exp.skills === 'string' ? exp.skills : JSON.stringify(exp.skills);
                     if (sStr.trim() !== '' && sStr !== '[]' && sStr !== '{}') {
                         secretsByTopic[topic].skills.add(sStr.trim());
                     }
                 }
                 if (exp.warnings) {
-                    hasNewFormat = true;
                     const wStr = typeof exp.warnings === 'string' ? exp.warnings : JSON.stringify(exp.warnings);
                     if (wStr.trim() !== '' && wStr !== '[]' && wStr !== '{}') {
                         secretsByTopic[topic].warnings.add(wStr.trim());
@@ -250,15 +241,20 @@ export function initSpecialTraining() {
             });
 
             const contentEl = document.getElementById('grammarSecretsContent');
+            
+            // 🌟 致命防墜網：如果找不到 HTML 容器，立刻跳出警告，絕不默默死當！
+            if (!contentEl) {
+                alert('嚴重錯誤：找不到顯示秘笈的彈窗容器 (grammarSecretsContent)！請確認 index.html 是否已經加上彈窗代碼。');
+                return;
+            }
+
             contentEl.innerHTML = '';
 
             if (!hasNewFormat) {
-                contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中的題目皆為無技巧解析格式。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
+                contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中的題目皆為舊版解析格式。<br>請多做幾次新版特訓，系統就會自動為您整理出這份秘笈囉！</div>';
             } else {
-                let addedAny = false;
                 for (const [topic, data] of Object.entries(secretsByTopic)) {
                     if (data.skills.size === 0 && data.warnings.size === 0) continue;
-                    addedAny = true;
                     
                     let topicHtml = `
                         <div style="margin-bottom: 24px; background: #fff; border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
@@ -283,21 +279,21 @@ export function initSpecialTraining() {
                     topicHtml += `</div></div>`;
                     contentEl.innerHTML += topicHtml;
                 }
-                
-                if (!addedAny) {
-                    contentEl.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px 20px;">目前錯題本中暫無可供整理的技巧與陷阱。</div>';
-                }
             }
             
-            grammarSecretsModal.style.display = 'flex';
-            grammarSecretsModal.classList.remove('hidden');
+            if(grammarSecretsModal) {
+                grammarSecretsModal.style.display = 'flex';
+                grammarSecretsModal.classList.remove('hidden');
+            }
         });
     }
 
     if (btnCloseSecrets) {
         btnCloseSecrets.addEventListener('click', () => {
-            grammarSecretsModal.style.display = '';
-            grammarSecretsModal.classList.add('hidden');
+            if(grammarSecretsModal) {
+                grammarSecretsModal.style.display = '';
+                grammarSecretsModal.classList.add('hidden');
+            }
         });
     }
 }
