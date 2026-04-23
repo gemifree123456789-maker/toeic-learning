@@ -4,7 +4,7 @@ import { MistakesDB, SecretsDB } from './specialTraining.js';
 // 狀態管理物件
 const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null };
 
-// 自動偵測並回傳當前可用的最強模型名稱 (如 gemini-1.5-flash)
+// 自動偵測並回傳當前可用的最強模型名稱
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -132,16 +132,19 @@ async function startPart1Training(difficulty) {
     renderPart1Question();
 }
 
-// 負責將 p1State 中的當前題目渲染到畫面上，包含發送圖片生成請求。
+// 渲染題目與圖片
 function renderPart1Question() {
     const q = p1State.questions[p1State.currentQ];
     p1State.answered = false;
-    if (p1State.currentAudio) p1State.currentAudio.pause();
-    p1State.currentAudio = null;
+    
+    // 如果有前一題的音檔，先暫停並清空
+    if (p1State.currentAudio) {
+        p1State.currentAudio.pause();
+        p1State.currentAudio = null;
+    }
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
-    // 渲染圖片
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
@@ -158,7 +161,6 @@ function renderPart1Question() {
     };
     imgEl.src = imgUrl;
 
-    // 渲染盲測選項
     const oArea = document.getElementById('part1OptionsArea');
     oArea.innerHTML = '';
     
@@ -179,7 +181,7 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
     
-    // 🌟 終極修復：語音播放邏輯
+    // 🌟 終極修復：語音播放邏輯 (Magic Bytes 自動偵測格式)
     audioBtn.onclick = async () => {
         if (p1State.currentAudio) {
             p1State.currentAudio.currentTime = 0; // 重頭播放
@@ -199,8 +201,16 @@ function renderPart1Question() {
             // 向 Gemini 索取 Base64 音檔資料
             const base64 = await fetchGeminiTTS(textToSpeak, voiceName);
             
-            // 🌟 拋棄容易崩潰的 atob()，直接套用最正確的 WAV 原生標籤！
-            const audioUrl = 'data:audio/wav;base64,' + base64;
+            // 🌟 透過 Base64 開頭的 Magic Bytes 來精準判斷音檔格式！
+            let mimeType = 'audio/mp3'; // 預設值
+            if (base64.startsWith('UklGR')) mimeType = 'audio/wav';
+            else if (base64.startsWith('OggS')) mimeType = 'audio/ogg';
+            else if (base64.startsWith('fLaC')) mimeType = 'audio/flac';
+            else if (base64.startsWith('//NEx') || base64.startsWith('SUQz')) mimeType = 'audio/mp3';
+            else if (base64.startsWith('AAAA')) mimeType = 'audio/mp4';
+            
+            // 組合出最正確的 Data URI
+            const audioUrl = `data:${mimeType};base64,${base64}`;
             
             const audio = new Audio(audioUrl);
             p1State.currentAudio = audio;
@@ -217,6 +227,7 @@ function renderPart1Question() {
     };
 }
 
+// 處理答題結果
 function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
     const oArea = document.getElementById('part1OptionsArea');
