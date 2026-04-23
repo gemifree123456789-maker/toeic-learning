@@ -1,10 +1,9 @@
 import { state } from './state.js';
 import { MistakesDB, SecretsDB } from './specialTraining.js';
 
-// 狀態管理物件
-const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null };
+// 狀態管理物件 (加入 isPlaying 防止重複點擊)
+const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null, isPlaying: false };
 
-// 自動偵測並回傳當前可用的最強模型名稱
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -28,7 +27,6 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 負責綁定 index.html 中 Part 1 面板的「開始」與「關閉」按鈕事件。
 export function initPart1Training() {
     const btnStartPart1 = document.getElementById('btnStartPart1');
     const btnClosePart1 = document.getElementById('btnClosePart1');
@@ -36,7 +34,6 @@ export function initPart1Training() {
     if (btnStartPart1) {
         btnStartPart1.addEventListener('click', async (e) => {
             e.preventDefault();
-            // 從 state.targetScore 抓取使用者選擇的難度 (500~800)
             const difficulty = state.targetScore || 600;
 
             btnStartPart1.disabled = true;
@@ -59,12 +56,12 @@ export function initPart1Training() {
             if (confirm('確定要退出聽力特訓嗎？目前進度將不會保存。')) {
                 document.getElementById('part1QuizOverlay').classList.add('hidden');
                 if (p1State.currentAudio) p1State.currentAudio.pause();
+                p1State.isPlaying = false;
             }
         });
     }
 }
 
-// 出題邏輯
 async function startPart1Training(difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -91,7 +88,7 @@ async function startPart1Training(difficulty) {
     ],
     "explanation": {
       "core": "解析為何此選項正確，並指出其他選項犯了什麼陷阱(例如相似音、過度推論等)。",
-      "skills": "一句話總結此題的聽力判斷技巧。",
+      "skills": "一句話總結此題的聽力判技巧。",
       "warnings": "一句話總結此題的易混淆陷阱。"
     }
   }
@@ -132,10 +129,10 @@ async function startPart1Training(difficulty) {
     renderPart1Question();
 }
 
-// 渲染題目與圖片
 function renderPart1Question() {
     const q = p1State.questions[p1State.currentQ];
     p1State.answered = false;
+    p1State.isPlaying = false;
     
     if (p1State.currentAudio) {
         p1State.currentAudio.pause();
@@ -144,7 +141,6 @@ function renderPart1Question() {
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
-    // 渲染圖片
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
@@ -181,69 +177,64 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
     
-    // 🌟 終極防彈修復：嚴謹轉檔、補齊等號、轉化 Blob
+    // 🌟 核心整合：導入 GPT 建議的 TOEIC 節奏播放引擎 (完全避開 Base64 毒藥)
     audioBtn.onclick = async () => {
-        if (p1State.currentAudio) {
-            p1State.currentAudio.currentTime = 0; 
-            p1State.currentAudio.play().catch(e => console.error('重播失敗', e));
-            return;
-        }
+        if (p1State.isPlaying) return; 
         
         audioBtn.disabled = true;
-        audioText.textContent = '語音生成中...';
+        audioText.textContent = '播放中...';
+        p1State.isPlaying = true;
+        
+        const currentQIndex = p1State.currentQ; // 鎖定當前題目，防止切換題目後繼續播
         
         try {
-            const textToSpeak = q.options.map(o => `${o.key}. ${o.en}`).join('. ');
-            const { fetchGeminiTTS } = await import('./apiGemini.js');
-            const voiceName = state.lastUsedVoice || 'Kore';
-            
-            // 1. 取得 API 回傳的原始 Base64 (可能是 Base64URL 格式)
-            const rawBase64 = await fetchGeminiTTS(textToSpeak, voiceName);
-            
-            // 2. 將 Base64URL 轉換回標準 Base64
-            let standardBase64 = rawBase64.replace(/-/g, '+').replace(/_/g, '/');
-            // 補齊結尾 Padding，防止 atob 函數崩潰
-            while (standardBase64.length % 4) {
-                standardBase64 += '=';
+            for (let i = 0; i < q.options.length; i++) {
+                // 如果已經跳到下一題、或離開面板，就立即中斷
+                if (!p1State.active || p1State.currentQ !== currentQIndex || !p1State.isPlaying) break; 
+                
+                const opt = q.options[i];
+                const text = `${opt.key}. ${opt.en}`;
+                
+                // 使用 GPT 推薦的穩定版 Google Translate TTS (直接給網址，瀏覽器 100% 能解碼)
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+                
+                const audio = new Audio(url);
+                p1State.currentAudio = audio;
+                
+                // 使用 Promise 等待這句話播放完畢
+                await new Promise((resolve) => {
+                    audio.onended = resolve;
+                    audio.onerror = resolve; // 即使載入失敗也強制繼續，不讓程式死機
+                    audio.play().catch(resolve);
+                });
+                
+                // TOEIC 模擬考場節奏：選項間隔停頓 1.2 秒
+                if (i < q.options.length - 1 && p1State.isPlaying) {
+                    await new Promise(r => setTimeout(r, 1200));
+                }
             }
             
-            // 3. 透過 Magic Bytes 精準判斷格式
-            let mimeType = 'audio/mp3'; // 預設
-            if (standardBase64.startsWith('UklGR')) mimeType = 'audio/wav'; // "RIFF"
-            else if (standardBase64.startsWith('OggS')) mimeType = 'audio/ogg'; // "OggS"
-            else if (standardBase64.startsWith('fLaC')) mimeType = 'audio/flac';
-            else if (standardBase64.startsWith('//NEx') || standardBase64.startsWith('SUQz')) mimeType = 'audio/mp3';
-            
-            // 4. 嚴謹轉檔：將 Base64 解碼為二進制陣列並封裝為 Blob 實體檔案
-            const binaryString = atob(standardBase64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+            if (p1State.currentQ === currentQIndex) {
+                audioText.textContent = '重播音檔';
             }
-            const blob = new Blob([bytes], { type: mimeType });
-            const audioUrl = URL.createObjectURL(blob);
-            
-            // 5. 播放音檔
-            const audio = new Audio(audioUrl);
-            p1State.currentAudio = audio;
-            await audio.play();
-            
-            audioText.textContent = '重播音檔';
         } catch (e) {
-            console.error('語音載入錯誤：', e);
-            alert('語音載入失敗：' + e.message);
+            console.error('語音播放錯誤：', e);
             audioText.textContent = '播放失敗';
         } finally {
             audioBtn.disabled = false;
+            p1State.isPlaying = false;
         }
     };
 }
 
 function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
+    p1State.isPlaying = false; // 答題後馬上中斷音檔流程
     const oArea = document.getElementById('part1OptionsArea');
     
-    if (p1State.currentAudio) p1State.currentAudio.pause();
+    if (p1State.currentAudio) {
+        p1State.currentAudio.pause();
+    }
 
     Array.from(oArea.children).forEach((btn, index) => {
         const opt = optionsData[index];
