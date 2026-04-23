@@ -93,12 +93,14 @@
         <div class="practice-container">
             <h2 data-i18n="practiceModeTitle">練習模式</h2>
             <p class="subtitle" data-i18n="practiceModeSubtitle">選擇文章、口說或模擬考試</p>
-            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px;">
+            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px; overflow-x: auto; white-space: nowrap;">
                 <button class="practice-mode-btn active" data-mode="article" data-i18n="practiceModeArticle">文章練習</button>
                 <button class="practice-mode-btn" data-mode="speaking" data-i18n="practiceModeSpeaking">口說對話</button>
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
+                <button class="practice-mode-btn" id="tabPart1" data-mode="part1">Part 1 聽力</button>
             </div>
+            
             <div class="practice-mode-panel" id="practicePanelArticle">
                 <h3 class="practice-label" data-i18n="targetScoreLabel">目標分數</h3>
                 <p class="practice-note" data-i18n="targetScoreNote">根據你的多益程度選擇適合難度</p>
@@ -113,6 +115,16 @@
                 </div>
                 <button class="generate-btn" id="btnGenerate" data-i18n="startLearningBtn">開始學習</button>
             </div>
+
+            <div class="practice-mode-panel hidden" id="practicePanelPart1">
+                <div id="part1ConfigView">
+                    <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇聽力難度</h3>
+                    <p class="practice-note" style="text-align: center;">目標 500~800 分，系統將自動調整照片複雜度與干擾陷阱</p>
+                    <div class="score-selector" id="part1ScoreSelector"></div>
+                    <button class="generate-btn" id="btnStartPart1" style="margin-top: 24px;">🚀 開始 6 題 Part 1 特訓</button>
+                </div>
+            </div>
+
             <div class="practice-mode-panel hidden" id="practicePanelSpecial">
                 <div id="specialConfigArea">
                     <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇特訓難度</h3>
@@ -370,9 +382,38 @@
     </div>
 
     <div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
+    
     <div class="srs-overlay hidden" id="srsOverlay"><div class="srs-content"><div class="srs-top-bar"><button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="srsProgressText">1 / 9</span><span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span></div><div class="srs-question-area" id="srsQuestionArea"></div><div class="srs-options-area" id="srsOptionsArea"></div></div></div>
+    
     <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
     
+    <div class="srs-overlay hidden" id="part1QuizOverlay">
+        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 600px;">
+            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
+                <button class="srs-close-btn" id="btnClosePart1"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                <span class="srs-progress-text" id="part1ProgressText" style="font-weight: bold; color: #4f46e5;">1 / 6</span>
+                <span class="srs-phase-badge" id="part1TopicBadge" style="background-color: #4f46e5; color: white;">Part 1 聽力</span>
+            </div>
+            
+            <div id="part1QuestionArea" style="margin-bottom: 16px;">
+                <div style="width: 100%; height: 250px; background: #e2e8f0; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 16px; position: relative;" id="part1ImageContainer">
+                    <span style="color: #64748b; font-size: 14px; position: absolute;" id="part1ImageStatus">載入圖片中...</span>
+                    <img id="part1Image" src="" style="width: 100%; height: 100%; object-fit: cover; display: none; position: relative; z-index: 1;" />
+                </div>
+                
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <button id="btnPlayPart1Audio" style="background: #4f46e5; color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3); transition: all 0.2s;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <span id="part1AudioBtnText">播放音檔 (A, B, C, D)</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="srs-options-area" id="part1OptionsArea" style="display: flex; flex-direction: column; gap: 10px;">
+                </div>
+        </div>
+    </div>
+
     <div class="srs-overlay hidden" id="grammarSecretsModal">
         <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 800px;">
             <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
