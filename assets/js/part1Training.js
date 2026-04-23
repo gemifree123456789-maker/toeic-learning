@@ -137,7 +137,6 @@ function renderPart1Question() {
     const q = p1State.questions[p1State.currentQ];
     p1State.answered = false;
     
-    // 如果有前一題的音檔，先暫停並清空
     if (p1State.currentAudio) {
         p1State.currentAudio.pause();
         p1State.currentAudio = null;
@@ -145,6 +144,7 @@ function renderPart1Question() {
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
+    // 渲染圖片
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
@@ -181,10 +181,10 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
     
-    // 🌟 終極修復：語音播放邏輯 (Magic Bytes 自動偵測格式)
+    // 🌟 終極修復：無敵字元校正轉換器
     audioBtn.onclick = async () => {
         if (p1State.currentAudio) {
-            p1State.currentAudio.currentTime = 0; // 重頭播放
+            p1State.currentAudio.currentTime = 0; 
             p1State.currentAudio.play().catch(e => console.error('重播失敗', e));
             return;
         }
@@ -193,24 +193,27 @@ function renderPart1Question() {
         audioText.textContent = '語音生成中...';
         
         try {
-            // 將四個選項合併成一句話傳給 TTS 朗讀
             const textToSpeak = q.options.map(o => `${o.key}. ${o.en}`).join('. ');
             const { fetchGeminiTTS } = await import('./apiGemini.js');
             const voiceName = state.lastUsedVoice || 'Kore';
             
-            // 向 Gemini 索取 Base64 音檔資料
-            const base64 = await fetchGeminiTTS(textToSpeak, voiceName);
+            // 1. 取得 API 回傳的原始 Base64 (可能是 Base64URL 格式)
+            const rawBase64 = await fetchGeminiTTS(textToSpeak, voiceName);
             
-            // 🌟 透過 Base64 開頭的 Magic Bytes 來精準判斷音檔格式！
-            let mimeType = 'audio/mp3'; // 預設值
-            if (base64.startsWith('UklGR')) mimeType = 'audio/wav';
-            else if (base64.startsWith('OggS')) mimeType = 'audio/ogg';
-            else if (base64.startsWith('fLaC')) mimeType = 'audio/flac';
-            else if (base64.startsWith('//NEx') || base64.startsWith('SUQz')) mimeType = 'audio/mp3';
-            else if (base64.startsWith('AAAA')) mimeType = 'audio/mp4';
+            // 2. 🌟 關鍵修復：將 Base64URL 轉換回標準 Base64
+            // 將 '-' 換成 '+'，'_' 換成 '/'，這樣 atob() 才不會崩潰！
+            const standardBase64 = rawBase64.replace(/-/g, '+').replace(/_/g, '/');
             
-            // 組合出最正確的 Data URI
-            const audioUrl = `data:${mimeType};base64,${base64}`;
+            // 3. 安全解碼為二進制陣列
+            const binaryString = atob(standardBase64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // 4. 封裝為實體檔案 Blob (Gemini Audio 預設為 WAV)
+            const blob = new Blob([bytes], { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(blob);
             
             const audio = new Audio(audioUrl);
             p1State.currentAudio = audio;
@@ -227,7 +230,6 @@ function renderPart1Question() {
     };
 }
 
-// 處理答題結果
 function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
     const oArea = document.getElementById('part1OptionsArea');
