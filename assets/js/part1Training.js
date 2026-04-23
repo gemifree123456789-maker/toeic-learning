@@ -181,7 +181,7 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
     
-    // 🌟 終極修復：無敵字元校正轉換器
+    // 🌟 終極防彈修復：嚴謹轉檔、補齊等號、轉化 Blob
     audioBtn.onclick = async () => {
         if (p1State.currentAudio) {
             p1State.currentAudio.currentTime = 0; 
@@ -200,21 +200,30 @@ function renderPart1Question() {
             // 1. 取得 API 回傳的原始 Base64 (可能是 Base64URL 格式)
             const rawBase64 = await fetchGeminiTTS(textToSpeak, voiceName);
             
-            // 2. 🌟 關鍵修復：將 Base64URL 轉換回標準 Base64
-            // 將 '-' 換成 '+'，'_' 換成 '/'，這樣 atob() 才不會崩潰！
-            const standardBase64 = rawBase64.replace(/-/g, '+').replace(/_/g, '/');
+            // 2. 將 Base64URL 轉換回標準 Base64
+            let standardBase64 = rawBase64.replace(/-/g, '+').replace(/_/g, '/');
+            // 補齊結尾 Padding，防止 atob 函數崩潰
+            while (standardBase64.length % 4) {
+                standardBase64 += '=';
+            }
             
-            // 3. 安全解碼為二進制陣列
+            // 3. 透過 Magic Bytes 精準判斷格式
+            let mimeType = 'audio/mp3'; // 預設
+            if (standardBase64.startsWith('UklGR')) mimeType = 'audio/wav'; // "RIFF"
+            else if (standardBase64.startsWith('OggS')) mimeType = 'audio/ogg'; // "OggS"
+            else if (standardBase64.startsWith('fLaC')) mimeType = 'audio/flac';
+            else if (standardBase64.startsWith('//NEx') || standardBase64.startsWith('SUQz')) mimeType = 'audio/mp3';
+            
+            // 4. 嚴謹轉檔：將 Base64 解碼為二進制陣列並封裝為 Blob 實體檔案
             const binaryString = atob(standardBase64);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i);
             }
-            
-            // 4. 封裝為實體檔案 Blob (Gemini Audio 預設為 WAV)
-            const blob = new Blob([bytes], { type: 'audio/wav' });
+            const blob = new Blob([bytes], { type: mimeType });
             const audioUrl = URL.createObjectURL(blob);
             
+            // 5. 播放音檔
             const audio = new Audio(audioUrl);
             p1State.currentAudio = audio;
             await audio.play();
