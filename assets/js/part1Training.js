@@ -4,7 +4,7 @@ import { MistakesDB, SecretsDB } from './specialTraining.js';
 // 狀態管理物件
 const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null };
 
-// 自動偵測並回傳當前可用的最強模型名稱
+// 自動偵測並回傳當前可用的最強模型名稱 (如 gemini-1.5-flash)
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -28,7 +28,7 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 初始化 Part 1 面板
+// 負責綁定 index.html 中 Part 1 面板的「開始」與「關閉」按鈕事件。
 export function initPart1Training() {
     const btnStartPart1 = document.getElementById('btnStartPart1');
     const btnClosePart1 = document.getElementById('btnClosePart1');
@@ -36,6 +36,7 @@ export function initPart1Training() {
     if (btnStartPart1) {
         btnStartPart1.addEventListener('click', async (e) => {
             e.preventDefault();
+            // 從 state.targetScore 抓取使用者選擇的難度 (500~800)
             const difficulty = state.targetScore || 600;
 
             btnStartPart1.disabled = true;
@@ -63,7 +64,7 @@ export function initPart1Training() {
     }
 }
 
-// 核心出題邏輯
+// 出題邏輯
 async function startPart1Training(difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
@@ -131,19 +132,16 @@ async function startPart1Training(difficulty) {
     renderPart1Question();
 }
 
-// 渲染題目與圖片
+// 負責將 p1State 中的當前題目渲染到畫面上，包含發送圖片生成請求。
 function renderPart1Question() {
     const q = p1State.questions[p1State.currentQ];
     p1State.answered = false;
-    
-    // 如果有前一題的音檔，先暫停並清空
-    if (p1State.currentAudio) {
-        p1State.currentAudio.pause();
-        p1State.currentAudio = null;
-    }
+    if (p1State.currentAudio) p1State.currentAudio.pause();
+    p1State.currentAudio = null;
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
+    // 渲染圖片
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
@@ -160,6 +158,7 @@ function renderPart1Question() {
     };
     imgEl.src = imgUrl;
 
+    // 渲染盲測選項
     const oArea = document.getElementById('part1OptionsArea');
     oArea.innerHTML = '';
     
@@ -180,7 +179,7 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
     
-    // 🌟 核心修復：語音播放邏輯 (Blob 轉檔法)
+    // 🌟 終極修復：語音播放邏輯
     audioBtn.onclick = async () => {
         if (p1State.currentAudio) {
             p1State.currentAudio.currentTime = 0; // 重頭播放
@@ -192,23 +191,18 @@ function renderPart1Question() {
         audioText.textContent = '語音生成中...';
         
         try {
+            // 將四個選項合併成一句話傳給 TTS 朗讀
             const textToSpeak = q.options.map(o => `${o.key}. ${o.en}`).join('. ');
             const { fetchGeminiTTS } = await import('./apiGemini.js');
             const voiceName = state.lastUsedVoice || 'Kore';
+            
+            // 向 Gemini 索取 Base64 音檔資料
             const base64 = await fetchGeminiTTS(textToSpeak, voiceName);
             
-            // 🌟 將 Base64 解碼並轉為 Blob (WAV格式)，這是最穩定不會被瀏覽器阻擋的解法
-            const binaryStr = atob(base64);
-            const len = binaryStr.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryStr.charCodeAt(i);
-            }
-            // Gemini 預設回傳為 WAV 格式
-            const blob = new Blob([bytes], { type: 'audio/wav' });
-            const url = URL.createObjectURL(blob);
+            // 🌟 拋棄容易崩潰的 atob()，直接套用最正確的 WAV 原生標籤！
+            const audioUrl = 'data:audio/wav;base64,' + base64;
             
-            const audio = new Audio(url);
+            const audio = new Audio(audioUrl);
             p1State.currentAudio = audio;
             await audio.play();
             
@@ -223,7 +217,6 @@ function renderPart1Question() {
     };
 }
 
-// 處理答題結果
 function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
     const oArea = document.getElementById('part1OptionsArea');
