@@ -2,7 +2,7 @@ import { state } from './state.js';
 
 let activeMistakeFilters = new Set();
 let activeSecretFilter = 'all'; 
-let currentSecretsData = {}; // 🌟 用於暫存給 AI 濃縮的資料
+let currentSecretsData = {}; 
 
 export const MistakesDB = {
     async open() {
@@ -179,6 +179,7 @@ export function initSpecialTraining() {
             const checkedBoxes = Array.from(specialConfigArea.querySelectorAll('input[type="checkbox"]:checked'));
             if (checkedBoxes.length === 0) return alert('請至少選擇一個文法主題！');
             const topics = checkedBoxes.map(cb => cb.value);
+
             const difficultySelect = document.getElementById('specialDifficultySelect');
             const difficulty = difficultySelect ? difficultySelect.value : '國中程度 (使用最簡單的單字)';
 
@@ -276,7 +277,6 @@ export function initSpecialTraining() {
         
         let allSecrets = await SecretsDB.getAll();
 
-        // 🌟 核心修復：防止舊錯題因為缺少 ID 或欄位而導致搬家崩潰
         if (!allSecrets || allSecrets.length === 0) {
             const oldMistakes = await MistakesDB.getAll();
             if (oldMistakes && oldMistakes.length > 0) {
@@ -426,7 +426,6 @@ export function initSpecialTraining() {
         });
     }
 
-    // 🌟 AI 智慧濃縮核心邏輯
     const btnAiSummarize = document.getElementById('btnAiSummarize');
     if (btnAiSummarize) {
         btnAiSummarize.addEventListener('click', async (e) => {
@@ -516,6 +515,15 @@ ${dataToSummarize}`;
 const printStyle = document.createElement('style');
 printStyle.textContent = `
     @media print {
+        html, body {
+            height: auto !important;
+            min-height: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+        }
+
         body.print-mistakes-mode * { visibility: hidden; }
         body.print-mistakes-mode #historyMistakesPanel, body.print-mistakes-mode #historyMistakesPanel * { visibility: visible; }
         body.print-mistakes-mode #historyMistakesPanel { position: absolute; left: 0; top: 0; width: 100%; }
@@ -523,14 +531,45 @@ printStyle.textContent = `
         body.print-mistakes-mode #historyMistakesPanel > p { display: none !important; }
         body.print-mistakes-mode .mistake-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; margin-bottom: 20px !important; }
 
-        body.print-secrets-mode * { visibility: hidden; }
-        body.print-secrets-mode #grammarSecretsModal, body.print-secrets-mode #grammarSecretsModal * { visibility: visible; }
-        body.print-secrets-mode #grammarSecretsModal { position: absolute; left: 0; top: 0; width: 100%; background: white !important; }
-        body.print-secrets-mode .srs-close-btn, body.print-secrets-mode #btnPrintSecrets { display: none !important; }
+        body.print-secrets-mode > *:not(#grammarSecretsModal) { display: none !important; }
         
-        body.print-secrets-mode #btnRealPrintSecrets, body.print-secrets-mode #btnAiSummarize, body.print-secrets-mode #secretsFilterArea, body.print-secrets-mode #btnRestoreOriginalSecrets { display: none !important; }
+        body.print-secrets-mode #grammarSecretsModal { 
+            display: block !important;
+            position: relative !important; 
+            left: auto !important; 
+            top: auto !important; 
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        body.print-secrets-mode .srs-content { 
+            box-shadow: none !important; 
+            overflow: visible !important; 
+            max-height: none !important; 
+            height: auto !important;
+            width: 100% !important; 
+            max-width: none !important; 
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        body.print-secrets-mode .srs-close-btn, 
+        body.print-secrets-mode #btnRealPrintSecrets, 
+        body.print-secrets-mode #btnAiSummarize, 
+        body.print-secrets-mode #secretsFilterArea, 
+        body.print-secrets-mode #btnRestoreOriginalSecrets { display: none !important; }
+        
         body.print-secrets-mode #grammarSecretsContent { padding: 0 !important; }
-        body.print-secrets-mode .srs-content { box-shadow: none !important; overflow: visible !important; max-height: none !important; width: 100% !important; max-width: none !important; }
+        
+        body.print-secrets-mode #grammarSecretsContent > div {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
     }
 `;
 document.head.appendChild(printStyle);
