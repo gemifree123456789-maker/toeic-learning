@@ -4,9 +4,7 @@ import { MistakesDB, SecretsDB } from './specialTraining.js';
 // 狀態管理物件
 const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null };
 
-// 逐參數解釋：getBestModel
-// apiKey: 使用者輸入的 Gemini API 授權碼
-// 返回值: 自動偵測並回傳當前可用的最強模型名稱 (如 gemini-1.5-flash)
+// 自動偵測並回傳當前可用的最強模型名稱
 async function getBestModel(apiKey) {
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -30,8 +28,7 @@ async function getBestModel(apiKey) {
     return 'models/gemini-1.5-flash';
 }
 
-// 逐參數解釋：initPart1Training
-// 無傳入參數。負責綁定 index.html 中 Part 1 面板的「開始」與「關閉」按鈕事件。
+// 初始化 Part 1 面板
 export function initPart1Training() {
     const btnStartPart1 = document.getElementById('btnStartPart1');
     const btnClosePart1 = document.getElementById('btnClosePart1');
@@ -39,7 +36,6 @@ export function initPart1Training() {
     if (btnStartPart1) {
         btnStartPart1.addEventListener('click', async (e) => {
             e.preventDefault();
-            // 從 state.targetScore 抓取使用者選擇的難度 (500~800)
             const difficulty = state.targetScore || 600;
 
             btnStartPart1.disabled = true;
@@ -67,12 +63,10 @@ export function initPart1Training() {
     }
 }
 
-// 逐參數解釋：startPart1Training
-// difficulty: 整數 (如 500, 600, 700, 800)，用來控制 AI 出題時的單字難度與陷阱複雜度
+// 核心出題邏輯
 async function startPart1Training(difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
-    // 核心出題 Prompt，強制 AI 提供圖片生成提示詞與三大陷阱
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請出一套 6 題的 TOEIC Part 1 照片描述 (Photographs) 模擬題。
 難度要求：多益 ${difficulty} 分程度。
@@ -137,24 +131,25 @@ async function startPart1Training(difficulty) {
     renderPart1Question();
 }
 
-// 逐參數解釋：renderPart1Question
-// 無傳入參數。負責將 p1State 中的當前題目渲染到畫面上，包含發送圖片生成請求。
+// 渲染題目與圖片
 function renderPart1Question() {
     const q = p1State.questions[p1State.currentQ];
     p1State.answered = false;
-    if (p1State.currentAudio) p1State.currentAudio.pause();
-    p1State.currentAudio = null;
+    
+    // 如果有前一題的音檔，先暫停並清空
+    if (p1State.currentAudio) {
+        p1State.currentAudio.pause();
+        p1State.currentAudio = null;
+    }
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
-    // 渲染圖片 (使用 pollinations.ai 進行免 API Key 的動態繪圖)
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
     statusEl.style.display = 'block';
     statusEl.textContent = '載入圖片中... (AI 繪圖約需 3-5 秒)';
     
-    // 將 Gemini 生成的英文描述 encode 後傳給繪圖 API
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.imagePrompt)}?width=600&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
     imgEl.onload = () => {
         statusEl.style.display = 'none';
@@ -165,14 +160,12 @@ function renderPart1Question() {
     };
     imgEl.src = imgUrl;
 
-    // 渲染盲測選項 (隱藏文字，只顯示 A, B, C, D)
     const oArea = document.getElementById('part1OptionsArea');
     oArea.innerHTML = '';
     
     q.options.forEach((opt) => {
         const btn = document.createElement('button');
         btn.className = 'srs-option';
-        // 初始狀態：英文選項被 hidden 隱藏，強迫使用者聽音檔
         btn.innerHTML = `<span style="font-size: 18px; font-weight: bold;">( ${opt.key} )</span><span class="opt-text hidden" style="font-size: 15px; margin-left: 12px;">${opt.en}</span>`;
         
         btn.onclick = () => {
@@ -182,33 +175,47 @@ function renderPart1Question() {
         oArea.appendChild(btn);
     });
 
-    // 綁定 TTS 語音播放按鈕
     const audioBtn = document.getElementById('btnPlayPart1Audio');
     const audioText = document.getElementById('part1AudioBtnText');
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
+    
+    // 🌟 核心修復：語音播放邏輯 (Blob 轉檔法)
     audioBtn.onclick = async () => {
         if (p1State.currentAudio) {
-            p1State.currentAudio.play();
+            p1State.currentAudio.currentTime = 0; // 重頭播放
+            p1State.currentAudio.play().catch(e => console.error('重播失敗', e));
             return;
         }
+        
         audioBtn.disabled = true;
         audioText.textContent = '語音生成中...';
+        
         try {
-            // 將四個選項合併成一句話傳給 TTS 朗讀
             const textToSpeak = q.options.map(o => `${o.key}. ${o.en}`).join('. ');
-            // 動態匯入原本的 TTS 函數
             const { fetchGeminiTTS } = await import('./apiGemini.js');
             const voiceName = state.lastUsedVoice || 'Kore';
             const base64 = await fetchGeminiTTS(textToSpeak, voiceName);
             
-            const audio = new Audio('data:audio/mp3;base64,' + base64);
+            // 🌟 將 Base64 解碼並轉為 Blob (WAV格式)，這是最穩定不會被瀏覽器阻擋的解法
+            const binaryStr = atob(base64);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+            // Gemini 預設回傳為 WAV 格式
+            const blob = new Blob([bytes], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            
+            const audio = new Audio(url);
             p1State.currentAudio = audio;
-            audio.play();
+            await audio.play();
+            
             audioText.textContent = '重播音檔';
         } catch (e) {
-            console.error(e);
-            alert('語音載入失敗');
+            console.error('語音載入錯誤：', e);
+            alert('語音載入失敗：' + e.message);
             audioText.textContent = '播放失敗';
         } finally {
             audioBtn.disabled = false;
@@ -216,34 +223,27 @@ function renderPart1Question() {
     };
 }
 
-// 逐參數解釋：handlePart1Answer
-// selectedBtn: 使用者點擊的 HTML 按鈕元素
-// isCorrect: 布林值，表示該選項是否正確
-// optionsData: 該題的 4 個選項資料陣列
-// questionObj: 該題的完整 JSON 物件資料
+// 處理答題結果
 function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
     const oArea = document.getElementById('part1OptionsArea');
     
     if (p1State.currentAudio) p1State.currentAudio.pause();
 
-    // 揭曉盲測文字與正確答案
     Array.from(oArea.children).forEach((btn, index) => {
         const opt = optionsData[index];
         btn.classList.add('disabled');
         btn.style.pointerEvents = 'none';
-        btn.querySelector('.opt-text').classList.remove('hidden'); // 解除英文隱藏
+        btn.querySelector('.opt-text').classList.remove('hidden'); 
         
         if (opt.isCorrect) {
             btn.classList.add('correct');
         } else if (btn === selectedBtn && !opt.isCorrect) {
             btn.classList.add('wrong');
         }
-        // 加上中文翻譯
         btn.innerHTML += `<span style="font-size:13px; font-weight:normal; margin-top:6px; display:block; opacity:0.8;">— ${opt.zh}</span>`;
     });
 
-    // 顯示解析與釘選區塊
     const expDiv = document.createElement('div');
     expDiv.style.cssText = 'margin-top: 16px; background: #eff6ff; padding: 16px; border-radius: 12px; border: 1px solid #bfdbfe;';
     
@@ -262,7 +262,6 @@ function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     `;
     oArea.appendChild(expDiv);
 
-    // 無論對錯，存入文法/聽力秘笈金庫 (SecretsDB)
     questionObj.savedAt = Date.now();
     SecretsDB.save(questionObj).catch(e => console.log(e));
 
@@ -276,7 +275,6 @@ function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
         btnPin.style.borderColor = isPinned ? '#fde047' : '#bfdbfe';
         btnPin.style.color = isPinned ? '#854d0e' : '#4b5563';
         
-        // 存入錯題本 (MistakesDB)
         if (isPinned) {
             questionObj.savedAt = Date.now();
             await MistakesDB.save(questionObj);
@@ -297,8 +295,6 @@ function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     oArea.appendChild(nextBtn);
 }
 
-// 逐參數解釋：showPart1Results
-// 無傳入參數。負責在 6 題結束後顯示結算畫面，並寫入每日任務進度。
 async function showPart1Results() {
     const qArea = document.getElementById('part1QuestionArea');
     const oArea = document.getElementById('part1OptionsArea');
