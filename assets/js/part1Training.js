@@ -2,16 +2,14 @@ import { state } from './state.js';
 import { MistakesDB, SecretsDB } from './specialTraining.js';
 
 // 狀態管理物件
-const p1State = { active: false, questions: [], currentQ: 0, answered: false, currentAudio: null, isPlaying: false };
+// 🌟 將 Audio 物件提昇為全域變數，這是破解 iOS 限制的關鍵
+const p1Audio = new Audio();
+const p1State = { active: false, questions: [], currentQ: 0, answered: false, isPlaying: false };
 
 // 🛑 強制停止所有聲音 (包含音檔與系統語音)
 function stopAllAudio() {
-    if (p1State.currentAudio) {
-        p1State.currentAudio.pause();
-        p1State.currentAudio.removeAttribute('src');
-        p1State.currentAudio.load();
-        p1State.currentAudio = null;
-    }
+    p1Audio.pause();
+    p1Audio.removeAttribute('src');
     if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
@@ -151,14 +149,14 @@ function renderPart1Question() {
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
-    // 渲染圖片
+    // 渲染圖片 (配合 HTML 的 5:4 比例，這裡調整為 width=500&height=400)
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
     statusEl.style.display = 'block';
     statusEl.textContent = '載入圖片中... (AI 繪圖約需 3-5 秒)';
     
-    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.imagePrompt)}?width=600&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.imagePrompt)}?width=500&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
     imgEl.onload = () => {
         statusEl.style.display = 'none';
         imgEl.style.display = 'block';
@@ -187,10 +185,19 @@ function renderPart1Question() {
     const audioText = document.getElementById('part1AudioBtnText');
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
+
+    // 🌟 定義 4 國腔調的聲音模型庫 (美、英、澳，備用系統支援加音)
+    const TOEIC_TTS_VOICES = ['en-US-Neural2-F', 'en-GB-Neural2-A', 'en-AU-Neural2-B', 'en-US-Neural2-J'];
+    const TOEIC_FALLBACK_LANGS = ['en-US', 'en-GB', 'en-AU', 'en-CA'];
     
-    // 🌟 雙引擎防彈語音系統
     audioBtn.onclick = async () => {
         if (p1State.isPlaying) return;
+        
+        // 🚀 iOS 靜音破解魔法：在「非同步(await)」開始前，立刻發送一個空聲音解鎖 Safari 限制
+        p1Audio.play().catch(() => {}); 
+        const silentUtterance = new SpeechSynthesisUtterance('');
+        silentUtterance.volume = 0;
+        window.speechSynthesis.speak(silentUtterance); 
         
         audioBtn.disabled = true;
         audioText.textContent = '語音生成中...';
@@ -198,35 +205,34 @@ function renderPart1Question() {
         
         const currentQIndex = p1State.currentQ;
         
+        // 🎲 隨機抽取本題口音 (0:美, 1:英, 2:澳, 3:加/備用美)
+        const accentIndex = Math.floor(Math.random() * 4);
+        const selectedVoice = TOEIC_TTS_VOICES[accentIndex];
+        const selectedFallbackLang = TOEIC_FALLBACK_LANGS[accentIndex];
+        
         try {
-            // 引擎 1：嘗試呼叫官方 Gemini TTS
+            // 引擎 1：嘗試呼叫官方 Gemini TTS (套用隨機抽取的口音)
             const { fetchGeminiTTS } = await import('./apiGemini.js');
-            const voiceName = state.lastUsedVoice || 'Kore';
             
-            // 將選項組合，加上大量標點符號強迫 AI 停頓，模擬考試節奏
             const textToSpeak = q.options.map(o => `Option ${o.key}. . . . ${o.en}`).join('. . . . ');
+            const base64 = await fetchGeminiTTS(textToSpeak, selectedVoice);
             
-            const base64 = await fetchGeminiTTS(textToSpeak, voiceName);
-            
-            // 最純粹的播放方式，不經過任何解碼轉換，直接餵給原生標籤
-            const audioUrl = "data:audio/wav;base64," + base64;
-            const audio = new Audio(audioUrl);
-            p1State.currentAudio = audio;
-            
+            // 將解鎖的 p1Audio 掛上正確的標籤進行播放
+            p1Audio.src = "data:audio/wav;base64," + base64;
             audioText.textContent = '播放中...';
             
             await new Promise((resolve, reject) => {
-                audio.onended = resolve;
-                audio.onerror = () => reject(new Error("Gemini Audio Decode Failed")); // 解碼失敗立刻拋錯
-                audio.play().catch(reject);
+                p1Audio.onended = resolve;
+                p1Audio.onerror = () => reject(new Error("Gemini Audio Decode Failed")); 
+                p1Audio.play().catch(reject);
             });
             
             if (p1State.currentQ === currentQIndex) {
                 audioText.textContent = '重播音檔';
             }
         } catch (e) {
-            console.warn('Gemini 語音失敗，自動啟動系統備援語音...', e);
-            // 引擎 2：無敵備援系統 (Web Speech API) - 絕對 100% 播得出聲音
+            console.warn('Gemini 語音失敗，啟動備援系統語音...', e);
+            // 引擎 2：無敵備援系統 (Web Speech API) - 套用隨機抽取的國別代碼
             audioText.textContent = '備用系統語音播放中...';
             
             for (let i = 0; i < q.options.length; i++) {
@@ -235,16 +241,15 @@ function renderPart1Question() {
                 const opt = q.options[i];
                 await new Promise(resolve => {
                     const utterance = new SpeechSynthesisUtterance(`Option ${opt.key}. ${opt.en}`);
-                    utterance.lang = 'en-US';
-                    utterance.rate = 0.9; // 模擬考試慢速
+                    utterance.lang = selectedFallbackLang; // 強制指定美、英、澳、加口音
+                    utterance.rate = 0.9; 
                     utterance.onend = resolve;
-                    utterance.onerror = resolve; // 出錯也繼續下一題，絕不卡死
+                    utterance.onerror = resolve; 
                     window.speechSynthesis.speak(utterance);
                 });
                 
-                // GPT 建議的停頓機制：完美還原 TOEIC 考場節奏
                 if (i < q.options.length - 1 && p1State.isPlaying) {
-                    await new Promise(r => setTimeout(r, 1200));
+                    await new Promise(r => setTimeout(r, 1200)); // 考場節奏停頓
                 }
             }
             
