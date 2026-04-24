@@ -76,13 +76,15 @@ export function initPart1Training() {
 async function startPart1Training(difficulty) {
     if (!state.apiKey) throw new Error('請先設定 API Key');
 
+    // 🌟 修正：加入「嚴格繪圖限制」，強迫 AI 避開小物件，只畫大場景大動作
     const prompt = `你是一位專業的 TOEIC 滿分出題老師。
 請出一套 6 題的 TOEIC Part 1 照片描述 (Photographs) 模擬題。
 難度要求：多益 ${difficulty} 分程度。
 
 【Part 1 命題規則】
 1. 必須包含「人物動作照」(約4題) 與「物品/風景靜態照」(約2題)。
-2. 必須佈下多益常見陷阱：相似音/多義字(Sound-alike)、看圖說故事(過度推論)、"is being V-p.p."(無人卻用被動進行式)等陷阱。
+2. ⚠️ 繪圖極度重要限制：AI繪圖對細節(如手指、小物件)容易出錯，因此 imagePrompt「絕對禁止」出現細微動作與小物件(如拿著鋼筆、拿杯子、戴戒指、使用餐具)。請全部設定為「大肢體動作或大場景」(例如：坐在桌前看著螢幕、在公園散步、站著交談、空曠的會議室、停滿車的街道)。
+3. 必須佈下多益常見陷阱：相似音/多義字(Sound-alike)、看圖說故事(過度推論)、"is being V-p.p."(無人卻用被動進行式)等陷阱。
 
 【輸出格式】純 JSON 陣列，絕對不要包含 markdown 標記 (如 \`\`\`json)。
 [
@@ -130,7 +132,12 @@ async function startPart1Training(difficulty) {
         throw new Error('AI 回傳格式錯誤，請重試！');
     }
 
-    questions.forEach(q => q.id = 'sp_p1_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+    // 🌟 核心升級：背景預載入魔法 (Image Preloading)
+    questions.forEach(q => {
+        q.id = 'sp_p1_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        // 預先為所有題目算好圖片網址
+        q.imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.imagePrompt)}?width=500&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+    });
 
     p1State.questions = questions;
     p1State.currentQ = 0;
@@ -138,6 +145,16 @@ async function startPart1Training(difficulty) {
 
     document.getElementById('part1QuizOverlay').classList.remove('hidden');
     renderPart1Question();
+
+    // 啟動背景循序下載：從第 2 張圖片開始默默載入快取
+    const preloadNextImage = (index) => {
+        if (index >= questions.length || !p1State.active) return;
+        const img = new Image();
+        img.onload = () => preloadNextImage(index + 1); // 載完一張才載下一張，避免塞爆網路
+        img.onerror = () => preloadNextImage(index + 1);
+        img.src = questions[index].imgUrl;
+    };
+    setTimeout(() => preloadNextImage(1), 1000); // 延遲一秒啟動，確保不影響第一題渲染
 }
 
 function renderPart1Question() {
@@ -149,14 +166,14 @@ function renderPart1Question() {
 
     document.getElementById('part1ProgressText').textContent = `${p1State.currentQ + 1} / ${p1State.questions.length}`;
     
-    // 渲染圖片 (配合 HTML 的 5:4 比例，這裡調整為 width=500&height=400)
+    // 渲染圖片
     const imgEl = document.getElementById('part1Image');
     const statusEl = document.getElementById('part1ImageStatus');
     imgEl.style.display = 'none';
     statusEl.style.display = 'block';
-    statusEl.textContent = '載入圖片中... (AI 繪圖約需 3-5 秒)';
+    statusEl.textContent = '載入圖片中...'; // 因為預載入，等待時間會大幅縮短
     
-    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.imagePrompt)}?width=500&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+    // 🌟 直接取用剛才預先算好的網址 (如果已經在快取裡，onload 會瞬間觸發)
     imgEl.onload = () => {
         statusEl.style.display = 'none';
         imgEl.style.display = 'block';
@@ -164,7 +181,7 @@ function renderPart1Question() {
     imgEl.onerror = () => {
         statusEl.textContent = '圖片載入失敗，請憑想像作答😅';
     };
-    imgEl.src = imgUrl;
+    imgEl.src = q.imgUrl;
 
     const oArea = document.getElementById('part1OptionsArea');
     oArea.innerHTML = '';
@@ -186,14 +203,14 @@ function renderPart1Question() {
     audioBtn.disabled = false;
     audioText.textContent = '播放音檔 (A, B, C, D)';
 
-    // 🌟 定義 4 國腔調的聲音模型庫 (美、英、澳，備用系統支援加音)
+    // 定義 4 國腔調的聲音模型庫 (美、英、澳，備用系統支援加音)
     const TOEIC_TTS_VOICES = ['en-US-Neural2-F', 'en-GB-Neural2-A', 'en-AU-Neural2-B', 'en-US-Neural2-J'];
     const TOEIC_FALLBACK_LANGS = ['en-US', 'en-GB', 'en-AU', 'en-CA'];
     
     audioBtn.onclick = async () => {
         if (p1State.isPlaying) return;
         
-        // 🚀 iOS 靜音破解魔法：在「非同步(await)」開始前，立刻發送一個空聲音解鎖 Safari 限制
+        // iOS 靜音破解魔法
         p1Audio.play().catch(() => {}); 
         const silentUtterance = new SpeechSynthesisUtterance('');
         silentUtterance.volume = 0;
@@ -205,19 +222,16 @@ function renderPart1Question() {
         
         const currentQIndex = p1State.currentQ;
         
-        // 🎲 隨機抽取本題口音 (0:美, 1:英, 2:澳, 3:加/備用美)
+        // 隨機抽取本題口音
         const accentIndex = Math.floor(Math.random() * 4);
         const selectedVoice = TOEIC_TTS_VOICES[accentIndex];
         const selectedFallbackLang = TOEIC_FALLBACK_LANGS[accentIndex];
         
         try {
-            // 引擎 1：嘗試呼叫官方 Gemini TTS (套用隨機抽取的口音)
             const { fetchGeminiTTS } = await import('./apiGemini.js');
-            
             const textToSpeak = q.options.map(o => `Option ${o.key}. . . . ${o.en}`).join('. . . . ');
             const base64 = await fetchGeminiTTS(textToSpeak, selectedVoice);
             
-            // 將解鎖的 p1Audio 掛上正確的標籤進行播放
             p1Audio.src = "data:audio/wav;base64," + base64;
             audioText.textContent = '播放中...';
             
@@ -232,7 +246,6 @@ function renderPart1Question() {
             }
         } catch (e) {
             console.warn('Gemini 語音失敗，啟動備援系統語音...', e);
-            // 引擎 2：無敵備援系統 (Web Speech API) - 套用隨機抽取的國別代碼
             audioText.textContent = '備用系統語音播放中...';
             
             for (let i = 0; i < q.options.length; i++) {
@@ -241,7 +254,7 @@ function renderPart1Question() {
                 const opt = q.options[i];
                 await new Promise(resolve => {
                     const utterance = new SpeechSynthesisUtterance(`Option ${opt.key}. ${opt.en}`);
-                    utterance.lang = selectedFallbackLang; // 強制指定美、英、澳、加口音
+                    utterance.lang = selectedFallbackLang; 
                     utterance.rate = 0.9; 
                     utterance.onend = resolve;
                     utterance.onerror = resolve; 
@@ -249,7 +262,7 @@ function renderPart1Question() {
                 });
                 
                 if (i < q.options.length - 1 && p1State.isPlaying) {
-                    await new Promise(r => setTimeout(r, 1200)); // 考場節奏停頓
+                    await new Promise(r => setTimeout(r, 1200)); 
                 }
             }
             
@@ -267,7 +280,7 @@ function handlePart1Answer(selectedBtn, isCorrect, optionsData, questionObj) {
     p1State.answered = true;
     const oArea = document.getElementById('part1OptionsArea');
     
-    stopAllAudio(); // 答題後馬上中斷音檔流程
+    stopAllAudio(); 
 
     Array.from(oArea.children).forEach((btn, index) => {
         const opt = optionsData[index];
