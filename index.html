@@ -100,7 +100,7 @@
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
                 <button class="practice-mode-btn" id="tabPart1" data-mode="part1">Part 1 聽力</button>
-                <button class="practice-mode-btn" id="tabClassic" data-mode="classic">📚 經典題庫</button>
+                <button class="practice-mode-btn" id="tabClassic" data-mode="classic">📚 閱讀特訓</button>
             </div>
             
             <div class="practice-mode-panel" id="practicePanelArticle">
@@ -120,13 +120,27 @@
 
             <div class="practice-mode-panel hidden" id="practicePanelClassic">
                 <div id="classicConfigView">
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">選擇練習部分 (Part 5-7)</h3>
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <button class="generate-btn" id="btnStartPart5" style="background: #eef2ff; color: #4f46e5; border: 2px solid #c7d2fe;">Part 5: 單句填空 (Grammar & Vocab)</button>
-                        <button class="generate-btn" id="btnStartPart6" style="background: #f0fdf4; color: #16a34a; border: 2px solid #bbf7d0;">Part 6: 短文填空 (Cloze Test)</button>
-                        <button class="generate-btn" id="btnStartPart7" style="background: #fff7ed; color: #ea580c; border: 2px solid #fed7aa;">Part 7: 閱讀理解 (Reading)</button>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                            <h3 style="font-size: 15px; font-weight: 700; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">⚡ 本地經典題庫 <span style="font-size: 11px; font-weight: normal; background: #cbd5e1; color: white; padding: 2px 6px; border-radius: 4px;">免等待</span></h3>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <button class="generate-btn secondary-btn" id="btnStartPart5" style="background: #fff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 10px; font-size: 14px;">Part 5: 單句填空</button>
+                                <button class="generate-btn secondary-btn" id="btnStartPart6" style="background: #fff; color: #16a34a; border: 1px solid #bbf7d0; padding: 10px; font-size: 14px;">Part 6: 短文填空</button>
+                                <button class="generate-btn secondary-btn" id="btnStartPart7" style="background: #fff; color: #ea580c; border: 1px solid #fed7aa; padding: 10px; font-size: 14px;">Part 7: 閱讀理解</button>
+                            </div>
+                        </div>
+
+                        <div style="background: #eef2ff; padding: 16px; border-radius: 12px; border: 1px solid #c7d2fe;">
+                            <h3 style="font-size: 15px; font-weight: 700; color: #4338ca; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">✨ AI 仿真特訓 <span style="font-size: 11px; font-weight: normal; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px;">無限題庫</span></h3>
+                            <p style="font-size: 12px; color: #6366f1; margin-bottom: 12px;">依據您設定的目標分數 (${state.targetScore} 分) 即時生成</p>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <button class="generate-btn" id="btnStartAIPart5" style="padding: 10px; font-size: 14px; background: #6366f1;">🚀 AI 生成 Part 5</button>
+                                <button class="generate-btn" id="btnStartAIPart6" style="padding: 10px; font-size: 14px; background: #4f46e5;">🚀 AI 生成 Part 6</button>
+                                <button class="generate-btn" id="btnStartAIPart7" style="padding: 10px; font-size: 14px; background: #3730a3;">🚀 AI 生成 Part 7</button>
+                            </div>
+                        </div>
                     </div>
-                    <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px;">* 題目來源：本地經典題庫，無需等待 AI 生成。</p>
+                    <p style="font-size: 11px; color: #9ca3af; text-align: center; margin-top: 16px;">* AI 生成需消耗 API 並等待約 5-10 秒。</p>
                 </div>
             </div>
 
@@ -424,7 +438,7 @@
             </div>
             
             <div class="srs-options-area" id="part1OptionsArea" style="display: flex; flex-direction: column; gap: 10px;">
-                </div>
+            </div>
         </div>
     </div>
 
@@ -435,10 +449,12 @@
                 <span class="srs-progress-text" id="classicProgressText" style="font-weight: bold; color: #10b981;">1 / 10</span>
                 <span class="srs-phase-badge" id="classicTopicBadge" style="background-color: #10b981; color: white;">經典題庫</span>
             </div>
+            
             <div id="classicQuestionArea" style="margin-bottom: 16px;">
-                </div>
+            </div>
+            
             <div class="srs-options-area" id="classicOptionsArea" style="display: flex; flex-direction: column; gap: 10px;">
-                </div>
+            </div>
         </div>
     </div>
 
