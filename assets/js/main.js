@@ -18,6 +18,8 @@ import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, s
 
 // 🌟 核心保證：匯入特訓模組初始化器
 import { initSpecialTraining } from './specialTraining.js';
+// 🌟 新增：匯入經典題庫初始化器
+import { initClassicTraining } from './classicTraining.js';
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
@@ -210,9 +212,13 @@ function setPracticeMode(mode) {
     const specialEl = document.getElementById('practicePanelSpecial');
     if(specialEl) specialEl.classList.toggle('hidden', mode !== 'special');
 
-    // 🌟 新增：控制 Part 1 面板顯示隱藏
+    // 控制 Part 1 面板顯示隱藏
     const part1El = document.getElementById('practicePanelPart1');
     if(part1El) part1El.classList.toggle('hidden', mode !== 'part1');
+
+    // 🌟 新增：控制經典題庫面板顯示隱藏
+    const classicEl = document.getElementById('practicePanelClassic');
+    if(classicEl) classicEl.classList.toggle('hidden', mode !== 'classic');
 
     if (mode === 'speaking') resetSpeakingPracticeView();
     if (mode === 'exam') resetExamPracticeView();
@@ -260,7 +266,6 @@ function renderScoreChips(containerId) {
     if (!el) return;
     el.innerHTML = '';
     scores.forEach(score => {
-        // 🌟 防呆處理：如果是 Part 1 且分數為 900，則不顯示 (因為使用者指定 Part 1 只考 500, 600, 700, 800)
         if (containerId === 'part1ScoreSelector' && score === 900) return;
 
         const chip = document.createElement('div');
@@ -282,7 +287,7 @@ function renderScoreChips(containerId) {
 }
 renderScoreChips('scoreSelector');
 renderScoreChips('examScoreSelector');
-renderScoreChips('part1ScoreSelector'); // 🌟 新增 Part 1 的分數晶片
+renderScoreChips('part1ScoreSelector');
 if (!state.speakingState.level) {
     state.speakingState.level = getSpeakingLevelByScore(state.targetScore);
 }
@@ -1049,7 +1054,10 @@ GENERATE_BTN.onclick = async () => {
         // 🌟 呼叫專項特訓的初始化器
         initSpecialTraining();
 
-        // 🌟 動態載入全新的 Part 1 聽力模組 (安全載入機制)
+        // 🌟 呼叫經典題庫的初始化器
+        initClassicTraining();
+
+        // 動態載入全新的 Part 1 聽力模組 (安全載入機制)
         try {
             const part1Module = await import('./part1Training.js');
             if (part1Module && part1Module.initPart1Training) {
