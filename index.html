@@ -21,6 +21,7 @@
       @keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="./assets/js/questions.js"></script>
     <script>
       (function bootstrapAppAssets() {
         document.documentElement.classList.add('app-booting');
@@ -99,6 +100,7 @@
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
                 <button class="practice-mode-btn" id="tabPart1" data-mode="part1">Part 1 聽力</button>
+                <button class="practice-mode-btn" id="tabClassic" data-mode="classic">📚 經典題庫</button>
             </div>
             
             <div class="practice-mode-panel" id="practicePanelArticle">
@@ -114,6 +116,18 @@
                     <div class="voice-selector" id="voiceSelector"></div>
                 </div>
                 <button class="generate-btn" id="btnGenerate" data-i18n="startLearningBtn">開始學習</button>
+            </div>
+
+            <div class="practice-mode-panel hidden" id="practicePanelClassic">
+                <div id="classicConfigView">
+                    <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">選擇練習部分 (Part 5-7)</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="generate-btn" id="btnStartPart5" style="background: #eef2ff; color: #4f46e5; border: 2px solid #c7d2fe;">Part 5: 單句填空 (Grammar & Vocab)</button>
+                        <button class="generate-btn" id="btnStartPart6" style="background: #f0fdf4; color: #16a34a; border: 2px solid #bbf7d0;">Part 6: 短文填空 (Cloze Test)</button>
+                        <button class="generate-btn" id="btnStartPart7" style="background: #fff7ed; color: #ea580c; border: 2px solid #fed7aa;">Part 7: 閱讀理解 (Reading)</button>
+                    </div>
+                    <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px;">* 題目來源：本地經典題庫，無需等待 AI 生成。</p>
+                </div>
             </div>
 
             <div class="practice-mode-panel hidden" id="practicePanelPart1">
@@ -410,6 +424,20 @@
             </div>
             
             <div class="srs-options-area" id="part1OptionsArea" style="display: flex; flex-direction: column; gap: 10px;">
+                </div>
+        </div>
+    </div>
+
+    <div class="srs-overlay hidden" id="classicQuizOverlay">
+        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 800px;">
+            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
+                <button class="srs-close-btn" id="btnCloseClassic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                <span class="srs-progress-text" id="classicProgressText" style="font-weight: bold; color: #10b981;">1 / 10</span>
+                <span class="srs-phase-badge" id="classicTopicBadge" style="background-color: #10b981; color: white;">經典題庫</span>
+            </div>
+            <div id="classicQuestionArea" style="margin-bottom: 16px;">
+                </div>
+            <div class="srs-options-area" id="classicOptionsArea" style="display: flex; flex-direction: column; gap: 10px;">
                 </div>
         </div>
     </div>
