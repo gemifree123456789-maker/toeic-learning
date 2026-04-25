@@ -11,7 +11,6 @@ function ensureCandidateText(data) {
     return text;
 }
 
-// 🌟 強化版：暴力 JSON 提取器 (解決 Part 5 引號崩潰問題)
 function parseJsonCandidateText(rawText) {
     let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     cleaned = cleaned.replace(/\n/g, ' ').replace(/\r/g, '');
@@ -36,11 +35,11 @@ function parseJsonCandidateText(rawText) {
                 const repairedJson = jsonStr.replace(/\\"/g, "'");
                 return JSON.parse(repairedJson);
             } catch (innerErr) {
-                console.error("暴力提取失敗:", rawText);
-                throw new Error("AI 格式解析失敗，請再試一次。");
+                console.error("JSON 深度解析失敗:", rawText);
+                throw new Error("AI 格式解析失敗，請重新嘗試。");
             }
         }
-        throw new Error("完全找不到 JSON 數據");
+        throw new Error("找不到有效的 JSON 數據");
     }
 }
 
@@ -140,7 +139,6 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return result.items || [];
 }
 
-// 🌟 修正後的函數：確保括號與邏輯完整
 export async function fetchGeminiTTS(text, voiceName) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
         method: 'POST',
@@ -169,18 +167,29 @@ export async function fetchGeminiTTS(text, voiceName) {
     return data.candidates[0].content.parts[0].inlineData.data;
 }
 
-// 🌟 AI 仿真特訓題目生成
+// 🌟 AI 仿真特訓題目生成 (本次針對 Part 6 中文問題進行強制修正)
+// 逐參數解釋：fetchAIPartQuestions(part, score)
+// - part: 測驗部分 (5, 6, 7)
+// - score: 難度分數 (500-900)
 export async function fetchAIPartQuestions(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    let rule = part === 5 ? "10 single-sentence questions." : "2 passages with 4 questions each.";
     
-    const prompt = `You are a TOEIC examiner. Target Score: ${score}. Part: ${part}. ${rule}
-        Output ONLY a valid JSON array. For Part 6/7, use "txt" for passage.
-        IMPORTANT: For "exp", use single quotes 'word' for emphasis, NOT escaped double quotes.
-        Part 5 Format: [{"q":"..._______...","opts":["A","B","C","D"],"ans":0,"exp":"解析","trans":"翻譯"}]
-        Part 6/7 Format: [{"txt":"文章","qs":[{"q":"題","opts":["A","B","C","D"],"ans":1,"exp":"解析","trans":"翻"}]}]
-        Strict Rules: Ensure level ${score}. Lang: ${targetLang}.`;
+    // 🌟 核心防禦：在指令中明確區分語言用途
+    const prompt = `You are a professional TOEIC test maker. Target Difficulty: ${score} points level.
+        TASK: Create Part ${part} questions.
+        
+        CRITICAL RULES:
+        1. All "txt" (passages), "q" (questions), and "opts" (options) MUST be in ENGLISH only.
+        2. Only "exp" (explanation) and "trans" (translation) should be in ${targetLang}.
+        3. For Part 6: Generate 2 short English passages. Each must have 4 blanks. Blanks should be marked as (1), (2) etc.
+        4. Output format: STRICT JSON array. Use single quotes for emphasis inside strings.
+
+        JSON structure:
+        Part 5: [{"q":"..._______...","opts":["A","B","C","D"],"ans":0,"exp":"解析","trans":"翻譯"}]
+        Part 6/7: [{"txt":"[ENGLISH PASSAGE]","qs":[{"q":"[ENGLISH QUESTION]","opts":["A","B","C","D"],"ans":1,"exp":"[${targetLang}解析]","trans":"[${targetLang}翻譯]"}]}]
+        
+        Difficulty Logic: Match TOEIC ${score} vocabulary and grammar complexity.`;
 
     return await fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
