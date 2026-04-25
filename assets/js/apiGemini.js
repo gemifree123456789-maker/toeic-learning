@@ -11,9 +11,28 @@ function ensureCandidateText(data) {
     return text;
 }
 
+// 🌟 已升級：暴力 JSON 提取器，防止 AI 廢話導致解析失敗
 function parseJsonCandidateText(rawText) {
-    const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
+    let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    try {
+        return JSON.parse(cleaned);
+    } catch (err) {
+        const arrayStart = cleaned.indexOf('[');
+        const arrayEnd = cleaned.lastIndexOf(']');
+        const objStart = cleaned.indexOf('{');
+        const objEnd = cleaned.lastIndexOf('}');
+        try {
+            if (arrayStart !== -1 && arrayEnd !== -1 && (objStart === -1 || arrayStart < objStart)) {
+                return JSON.parse(cleaned.substring(arrayStart, arrayEnd + 1));
+            } else if (objStart !== -1 && objEnd !== -1) {
+                return JSON.parse(cleaned.substring(objStart, objEnd + 1));
+            }
+        } catch (extractErr) {
+            console.error("JSON 提取失敗:", rawText);
+            throw new Error("AI 格式解析失敗");
+        }
+        throw new Error("無法解析題目資料");
+    }
 }
 
 // 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
@@ -30,9 +49,8 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
 
         if (response.status === 429) {
             if (i === retries - 1) {
-                throw new Error("HTTP_429"); // 快速拋出錯誤代碼給外層處理
+                throw new Error("HTTP_429");
             }
-            // 極短暫退避：只等 2 秒就重試，不再傻等 15 秒
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
         }
@@ -70,10 +88,7 @@ export async function fetchWordDetails(word, forceFetch = false) {
     }
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    
-    // 🌟 核心升級：在 Prompt 中強制要求回傳同義字與反義字
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string.", "synonyms": "Comma-separated list of 1-2 most common synonyms with brief ${targetLang} meaning, e.g. purchase (購買). If none, leave empty.", "antonyms": "Provide exactly 1 common antonym with brief ${targetLang} meaning, e.g. sell (賣出). If none, leave empty."}`;
-    
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     await DB.setWord(word, result);
     return result;
@@ -273,4 +288,31 @@ export async function fetchGeminiTTS(text, voiceName) {
         throw error;
     }
     return data.candidates[0].content.parts[0].inlineData.data;
+}
+
+// 🌟 新增：AI 仿真特訓 Part 5/6/7 生成函數
+export async function fetchAIPartQuestions(part, score) {
+    const locale = getLocaleMeta();
+    const targetLang = `${locale.name} (${locale.inLocal})`;
+    let specificRule = "";
+    
+    if (part === 5) {
+        specificRule = "Generate 10 single-sentence multiple-choice questions focusing on grammar and vocabulary.";
+    } else if (part === 6) {
+        specificRule = "Generate 2 short passages (email/memo/notice). Each passage must have 4 blanks with questions. Total 8 questions.";
+    } else if (part === 7) {
+        specificRule = "Generate 2 articles (advertisement/article/letter). Each article must have 4 reading comprehension questions. Total 8 questions.";
+    }
+
+    const prompt = `You are a TOEIC examiner. Task: Create realistic Part ${part} questions.
+        Target Difficulty: ${score} points level.
+        Language for Explanations/Translations: ${targetLang}.
+        
+        Output format: ONLY a valid JSON array. For Part 6/7, use "txt" for passage.
+        Part 5 Format: [{"q":"..._______...", "opts":["A","B","C","D"], "ans":0, "exp":"解析", "trans":"翻譯"}]
+        Part 6/7 Format: [{"txt":"文章內容", "qs":[{"q":"題目", "opts":["A","B","C","D"], "ans":1, "exp":"解析", "trans":"題目翻譯"}]}]
+        
+        Strict Rules: Ensure logic match ${score} level. ${specificRule}`;
+
+    return await fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
