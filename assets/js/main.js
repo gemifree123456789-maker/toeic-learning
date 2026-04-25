@@ -18,8 +18,6 @@ import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, s
 
 // 🌟 核心保證：匯入特訓模組初始化器
 import { initSpecialTraining } from './specialTraining.js';
-// 🌟 新增：匯入經典題庫初始化器
-import { initClassicTraining } from './classicTraining.js';
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
@@ -266,6 +264,7 @@ function renderScoreChips(containerId) {
     if (!el) return;
     el.innerHTML = '';
     scores.forEach(score => {
+        // 防呆處理：如果是 Part 1 且分數為 900，則不顯示
         if (containerId === 'part1ScoreSelector' && score === 900) return;
 
         const chip = document.createElement('div');
@@ -287,7 +286,7 @@ function renderScoreChips(containerId) {
 }
 renderScoreChips('scoreSelector');
 renderScoreChips('examScoreSelector');
-renderScoreChips('part1ScoreSelector');
+renderScoreChips('part1ScoreSelector'); 
 if (!state.speakingState.level) {
     state.speakingState.level = getSpeakingLevelByScore(state.targetScore);
 }
@@ -1054,10 +1053,7 @@ GENERATE_BTN.onclick = async () => {
         // 🌟 呼叫專項特訓的初始化器
         initSpecialTraining();
 
-        // 🌟 呼叫經典題庫的初始化器
-        initClassicTraining();
-
-        // 動態載入全新的 Part 1 聽力模組 (安全載入機制)
+        // 🌟 動態載入全新的 Part 1 聽力模組 (安全載入機制)
         try {
             const part1Module = await import('./part1Training.js');
             if (part1Module && part1Module.initPart1Training) {
@@ -1065,6 +1061,16 @@ GENERATE_BTN.onclick = async () => {
             }
         } catch (e) {
             console.log('請於下一步建立 part1Training.js 檔案！');
+        }
+
+        // 🌟 動態載入經典題庫模組 (安全載入機制，絕對不當機)
+        try {
+            const classicModule = await import('./classicTraining.js');
+            if (classicModule && classicModule.initClassicTraining) {
+                classicModule.initClassicTraining();
+            }
+        } catch (e) {
+            console.warn('經典題庫載入失敗或檔案未建立', e);
         }
 
         await renderDailyDashboard();
