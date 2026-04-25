@@ -159,32 +159,30 @@ export async function fetchGeminiTTS(text, voiceName) {
     return data.candidates[0].content.parts[0].inlineData.data;
 }
 
-// 🌟 核心修正：強制語言鎖定 (Anti-Chinese-In-Questions Logic)
+// 🌟 最終校準版：解決 Part 5 白畫面與 5/6/7 語言混亂問題
 export async function fetchAIPartQuestions(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    const prompt = `You are a strict TOEIC Examiner. Generate realistic Part ${part} questions for difficulty level ${score}.
+    // 根據 Part 決定不同的結構說明
+    let structureInstruction = "";
+    if (part === 5) {
+        structureInstruction = `[{"q":"[ENGLISH SENTENCE WITH _______]","opts":["[ENGLISH OPTION A]","[ENGLISH OPTION B]","[ENGLISH OPTION C]","[ENGLISH OPTION D]"],"ans":0,"exp":"[${targetLang} EXPLANATION]","trans":"[${targetLang} TRANSLATION]"}]`;
+    } else {
+        structureInstruction = `[{"txt":"[ENGLISH PASSAGE]","qs":[{"q":"[ENGLISH QUESTION]","opts":["[ENGLISH OPTION A]","..."],"ans":1,"exp":"[${targetLang}解析]","trans":"[${targetLang}翻譯]"}]}]`;
+    }
 
-    [STRICT LANGUAGE RULES]
-    - "txt" (passage text): MUST BE 100% ENGLISH.
-    - "q" (question text): MUST BE 100% ENGLISH. 
-    - "opts" (options): MUST BE 100% ENGLISH.
-    - "exp" (explanation): MUST BE IN ${targetLang}.
-    - "trans" (translation): MUST BE IN ${targetLang}.
-
-    [TASK SPECIFICS]
-    - Part 5: 10 single-sentence grammar/vocab questions.
-    - Part 6: 2 short English passages, 4 questions each.
-    - Part 7: 2 English articles, 4 comprehension questions each.
-
-    [OUTPUT FORMAT]
-    - STRICT JSON array only.
-    - Use single quotes 'word' for emphasis inside JSON strings.
-    - JSON Structure:
-      [{"txt":"[ONLY ENGLISH]","qs":[{"q":"[ONLY ENGLISH]","opts":["[ONLY ENGLISH]","..."],"ans":0,"exp":"[IN ${targetLang}]","trans":"[IN ${targetLang}]"}]}]
+    const prompt = `You are a professional TOEIC test maker. Level: ${score} points.
+    TASK: Generate Part ${part} questions.
     
-    (For Part 5, ignore "txt" and put sentence in "q")`;
+    [CRITICAL LANGUAGE RULES]
+    - "txt", "q", "opts" MUST BE 100% ENGLISH. No Chinese allowed in these fields.
+    - "exp", "trans" MUST BE IN ${targetLang}.
+    
+    [DATA FORMAT]
+    - Return ONLY a valid JSON array.
+    - Use single quotes 'word' inside JSON strings.
+    - Structure: ${structureInstruction}`;
 
     return await fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
