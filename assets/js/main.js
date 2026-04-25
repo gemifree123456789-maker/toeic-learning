@@ -18,6 +18,8 @@ import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, s
 
 // 🌟 核心保證：匯入特訓模組初始化器
 import { initSpecialTraining } from './specialTraining.js';
+// 加上這行 👇
+import { initClassicTraining } from './classicTraining.js';
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
@@ -209,6 +211,10 @@ function setPracticeMode(mode) {
     
     const specialEl = document.getElementById('practicePanelSpecial');
     if(specialEl) specialEl.classList.toggle('hidden', mode !== 'special');
+
+    // 加上這行 👇
+    const classicEl = document.getElementById('practicePanelClassic');
+    if(classicEl) classicEl.classList.toggle('hidden', mode !== 'classic');
 
     // 🌟 新增：控制 Part 1 面板顯示隱藏
     const part1El = document.getElementById('practicePanelPart1');
@@ -1048,6 +1054,9 @@ GENERATE_BTN.onclick = async () => {
         
         // 🌟 呼叫專項特訓的初始化器
         initSpecialTraining();
+
+        // 加上這行 👇 啟動經典題庫
+        initClassicTraining();
 
         // 🌟 動態載入全新的 Part 1 聽力模組 (安全載入機制)
         try {
