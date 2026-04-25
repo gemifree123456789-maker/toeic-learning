@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { MistakesDB } from './specialTraining.js';
+// 🌟 破案關鍵：就是漏了下面這一行！必須把 AI 生成函數給請過來！
 import { fetchAIPartQuestions } from './apiGemini.js';
 
 // 狀態管理物件
