@@ -155,41 +155,36 @@ export async function fetchGeminiTTS(text, voiceName) {
             }
         })
     });
-    
-    if (response.status === 429) {
-        throw new Error("語音功能請求太頻繁，請稍等。");
-    }
-
     const data = await response.json();
-    if (!response.ok || data?.error) {
-        throw new Error(data?.error?.message || 'TTS failed');
-    }
     return data.candidates[0].content.parts[0].inlineData.data;
 }
 
-// 🌟 AI 仿真特訓題目生成 (本次針對 Part 6 中文問題進行強制修正)
-// 逐參數解釋：fetchAIPartQuestions(part, score)
-// - part: 測驗部分 (5, 6, 7)
-// - score: 難度分數 (500-900)
+// 🌟 核心修正：強制語言鎖定 (Anti-Chinese-In-Questions Logic)
 export async function fetchAIPartQuestions(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    // 🌟 核心防禦：在指令中明確區分語言用途
-    const prompt = `You are a professional TOEIC test maker. Target Difficulty: ${score} points level.
-        TASK: Create Part ${part} questions.
-        
-        CRITICAL RULES:
-        1. All "txt" (passages), "q" (questions), and "opts" (options) MUST be in ENGLISH only.
-        2. Only "exp" (explanation) and "trans" (translation) should be in ${targetLang}.
-        3. For Part 6: Generate 2 short English passages. Each must have 4 blanks. Blanks should be marked as (1), (2) etc.
-        4. Output format: STRICT JSON array. Use single quotes for emphasis inside strings.
+    const prompt = `You are a strict TOEIC Examiner. Generate realistic Part ${part} questions for difficulty level ${score}.
 
-        JSON structure:
-        Part 5: [{"q":"..._______...","opts":["A","B","C","D"],"ans":0,"exp":"解析","trans":"翻譯"}]
-        Part 6/7: [{"txt":"[ENGLISH PASSAGE]","qs":[{"q":"[ENGLISH QUESTION]","opts":["A","B","C","D"],"ans":1,"exp":"[${targetLang}解析]","trans":"[${targetLang}翻譯]"}]}]
-        
-        Difficulty Logic: Match TOEIC ${score} vocabulary and grammar complexity.`;
+    [STRICT LANGUAGE RULES]
+    - "txt" (passage text): MUST BE 100% ENGLISH.
+    - "q" (question text): MUST BE 100% ENGLISH. 
+    - "opts" (options): MUST BE 100% ENGLISH.
+    - "exp" (explanation): MUST BE IN ${targetLang}.
+    - "trans" (translation): MUST BE IN ${targetLang}.
+
+    [TASK SPECIFICS]
+    - Part 5: 10 single-sentence grammar/vocab questions.
+    - Part 6: 2 short English passages, 4 questions each.
+    - Part 7: 2 English articles, 4 comprehension questions each.
+
+    [OUTPUT FORMAT]
+    - STRICT JSON array only.
+    - Use single quotes 'word' for emphasis inside JSON strings.
+    - JSON Structure:
+      [{"txt":"[ONLY ENGLISH]","qs":[{"q":"[ONLY ENGLISH]","opts":["[ONLY ENGLISH]","..."],"ans":0,"exp":"[IN ${targetLang}]","trans":"[IN ${targetLang}]"}]}]
+    
+    (For Part 5, ignore "txt" and put sentence in "q")`;
 
     return await fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
