@@ -1,16 +1,18 @@
 import { state } from './state.js';
 import { MistakesDB } from './specialTraining.js';
 
-// --- 狀態管理物件 ---
-const ctState = { 
-    active: false, 
-    part: 5, 
-    questions: [], 
-    currentQ: 0, 
-    answered: false 
-};
+// 狀態管理物件
+// 逐參數解釋：
+// - active: 布林值，測驗是否進行中
+// - part: 數字，紀錄目前選擇的是 Part 5, 6 或 7
+// - questions: 陣列，存放本次抽出並格式化後的測驗題
+// - currentQ: 數字，目前答題的索引進度
+// - answered: 布林值，當下這題是否已作答，用來防止重複點擊
+const ctState = { active: false, part: 5, questions: [], currentQ: 0, answered: false };
 
-// --- 取得題庫函數 ---
+// 逐參數解釋：getQuestionPool(part)
+// part: 傳入數字 5, 6, 或 7，決定要撈取哪個資料庫
+// 功能：利用 try-catch 安全地向全域環境 (window) 呼叫 questions.js 內的靜態變數。若找不到則回傳空陣列防呆。
 function getQuestionPool(part) {
     let pool = [];
     try {
@@ -30,7 +32,8 @@ function getQuestionPool(part) {
     return pool;
 }
 
-// --- 模組初始化函數 ---
+// 逐參數解釋：initClassicTraining()
+// 無傳入參數。負責將 index.html 面板中的 Part 5~7 按鈕，以及右上角關閉按鈕綁定對應的點擊事件。
 export function initClassicTraining() {
     const btn5 = document.getElementById('btnStartPart5');
     const btn6 = document.getElementById('btnStartPart6');
@@ -51,7 +54,10 @@ export function initClassicTraining() {
     }
 }
 
-// --- 啟動測驗與資料轉譯函數 ---
+// 逐參數解釋：startClassicTraining(part)
+// part: 數字，代表準備執行的測驗單元。
+// 功能：取得題庫後，將階層式或陣列式的靜態資料「扁平化」與「標準化」。
+// 🌟 修正重點：為 Part 6/7 增加 `txt` 屬性讀取，並確保同一篇文章的題目連續出現。
 function startClassicTraining(part) {
     const pool = getQuestionPool(part);
     if (!pool || pool.length === 0) {
@@ -60,35 +66,49 @@ function startClassicTraining(part) {
     }
 
     let flatPool = [];
-    pool.forEach(item => {
-        if (item.qs && Array.isArray(item.qs)) {
-            item.qs.forEach(subQ => {
-                flatPool.push({ ...subQ, article: item.article || item.passage || '' });
-            });
-        } else {
-            flatPool.push(item);
-        }
-    });
 
-    flatPool.sort(() => Math.random() - 0.5);
+    if (part === 5) {
+        // Part 5 只有單題，直接洗牌取 10 題
+        let shuffled = [...pool].sort(() => Math.random() - 0.5);
+        flatPool = shuffled.slice(0, 10);
+    } else {
+        // Part 6/7 題庫格式帶有文章，必須以「題組(文章)」為單位洗牌，確保題目順序連貫
+        let shuffledGroups = [...pool].sort(() => Math.random() - 0.5);
+        for (let group of shuffledGroups) {
+            if (group.qs && Array.isArray(group.qs)) {
+                // 🌟 核心修正：抓取原開源專案使用的 `txt` 屬性，並保留 fallback 彈性
+                let articleText = group.txt || group.article || group.passage || group.text || group.content || '';
+                
+                group.qs.forEach(subQ => {
+                    flatPool.push({ ...subQ, article: articleText });
+                });
+            } else {
+                flatPool.push(group);
+            }
+            
+            // 若題目數已達約 10 題，則停止抽取題組 (避免一次考太多，但會保證同一篇考完)
+            if (flatPool.length >= 10) break;
+        }
+    }
     
-    const selected = flatPool.slice(0, 10).map((raw, idx) => {
+    // 將靜態格式轉化為 TOEIC AI Tutor 系統標準的資料格式
+    const selected = flatPool.map((raw, idx) => {
         const options = (raw.opts || []).map((optText, oIdx) => ({
-            key: String.fromCharCode(65 + oIdx),
+            key: String.fromCharCode(65 + oIdx), // 'A', 'B', 'C', 'D'
             en: optText,
-            isCorrect: oIdx === raw.ans
+            isCorrect: oIdx === raw.ans // 原題庫的 ans 是 0-based 索引
         }));
 
         return {
             id: `classic_p${part}_${Date.now()}_${idx}`,
             topic: `Part ${part} 經典題庫`,
-            article: raw.article || raw.passage || '',
+            article: raw.article || '',
             en: raw.q || '',
-            zh: raw.trans || '',
+            zh: raw.trans || '', // 題幹中文翻譯
             options: options,
             explanation: {
                 core: raw.exp || '無詳細解析',
-                skills: raw.zh || ''
+                skills: raw.zh || '' // 原題庫常將中文詳解放在 zh
             }
         };
     });
@@ -102,7 +122,8 @@ function startClassicTraining(part) {
     renderClassicQuestion();
 }
 
-// --- 渲染考題介面函數 ---
+// 逐參數解釋：renderClassicQuestion()
+// 無傳入參數。依據目前進度 (currentQ) 將題目文章、題幹與 4 個按鈕渲染至畫面。
 function renderClassicQuestion() {
     const q = ctState.questions[ctState.currentQ];
     ctState.answered = false;
@@ -114,11 +135,15 @@ function renderClassicQuestion() {
     const oArea = document.getElementById('classicOptionsArea');
 
     let qHtml = '';
+    // 若為 Part 6/7 且有文章內容，渲染文章區塊
     if (q.article) {
         qHtml += `<div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; color: #334155; line-height: 1.6; white-space: pre-wrap; max-height: 250px; overflow-y: auto; border: 1px solid #cbd5e1;">${q.article}</div>`;
     }
-    qHtml += `<div style="font-size: 18px; color: #1f2937; font-weight: 500; line-height: 1.6; margin-bottom: 12px;">${q.en.replace(/-------/g, '_______')}</div>`;
+    // 將題目中可能出現的 ------- 替換為標準底線
+    let questionText = (q.en || '').replace(/-------/g, '_______');
+    qHtml += `<div style="font-size: 18px; color: #1f2937; font-weight: 500; line-height: 1.6; margin-bottom: 12px;">${questionText}</div>`;
     
+    // 預埋題幹中文翻譯 (預設隱藏)
     if (q.zh) {
         qHtml += `<div id="classicQuestionZh" class="hidden" style="font-size: 14px; color: #6b7280; border-top: 1px dashed #e5e7eb; padding-top: 12px;">${q.zh}</div>`;
     }
@@ -126,6 +151,7 @@ function renderClassicQuestion() {
     qArea.innerHTML = qHtml;
     oArea.innerHTML = '';
 
+    // 渲染 A,B,C,D 按鈕
     q.options.forEach((opt) => {
         const btn = document.createElement('button');
         btn.className = 'srs-option';
@@ -139,7 +165,11 @@ function renderClassicQuestion() {
     });
 }
 
-// --- 答題判定與解析函數 ---
+// 逐參數解釋：handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj)
+// selectedBtn: 玩家點擊的 HTML 節點，用來上紅綠色
+// isCorrect: 布林值，判斷是否答對
+// optionsData: 四個選項的完整陣列
+// questionObj: 當前這題的標準化資料物件
 function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     ctState.answered = true;
     const oArea = document.getElementById('classicOptionsArea');
@@ -159,6 +189,7 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         }
     });
 
+    // 建立解析區塊
     const expDiv = document.createElement('div');
     expDiv.style.cssText = 'margin-top: 16px; background: #eff6ff; padding: 16px; border-radius: 12px; border: 1px solid #bfdbfe;';
     
@@ -178,6 +209,7 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     `;
     oArea.appendChild(expDiv);
 
+    // 釘選/收錄錯題邏輯 (完美共用系統原本的 MistakesDB)
     const btnPin = document.getElementById('btnPinClassicMistake');
     let isPinned = false;
     btnPin.onclick = async () => {
@@ -216,7 +248,8 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     oArea.appendChild(nextBtn);
 }
 
-// --- 結算與紀錄函數 ---
+// 逐參數解釋：showClassicResults()
+// 無傳入參數。測驗完畢後，顯示結算畫面，並為每日任務的「專項特訓」進度 +1。
 async function showClassicResults() {
     const qArea = document.getElementById('classicQuestionArea');
     const oArea = document.getElementById('classicOptionsArea');
