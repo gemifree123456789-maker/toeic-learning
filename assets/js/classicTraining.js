@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { MistakesDB } from './specialTraining.js';
+import { fetchAIPartQuestions } from './apiGemini.js';
 
 // 狀態管理物件
 // 逐參數解釋：
@@ -11,8 +12,8 @@ import { MistakesDB } from './specialTraining.js';
 const ctState = { active: false, part: 5, questions: [], currentQ: 0, answered: false };
 
 // 逐參數解釋：getQuestionPool(part)
-// part: 傳入數字 5, 6, 或 7，決定要撈取哪個資料庫
-// 功能：利用 try-catch 安全地向全域環境 (window) 呼叫 questions.js 內的靜態變數。若找不到則回傳空陣列防呆。
+// part: 傳入數字 5, 6, 或 7，決定要撈取哪個本地資料庫
+// 功能：利用 try-catch 安全地向全域環境 (window) 呼叫 questions.js 內的靜態變數。
 function getQuestionPool(part) {
     let pool = [];
     try {
@@ -33,16 +34,27 @@ function getQuestionPool(part) {
 }
 
 // 逐參數解釋：initClassicTraining()
-// 無傳入參數。負責將 index.html 面板中的 Part 5~7 按鈕，以及右上角關閉按鈕綁定對應的點擊事件。
+// 負責將面板中的按鈕綁定對應的點擊事件（含本地與 AI 按鈕）。
 export function initClassicTraining() {
+    // 本地題庫按鈕
     const btn5 = document.getElementById('btnStartPart5');
     const btn6 = document.getElementById('btnStartPart6');
     const btn7 = document.getElementById('btnStartPart7');
+    
+    // AI 仿真按鈕
+    const btnAI5 = document.getElementById('btnStartAIPart5');
+    const btnAI6 = document.getElementById('btnStartAIPart6');
+    const btnAI7 = document.getElementById('btnStartAIPart7');
+    
     const btnClose = document.getElementById('btnCloseClassic');
 
-    if (btn5) btn5.onclick = (e) => { e.preventDefault(); startClassicTraining(5); };
-    if (btn6) btn6.onclick = (e) => { e.preventDefault(); startClassicTraining(6); };
-    if (btn7) btn7.onclick = (e) => { e.preventDefault(); startClassicTraining(7); };
+    if (btn5) btn5.onclick = (e) => { e.preventDefault(); startClassicTraining(5, false); };
+    if (btn6) btn6.onclick = (e) => { e.preventDefault(); startClassicTraining(6, false); };
+    if (btn7) btn7.onclick = (e) => { e.preventDefault(); startClassicTraining(7, false); };
+
+    if (btnAI5) btnAI5.onclick = (e) => { e.preventDefault(); startClassicTraining(5, true); };
+    if (btnAI6) btnAI6.onclick = (e) => { e.preventDefault(); startClassicTraining(6, true); };
+    if (btnAI7) btnAI7.onclick = (e) => { e.preventDefault(); startClassicTraining(7, true); };
 
     if (btnClose) {
         btnClose.onclick = (e) => {
@@ -54,61 +66,78 @@ export function initClassicTraining() {
     }
 }
 
-// 逐參數解釋：startClassicTraining(part)
-// part: 數字，代表準備執行的測驗單元。
-// 功能：取得題庫後，將階層式或陣列式的靜態資料「扁平化」與「標準化」。
-// 🌟 修正重點：為 Part 6/7 增加 `txt` 屬性讀取，並確保同一篇文章的題目連續出現。
-function startClassicTraining(part) {
-    const pool = getQuestionPool(part);
-    if (!pool || pool.length === 0) {
-        alert(`找不到 Part ${part} 的題庫資料！請確認 questions.js 檔案內容是否正確載入。`);
+// 逐參數解釋：startClassicTraining(part, isAI)
+// - part: 測驗部分 (5/6/7)
+// - isAI: 布林值，True 代表使用 AI 生成，False 代表使用本地題庫
+async function startClassicTraining(part, isAI) {
+    let rawData = [];
+    
+    if (isAI) {
+        if (!state.apiKey) return alert("請先至設定填入 API Key");
+        const btn = document.getElementById(`btnStartAIPart${part}`);
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "✨ AI 仿真題庫生成中...";
+        
+        try {
+            // 呼叫 apiGemini.js 中的生成函數
+            rawData = await fetchAIPartQuestions(part, state.targetScore || 600);
+        } catch (err) {
+            alert("AI 生成失敗：" + (err.message === 'HTTP_429' ? "請求太頻繁，請稍後再試" : err.message));
+            return;
+        } finally {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    } else {
+        rawData = getQuestionPool(part);
+    }
+
+    if (!rawData || rawData.length === 0) {
+        alert(`找不到資料！請確認相關載入是否正確。`);
         return;
     }
 
     let flatPool = [];
 
+    // 資料扁平化處理
     if (part === 5) {
-        // Part 5 只有單題，直接洗牌取 10 題
-        let shuffled = [...pool].sort(() => Math.random() - 0.5);
-        flatPool = shuffled.slice(0, 10);
+        let poolToUse = isAI ? rawData : [...rawData].sort(() => Math.random() - 0.5);
+        flatPool = poolToUse.slice(0, 10);
     } else {
-        // Part 6/7 題庫格式帶有文章，必須以「題組(文章)」為單位洗牌，確保題目順序連貫
-        let shuffledGroups = [...pool].sort(() => Math.random() - 0.5);
-        for (let group of shuffledGroups) {
+        let poolToUse = isAI ? rawData : [...rawData].sort(() => Math.random() - 0.5);
+        for (let group of poolToUse) {
             if (group.qs && Array.isArray(group.qs)) {
-                // 🌟 核心修正：抓取原開源專案使用的 `txt` 屬性，並保留 fallback 彈性
-                let articleText = group.txt || group.article || group.passage || group.text || group.content || '';
-                
+                let articleText = group.txt || group.article || group.passage || '';
                 group.qs.forEach(subQ => {
                     flatPool.push({ ...subQ, article: articleText });
                 });
             } else {
                 flatPool.push(group);
             }
-            
-            // 若題目數已達約 10 題，則停止抽取題組 (避免一次考太多，但會保證同一篇考完)
-            if (flatPool.length >= 10) break;
+            // 本地模式才限制題數，AI 模式通常直接使用回傳的所有題目
+            if (flatPool.length >= 10 && !isAI) break; 
         }
     }
     
-    // 將靜態格式轉化為 TOEIC AI Tutor 系統標準的資料格式
+    // 標準化題目格式
     const selected = flatPool.map((raw, idx) => {
         const options = (raw.opts || []).map((optText, oIdx) => ({
-            key: String.fromCharCode(65 + oIdx), // 'A', 'B', 'C', 'D'
+            key: String.fromCharCode(65 + oIdx),
             en: optText,
-            isCorrect: oIdx === raw.ans // 原題庫的 ans 是 0-based 索引
+            isCorrect: oIdx === raw.ans
         }));
 
         return {
-            id: `classic_p${part}_${Date.now()}_${idx}`,
-            topic: `Part ${part} 經典題庫`,
+            id: `classic_${isAI?'ai':'local'}_p${part}_${Date.now()}_${idx}`,
+            topic: isAI ? `AI 仿真 Part ${part}` : `經典題庫 Part ${part}`,
             article: raw.article || '',
             en: raw.q || '',
-            zh: raw.trans || '', // 題幹中文翻譯
+            zh: raw.trans || '',
             options: options,
             explanation: {
                 core: raw.exp || '無詳細解析',
-                skills: raw.zh || '' // 原題庫常將中文詳解放在 zh
+                skills: raw.zh || ''
             }
         };
     });
@@ -123,27 +152,24 @@ function startClassicTraining(part) {
 }
 
 // 逐參數解釋：renderClassicQuestion()
-// 無傳入參數。依據目前進度 (currentQ) 將題目文章、題幹與 4 個按鈕渲染至畫面。
+// 無傳入參數。將當前題目渲染至 UI。
 function renderClassicQuestion() {
     const q = ctState.questions[ctState.currentQ];
     ctState.answered = false;
 
     document.getElementById('classicProgressText').textContent = `${ctState.currentQ + 1} / ${ctState.questions.length}`;
-    document.getElementById('classicTopicBadge').textContent = `Part ${ctState.part} 測驗`;
+    document.getElementById('classicTopicBadge').textContent = q.topic;
 
     const qArea = document.getElementById('classicQuestionArea');
     const oArea = document.getElementById('classicOptionsArea');
 
     let qHtml = '';
-    // 若為 Part 6/7 且有文章內容，渲染文章區塊
     if (q.article) {
         qHtml += `<div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; color: #334155; line-height: 1.6; white-space: pre-wrap; max-height: 250px; overflow-y: auto; border: 1px solid #cbd5e1;">${q.article}</div>`;
     }
-    // 將題目中可能出現的 ------- 替換為標準底線
     let questionText = (q.en || '').replace(/-------/g, '_______');
     qHtml += `<div style="font-size: 18px; color: #1f2937; font-weight: 500; line-height: 1.6; margin-bottom: 12px;">${questionText}</div>`;
     
-    // 預埋題幹中文翻譯 (預設隱藏)
     if (q.zh) {
         qHtml += `<div id="classicQuestionZh" class="hidden" style="font-size: 14px; color: #6b7280; border-top: 1px dashed #e5e7eb; padding-top: 12px;">${q.zh}</div>`;
     }
@@ -151,7 +177,6 @@ function renderClassicQuestion() {
     qArea.innerHTML = qHtml;
     oArea.innerHTML = '';
 
-    // 渲染 A,B,C,D 按鈕
     q.options.forEach((opt) => {
         const btn = document.createElement('button');
         btn.className = 'srs-option';
@@ -166,10 +191,7 @@ function renderClassicQuestion() {
 }
 
 // 逐參數解釋：handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj)
-// selectedBtn: 玩家點擊的 HTML 節點，用來上紅綠色
-// isCorrect: 布林值，判斷是否答對
-// optionsData: 四個選項的完整陣列
-// questionObj: 當前這題的標準化資料物件
+// 負責判定對錯、變更顏色、顯示解析。
 function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     ctState.answered = true;
     const oArea = document.getElementById('classicOptionsArea');
@@ -189,13 +211,12 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
         }
     });
 
-    // 建立解析區塊
     const expDiv = document.createElement('div');
     expDiv.style.cssText = 'margin-top: 16px; background: #eff6ff; padding: 16px; border-radius: 12px; border: 1px solid #bfdbfe;';
     
     let expHtml = `<div style="font-size: 14px; color: #1e3a8a; line-height: 1.6; margin-bottom: 8px;"><strong>原文解析：</strong>${questionObj.explanation.core}</div>`;
     if (questionObj.explanation.skills) {
-        expHtml += `<div style="margin-top: 10px; font-size: 13.5px; color: #475569;"><strong>中文翻譯：</strong>${questionObj.explanation.skills}</div>`;
+        expHtml += `<div style="margin-top: 10px; font-size: 13.5px; color: #475569;"><strong>解析細節：</strong>${questionObj.explanation.skills}</div>`;
     }
 
     expDiv.innerHTML = `
@@ -209,7 +230,6 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
     `;
     oArea.appendChild(expDiv);
 
-    // 釘選/收錄錯題邏輯 (完美共用系統原本的 MistakesDB)
     const btnPin = document.getElementById('btnPinClassicMistake');
     let isPinned = false;
     btnPin.onclick = async () => {
@@ -225,7 +245,7 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
                 id: questionObj.id,
                 topic: questionObj.topic,
                 en: questionObj.article ? `[閱讀測驗]\n${questionObj.en}` : questionObj.en,
-                zh: questionObj.zh || '經典題庫',
+                zh: questionObj.zh || '閱讀特訓',
                 options: questionObj.options,
                 explanation: questionObj.explanation,
                 savedAt: Date.now()
@@ -249,7 +269,7 @@ function handleClassicAnswer(selectedBtn, isCorrect, optionsData, questionObj) {
 }
 
 // 逐參數解釋：showClassicResults()
-// 無傳入參數。測驗完畢後，顯示結算畫面，並為每日任務的「專項特訓」進度 +1。
+// 顯示結算畫面並更新每日進度。
 async function showClassicResults() {
     const qArea = document.getElementById('classicQuestionArea');
     const oArea = document.getElementById('classicOptionsArea');
@@ -267,7 +287,7 @@ async function showClassicResults() {
     qArea.innerHTML = `
         <div style="text-align: center; padding: 32px 0;">
             <div style="font-size: 48px; margin-bottom: 16px;">📚</div>
-            <h2 style="font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 8px;">經典題庫測驗完成！</h2>
+            <h2 style="font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 8px;">特訓完成！</h2>
             <p style="color: #6b7280; line-height: 1.5;">答錯或釘選的題目已為您收錄至【特訓錯題本】</p>
         </div>
     `;
@@ -275,7 +295,7 @@ async function showClassicResults() {
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'srs-done-btn';
-    closeBtn.textContent = '結束測驗，返回首頁';
+    closeBtn.textContent = '結束特訓，返回首頁';
     closeBtn.onclick = () => {
         document.getElementById('classicQuizOverlay').classList.add('hidden');
     };
