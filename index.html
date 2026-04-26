@@ -19,6 +19,10 @@
       #bootLoading .boot-loading-card { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #5856d6; font-weight: 600; }
       #bootLoading .boot-loading-spinner { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(88, 86, 214, 0.2); border-top-color: #5856d6; animation: boot-spin 0.8s linear infinite; }
       @keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      /* 🌟 修正滑桿與單字顯示樣式，確保不影響原有 layout */
+      #aiDifficultySlider { cursor: pointer; transition: opacity 0.2s; }
+      #aiDifficultySlider:active { opacity: 0.8; }
+      .word-modal.active { display: block !important; }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="./assets/js/questions.js"></script>
@@ -50,8 +54,7 @@
             <button class="settings-btn" id="btnSettings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
         </div>
     </header>
-
-    <div id="tabLearn" class="container">
+<div id="tabLearn" class="container">
         <div id="dailyTaskDashboard" class="hidden" style="background: white; border-radius: 16px; padding: 16px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;"></div>
 
         <div id="emptyState" class="empty-state">
@@ -89,12 +92,11 @@
             <button class="wm-btn secondary exam-back-btn" id="btnExamBack" data-i18n="examBack">返回考試設定</button>
         </div>
     </div>
-
-    <div id="tabPractice" class="container hidden">
+<div id="tabPractice" class="container hidden">
         <div class="practice-container">
             <h2 data-i18n="practiceModeTitle">練習模式</h2>
             <p class="subtitle" data-i18n="practiceModeSubtitle">選擇文章、口說或模擬考試</p>
-            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px; overflow-x: auto; white-space: nowrap;">
+            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px; overflow-x: auto; white-space: nowrap; padding-bottom: 8px;">
                 <button class="practice-mode-btn active" data-mode="article" data-i18n="practiceModeArticle">文章練習</button>
                 <button class="practice-mode-btn" data-mode="speaking" data-i18n="practiceModeSpeaking">口說對話</button>
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
@@ -102,124 +104,50 @@
                 <button class="practice-mode-btn" id="tabPart1" data-mode="part1">Part 1 聽力</button>
                 <button class="practice-mode-btn" id="tabClassic" data-mode="classic">📚 閱讀特訓</button>
             </div>
-            
-            <div class="practice-mode-panel" id="practicePanelArticle">
-                <h3 class="practice-label" data-i18n="targetScoreLabel">目標分數</h3>
-                <p class="practice-note" data-i18n="targetScoreNote">根據你的多益程度選擇適合難度</p>
-                <div class="score-selector" id="scoreSelector"></div>
-                <div class="practice-section">
-                    <h3 class="practice-label" data-i18n="customTopicLabel">自訂主題（選填）</h3>
-                    <input type="text" class="topic-input" id="customTopic" data-i18n-placeholder="customTopicPlaceholder" placeholder="例如：機場報到、商業會議、餐廳點餐...">
-                </div>
-                <div class="practice-section">
-                    <h3 class="practice-label" data-i18n="voiceLabel">朗讀語音</h3>
-                    <div class="voice-selector" id="voiceSelector"></div>
-                </div>
-                <button class="generate-btn" id="btnGenerate" data-i18n="startLearningBtn">開始學習</button>
-            </div>
 
-            <div class="practice-mode-panel hidden" id="practicePanelClassic">
-                <div id="classicConfigView">
-                    <div style="display: flex; flex-direction: column; gap: 20px;">
-                        <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                            <h3 style="font-size: 15px; font-weight: 700; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">⚡ 本地經典題庫 <span style="font-size: 11px; font-weight: normal; background: #cbd5e1; color: white; padding: 2px 6px; border-radius: 4px;">免等待</span></h3>
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button class="generate-btn secondary-btn" id="btnStartPart5" style="background: #fff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 10px; font-size: 14px;">Part 5: 單句填空</button>
-                                <button class="generate-btn secondary-btn" id="btnStartPart6" style="background: #fff; color: #16a34a; border: 1px solid #bbf7d0; padding: 10px; font-size: 14px;">Part 6: 短文填空</button>
-                                <button class="generate-btn secondary-btn" id="btnStartPart7" style="background: #fff; color: #ea580c; border: 1px solid #fed7aa; padding: 10px; font-size: 14px;">Part 7: 閱讀理解</button>
-                            </div>
-                        </div>
-
-                        <div style="background: #eef2ff; padding: 16px; border-radius: 12px; border: 1px solid #c7d2fe;">
-                            <h3 style="font-size: 15px; font-weight: 700; color: #4338ca; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">✨ AI 仿真特訓 <span style="font-size: 11px; font-weight: normal; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px;">無限題庫</span></h3>
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <p style="font-size: 12px; color: #6366f1; margin: 0;">目標難度分數</p>
-                                <strong id="difficultyValue" style="color: #4338ca; font-size: 18px; background: #fff; padding: 2px 8px; border-radius: 6px; border: 1px solid #c7d2fe;">700</strong>
-                            </div>
-                            <input type="range" id="aiDifficultySlider" min="500" max="990" step="50" value="700" style="width:100%; margin-bottom: 12px; accent-color: #6366f1;">
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button class="generate-btn" id="btnStartAIPart5" style="padding: 10px; font-size: 14px; background: #6366f1;">🚀 AI 生成 Part 5</button>
-                                <button class="generate-btn" id="btnStartAIPart6" style="padding: 10px; font-size: 14px; background: #4f46e5;">🚀 AI 生成 Part 6</button>
-                                <button class="generate-btn" id="btnStartAIPart7" style="padding: 10px; font-size: 14px; background: #3730a3;">🚀 AI 生成 Part 7</button>
-                            </div>
-                        </div>
+            <div id="panelArticle" class="mode-panel">
+                <div class="config-card">
+                    <label data-i18n="labelTopic">主題</label>
+                    <input type="text" id="aiTopic" placeholder="e.g. Business meeting, Airport...">
+                    
+                    <label data-i18n="labelDifficulty">難度 (TOEIC 分數)</label>
+                    <div class="difficulty-slider-container">
+                        <input type="range" id="aiDifficultySlider" min="100" max="990" step="10" value="600">
+                        <div class="difficulty-value" id="aiDifficultyValue">600</div>
                     </div>
-                    <p style="font-size: 11px; color: #9ca3af; text-align: center; margin-top: 16px;">* AI 生成需消耗 API 並等待約 5-10 秒。</p>
+                    
+                    <button class="wm-btn" id="btnGenerateArticle" data-i18n="btnGenerateArticle">生成文章</button>
                 </div>
             </div>
 
-            <div class="practice-mode-panel hidden" id="practicePanelPart1">
-                <div id="part1ConfigView">
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇聽力難度</h3>
-                    <p class="practice-note" style="text-align: center;">目標 500~800 分，系統將自動調整照片複雜度與干擾陷阱</p>
-                    <div class="score-selector" id="part1ScoreSelector"></div>
-                    <button class="generate-btn" id="btnStartPart1" style="margin-top: 24px;">🚀 開始 6 題 Part 1 特訓</button>
+            <div id="panelSpeaking" class="mode-panel hidden">
+                <div class="config-card">
+                    <label data-i18n="labelSpeakingTopic">對話主題</label>
+                    <input type="text" id="speakingTopic" placeholder="e.g. Job Interview, Ordering Coffee...">
+                    <button class="wm-btn" id="btnStartSpeaking" data-i18n="btnStartSpeaking">開始口說對話</button>
                 </div>
             </div>
 
-            <div class="practice-mode-panel hidden" id="practicePanelSpecial">
-                <div id="specialConfigArea">
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇特訓難度</h3>
-                    <div style="display: flex; justify-content: center; margin-bottom: 24px;">
-                        <select id="specialDifficultySelect" style="padding: 10px 14px; border-radius: 8px; border: 2px solid #c7d2fe; background-color: #eef2ff; font-size: 15px; color: #4338ca; font-weight: bold; cursor: pointer; outline: none; width: 90%; max-width: 320px; text-align: center; appearance: none;">
-                            <option value="國中基礎程度 (使用最簡單的國中單字，專注於測試基礎文法觀念，嚴禁商業冷僻字)">⭐ 國中基礎 (文法打底)</option>
-                            <option value="多益 500 分程度 (使用多益 500 分等級的常見生活與職場單字)">⭐⭐ 多益 500 分 (常見生活)</option>
-                            <option value="多益 600 分程度 (使用多益 600 分等級的核心商業單字與情境)">⭐⭐⭐ 多益 600 分 (核心商業)</option>
-                            <option value="多益 700 分程度 (使用多益 700 分等級的進階商業單字與稍長句型)">⭐⭐⭐⭐ 多益 700 分 (進階句型)</option>
-                            <option value="多益 800 分以上程度 (使用多益 800 分以上的艱澀單字、複雜長難句與倒裝等特殊結構)">⭐⭐⭐⭐⭐ 多益 800 分 (魔王挑戰)</option>
-                        </select>
-                    </div>
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 12px;">2. 選擇特訓考點 (可複選)</h3>
-                    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px;">
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="時態" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 時態</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="詞性判斷" checked style="accent-color: var(--accent); width: 16px; height: 16px;"> 詞性判斷</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="介系詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 介系詞</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="代名詞" style="accent-color: var(--accent); width: 16px; height: 16px;"> 代名詞</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="單複數" style="accent-color: var(--accent); width: 16px; height: 16px;"> 單複數</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="比較級" style="accent-color: var(--accent); width: 16px; height: 16px;"> 比較級</label>
-                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 14px; border-radius: 8px; font-size: 14px; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"><input type="checkbox" value="假設語氣" style="accent-color: var(--accent); width: 16px; height: 16px;"> 假設語氣</label>
-                    </div>
-                    <button class="generate-btn" id="btnStartSpecial">🚀 開始 10 題專項特訓</button>
+            <div id="panelExam" class="mode-panel hidden">
+                <div class="config-card">
+                    <label data-i18n="labelExamPart">考試部分</label>
+                    <select id="examPart">
+                        <option value="5">Part 5: Incomplete Sentences</option>
+                        <option value="6">Part 6: Text Completion</option>
+                        <option value="7">Part 7: Reading Comprehension</option>
+                    </select>
+                    <button class="wm-btn" id="btnGenerateExam" data-i18n="btnGenerateExam">生成題目</button>
                 </div>
             </div>
-            <div class="practice-mode-panel hidden" id="practicePanelSpeaking">
-                <div id="speakingConfigView">
-                    <h3 class="practice-label" data-i18n="speakingLevelLabel">口說等級</h3>
-                    <div class="score-selector speaking-level-switch" id="speakingLevelSwitch">
-                        <button class="score-chip speaking-level-chip" data-level="beginner" data-i18n="speakingLevelBeginner">初級</button>
-                        <button class="score-chip speaking-level-chip" data-level="intermediate" data-i18n="speakingLevelIntermediate">中級</button>
-                        <button class="score-chip speaking-level-chip" data-level="advanced" data-i18n="speakingLevelAdvanced">困難</button>
-                    </div>
-                    <h3 class="practice-label" data-i18n="topicSelectLabel">主題（可選一個）</h3>
-                    <div class="topic-preset-group" id="speakingPresetGroup">
-                        <button class="topic-chip active" data-topic-key="topicAirportBoarding" data-i18n="topicAirportBoarding">機場通關與登機</button>
-                        <button class="topic-chip" data-topic-key="topicBusinessMeeting" data-i18n="topicBusinessMeeting">商務會議與簡報</button>
-                        <button class="topic-chip" data-topic-key="topicCustomerSupport" data-i18n="topicCustomerSupport">電話客服與問題排除</button>
-                        <button class="topic-chip" data-topic-key="topicQuoteNegotiation" data-i18n="topicQuoteNegotiation">報價談判與合約討論</button>
-                        <button class="topic-chip" data-topic-key="topicHotelBooking" data-i18n="topicHotelBooking">飯店訂房與改期</button>
-                        <button class="topic-chip" data-topic-key="topicRestaurantComplaints" data-i18n="topicRestaurantComplaints">餐廳訂位與抱怨處理</button>
-                        <button class="topic-chip" data-topic-key="topicCrossTeamCollaboration" data-i18n="topicCrossTeamCollaboration">跨部門合作與進度追蹤</button>
-                        <button class="topic-chip" data-topic-key="topicInterviewSelfIntro" data-i18n="topicInterviewSelfIntro">面試與自我介紹</button>
-                    </div>
-                    <div class="practice-section">
-                        <h3 class="practice-label" data-i18n="customTopicLabel">自訂主題（選填）</h3>
-                        <input type="text" class="topic-input" id="speakingCustomTopic" data-i18n-placeholder="speakingCustomTopicPlaceholder" placeholder="例如：談判報價、面試自我介紹、訂房問題處理...">
-                    </div>
-                    <button class="generate-btn" id="btnStartSpeaking" data-i18n="startSpeakingBtn">開始口說對話</button>
-                </div>
-            </div>
-            <div class="practice-mode-panel hidden" id="practicePanelExam">
-                <div id="examConfigView">
-                    <h3 class="practice-label" data-i18n="examConfigTitle">考試設定</h3>
-                    <p class="practice-note" data-i18n="examConfigNote">依目前目標分數生成四類題目：聽力 3 題 / 閱讀 3 篇 3 題 / 單字 3 題 / 文法 3 題</p>
-                    <div class="score-selector" id="examScoreSelector"></div>
-                    <button class="generate-btn" id="btnStartExam" data-i18n="startExamBtn">開始模擬考試</button>
+
+            <div id="panelSpecial" class="mode-panel hidden">
+                <div class="config-card" style="text-align:center; padding: 40px 20px;">
+                    <p style="color:#8e8e93;">專項特訓內容開發中...</p>
                 </div>
             </div>
         </div>
     </div>
-
-    <div id="tabVocab" class="container hidden">
+<div id="tabVocab" class="container hidden">
         <div class="vocab-tab-header">
             <h3 class="section-title" data-i18n="vocabNotebookTitle">單字本 Vocabulary</h3>
             <span class="vocab-tab-count" id="vocabCount">0 個單字</span>
@@ -254,52 +182,6 @@
         </div>
     </div>
 
-    <div id="tabHistory" class="container hidden">
-        <div class="vocab-tab-header" style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="section-title" style="margin: 0;" data-i18n="historyTitle">紀錄與錯題</h3>
-        </div>
-        <div class="vocab-subtab-switch" id="historySubtabSwitch" style="margin-bottom: 16px;">
-            <button class="vocab-subtab-btn active" data-history-subtab="general">學習紀錄</button>
-            <button class="vocab-subtab-btn" data-history-subtab="mistakes">特訓錯題本 📌</button>
-        </div>
-        <div id="historyMainPanel">
-            <div id="historyList"></div>
-            <button id="btnClearHistory" style="font-size:13px; color:red; background:none; border:none; margin-top:10px;" data-i18n="clearAllHistoryBtn">清除全部紀錄</button>
-        </div>
-        <div id="historyMistakesPanel" class="hidden">
-            <p style="font-size: 13px; color: #6b7280; margin-bottom: 12px; text-align: center;">收錄您在「專項特訓」中答錯或手動釘選的文法考題。</p>
-            <div id="mistakesFilterArea" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 16px;">
-                <button class="mistake-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
-                <button class="mistake-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
-                <button class="mistake-filter-btn" data-topic="詞性判斷" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">詞性判斷</button>
-                <button class="mistake-filter-btn" data-topic="介系詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">介系詞</button>
-                <button class="mistake-filter-btn" data-topic="代名詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">代名詞</button>
-                <button class="mistake-filter-btn" data-topic="單複數" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">單複數</button>
-                <button class="mistake-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
-                <button class="mistake-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
-            </div>
-            <div style="text-align: center; margin-bottom: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-                <button id="btnPrintPDF" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📄 儲存錯題為 PDF</button>
-                <button id="btnGenerateSecrets" style="background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.1s;">📘 匯總專屬文法秘笈</button>
-            </div>
-            <div id="mistakesList"></div>
-        </div>
-    </div>
-
-    <div id="tabAbout" class="container hidden">
-        <div class="about-page">
-            <div class="about-icon-circle"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-            <h2 class="about-name">Bruce Yang</h2>
-            <p class="about-bio" data-i18n-html="aboutBio">TOEIC AI Tutor 開發者<br>熱愛用技術解決學習問題，希望讓每個人都能輕鬆學英文。<br>如果這個工具對你有幫助，歡迎給我一點鼓勵！</p>
-            <div class="about-links">
-                <a href="https://www.facebook.com/bruce.yang.94" target="_blank" rel="noopener" class="about-link-card"><span class="about-link-icon fb"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span><span class="about-link-text"><span class="about-link-title">Facebook</span><span class="about-link-desc" data-i18n="aboutFacebookDesc">追蹤我的動態</span></span></a>
-                <a href="https://github.com/brucefay1115/toeic-learning" target="_blank" rel="noopener" class="about-link-card"><span class="about-link-icon github"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></span><span class="about-link-text"><span class="about-link-title">GitHub</span><span class="about-link-desc" data-i18n="aboutGithubDesc">查看開源程式碼，歡迎 Star ⭐</span></span></a>
-            </div>
-            <p class="about-version" id="appVersion"></p>
-            <p class="about-footer" data-i18n="aboutFooter">Made with ❤️ by Bruce Yang</p>
-        </div>
-    </div>
-
     <nav class="tab-bar">
         <button class="tab-btn active" data-tab="learn" style="position:relative;">
             <span class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
@@ -324,93 +206,27 @@
         </button>
     </nav>
 
-    <div class="player-bar hidden" id="playerBar">
-        <button class="play-btn" id="btnPlayPause"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
-        <div class="progress-container" id="progressContainer"><div class="progress-fill" id="progressBar"></div></div>
-        <button class="speed-btn" id="btnSpeed">1.0x</button>
-    </div>
-
     <div class="word-modal" id="wordModal">
         <div class="wm-header">
             <div class="wm-word" id="wmWord">Word</div>
             <button class="large-speaker" id="btnWordAudio"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
         </div>
-        <div class="wm-meta"><span id="wmPos">n.</span> <span id="wmIpa">/IPA/</span></div>
-        <div class="wm-def" id="wmDef">Definition</div>
+        <div class="wm-meta"><span id="wmPos"></span> <span id="wmIpa"></span></div>
+        <div class="wm-def" id="wmDef"></div>
         <div style="font-style: italic; color: #666; margin-bottom: 6px; display: flex; align-items: center;" id="wmEx">
-            <span id="wmExText">Example.</span>
+            <span id="wmExText"></span>
             <button class="mini-speaker" id="wmExSpeakBtn" style="margin-left:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
         </div>
         <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 20px;" id="wmExZh" class="hidden"></div>
         <div id="wmActionArea" class="wm-actions"></div>
-        <button class="wm-btn secondary" data-i18n="settingsClose">關閉</button>
-    </div>
-
-    <div class="modal-overlay" id="keyModal">
-        <div class="modal-card">
-            <h3 data-i18n="settingsTitle">設定 Gemini API</h3>
-            <section class="settings-section">
-                <h3 class="practice-label settings-label-center" data-i18n="settingsApiLabel">Gemini API Key</h3>
-                <div class="input-group">
-                    <input type="password" id="apiKeyInput" placeholder="Paste API Key here...">
-                    <button type="button" class="api-clear-btn" id="btnClearApiKey" data-i18n="settingsClear">一鍵清除</button>
-                </div>
-            </section>
-            <section class="settings-section" style="margin-top: 20px;">
-                <h3 class="practice-label settings-label-center">🎯 每日任務設定</h3>
-                <div class="input-group" style="display:flex; justify-content:space-between; margin-bottom:10px; background:#f9fafb; padding:10px; border-radius:8px;">
-                    <span style="font-size:14px; font-weight:600; color:#374151;">📖 單字複習 (個)</span>
-                    <input type="number" id="goalInputSrs" min="1" max="200" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
-                </div>
-                <div class="input-group" style="display:flex; justify-content:space-between; margin-bottom:10px; background:#f9fafb; padding:10px; border-radius:8px;">
-                    <span style="font-size:14px; font-weight:600; color:#374151;">🎯 專項特訓 (次)</span>
-                    <input type="number" id="goalInputSpecial" min="1" max="10" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
-                </div>
-                <div class="input-group" style="display:flex; justify-content:space-between; background:#f9fafb; padding:10px; border-radius:8px;">
-                    <span style="font-size:14px; font-weight:600; color:#374151;">📚 文章閱讀 (篇)</span>
-                    <input type="number" id="goalInputArticle" min="1" max="10" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
-                </div>
-            </section>
-            <section class="settings-section">
-                <h3 class="practice-label settings-label-center" data-i18n="settingsLanguageLabel">介面語言</h3>
-                <select id="localeSelect" class="topic-input"></select>
-                <p style="font-size:12px; color:#999; margin-top:8px;" data-i18n="settingsLanguageHint">AI 解說與翻譯將依此語言輸出。</p>
-            </section>
-            <section class="settings-section">
-            <div class="cloud-section">
-                <h4>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-                    <span data-i18n="cloudBackupTitle">雲端備份 Cloud Backup</span>
-                </h4>
-                <div id="cloudAuthArea">
-                    <button class="cloud-login-btn" id="btnCloudLogin">登入</button>
-                </div>
-                <div id="cloudUserArea" class="hidden">
-                    <div class="cloud-user-info">
-                        <div class="cloud-user-avatar" id="cloudAvatar">G</div>
-                        <div class="cloud-user-detail">
-                            <div class="cloud-user-name" id="cloudUserName">User</div>
-                            <div class="cloud-user-email" id="cloudUserEmail">user@gmail.com</div>
-                        </div>
-                    </div>
-                    <div class="cloud-actions">
-                        <button class="cloud-action-btn primary" id="btnBackupNow" data-i18n="cloudBackupNowBtn">立即備份</button>
-                        <button class="cloud-action-btn" id="btnRestore" data-i18n="cloudRestoreBtn">從雲端還原</button>
-                        <button class="cloud-action-btn danger" id="btnCloudLogout" data-i18n="cloudLogoutBtn">登出</button>
-                    </div>
-                </div>
-            </div>
-            </section>
-            <div class="settings-bottom-actions">
-                <button class="generate-btn settings-action-btn" id="btnSaveApiKey" data-i18n="settingsSave">儲存</button>
-                <button class="wm-btn secondary settings-action-btn" id="btnCloseKeyModal" style="display: none;" data-i18n="settingsClose">關閉</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
+        <button class="wm-btn secondary" data-i18n="settingsClose" onclick="document.getElementById('wordModal').classList.remove('active')">關閉</button>
+    </div>        
+<div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
+    
     <div class="srs-overlay hidden" id="srsOverlay"><div class="srs-content"><div class="srs-top-bar"><button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="srsProgressText">1 / 9</span><span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span></div><div class="srs-question-area" id="srsQuestionArea"></div><div class="srs-options-area" id="srsOptionsArea"></div></div></div>
+    
     <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
+    
     <div class="srs-overlay hidden" id="part1QuizOverlay">
         <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 600px;">
             <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
@@ -457,14 +273,14 @@
                 </div>
             </div>
             <div id="secretsFilterArea" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed #cbd5e1;">
-                <button class="secret-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
-                <button class="secret-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
-                <button class="secret-filter-btn" data-topic="詞性判斷" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">詞性判斷</button>
-                <button class="secret-filter-btn" data-topic="介系詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">介系詞</button>
-                <button class="secret-filter-btn" data-topic="代名詞" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">代名詞</button>
-                <button class="secret-filter-btn" data-topic="單複數" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">單複數</button>
-                <button class="secret-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
-                <button class="secret-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
+                <button class="secret-filter-btn active" data-topic="all">全部</button>
+                <button class="secret-filter-btn" data-topic="時態">時態</button>
+                <button class="secret-filter-btn" data-topic="詞性判斷">詞性判斷</button>
+                <button class="secret-filter-btn" data-topic="介系詞">介系詞</button>
+                <button class="secret-filter-btn" data-topic="代名詞">代名詞</button>
+                <button class="secret-filter-btn" data-topic="單複數">單複數</button>
+                <button class="secret-filter-btn" data-topic="比較級">比較級</button>
+                <button class="secret-filter-btn" data-topic="假設語氣">假設語氣</button>
             </div>
             <div id="grammarSecretsContent" style="padding: 0 5px 20px 5px;"></div>
         </div>
@@ -478,7 +294,6 @@
         if (slider && display) {
           slider.oninput = (e) => {
             display.textContent = e.target.value;
-            // 與專案原本的 state 連動
             import('./assets/js/state.js').then(m => {
               if (m.state) m.state.targetScore = parseInt(e.target.value);
             });
