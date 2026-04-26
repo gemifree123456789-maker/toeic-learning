@@ -80,7 +80,18 @@ export async function fetchWordDetails(word, forceFetch = false) {
     }
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    const prompt = `Explain "${word}" for TOEIC card. Use ${targetLang}. Output JSON.`;
+    // 🌟 鐵粉化 Prompt：嚴格規定 JSON 欄位名稱，避免渲染時出現 undefined
+    const prompt = `Explain the word "${word}" for a TOEIC student. 
+        Output STRICT JSON format:
+        {
+          "word": "${word}",
+          "pos": "part of speech",
+          "ipa": "IPA symbol",
+          "category": "Business/Travel/etc",
+          "def": "Brief ${targetLang} definition",
+          "ex": "One short English example sentence",
+          "ex_zh": "${targetLang} translation of the example sentence"
+        }`;
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     await DB.setWord(word, result);
     return result;

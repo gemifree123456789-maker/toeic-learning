@@ -333,17 +333,19 @@
     <div class="word-modal" id="wordModal">
         <div class="wm-header">
             <div class="wm-word" id="wmWord">Word</div>
-            <button class="large-speaker" id="btnWordAudio"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+            <button class="large-speaker" id="btnWordAudio">
+                </button>
         </div>
-        <div class="wm-meta"><span id="wmPos">n.</span> <span id="wmIpa">/IPA/</span></div>
+        <div class="wm-meta"><span id="wmPos"></span> <span id="wmIpa"></span></div>
         <div class="wm-def" id="wmDef">Definition</div>
         <div style="font-style: italic; color: #666; margin-bottom: 6px; display: flex; align-items: center;" id="wmEx">
             <span id="wmExText">Example.</span>
-            <button class="mini-speaker" id="wmExSpeakBtn" style="margin-left:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+            <button class="mini-speaker" id="wmExSpeakBtn" style="margin-left:5px;">
+                </button>
         </div>
         <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 20px;" id="wmExZh" class="hidden"></div>
         <div id="wmActionArea" class="wm-actions"></div>
-        <button class="wm-btn secondary" data-i18n="settingsClose">關閉</button>
+        <button class="wm-btn secondary" data-i18n="settingsClose" onclick="document.getElementById('wordModal').classList.remove('active')">關閉</button>
     </div>
 
     <div class="modal-overlay" id="keyModal">

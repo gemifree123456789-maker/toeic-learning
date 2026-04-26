@@ -171,3 +171,60 @@ export function updateTranslationVisibility() {
 export function updateEnglishVisibility() {
     document.querySelectorAll('.segment-en').forEach(el => el.classList.toggle('en-hidden', !state.showEnglish));
 }
+
+// 🌟 手術式補回：單字彈窗顯示邏輯，確保消滅 undefined
+export async function showWordModal(wordStr) {
+    const modal = document.getElementById('wordModal');
+    const wmWord = document.getElementById('wmWord');
+    const wmPos = document.getElementById('wmPos');
+    const wmIpa = document.getElementById('wmIpa');
+    const wmDef = document.getElementById('wmDef');
+    const wmExText = document.getElementById('wmExText');
+    const wmExZh = document.getElementById('wmExZh');
+    const wmActionArea = document.getElementById('wmActionArea');
+
+    // 1. 初始化 UI 狀態
+    wmWord.textContent = wordStr;
+    wmPos.textContent = '';
+    wmIpa.textContent = '';
+    wmDef.textContent = t('loading') || 'Loading...';
+    wmExText.textContent = '';
+    wmExZh.textContent = '';
+    wmExZh.classList.add('hidden');
+    wmActionArea.innerHTML = '';
+
+    // 2. 顯示彈窗 (index.html 中對應的 CSS 類名為 active)
+    modal.classList.add('active');
+
+    try {
+        // 3. 調用 apiGemini.js 獲取資料
+        const info = await import('./apiGemini.js').then(m => m.fetchWordDetails(wordStr));
+        
+        // 4. 填入資料：確保 key 名稱與 apiGemini.js 回傳的鐵粉格式一致
+        wmPos.textContent = info.pos || '';
+        wmIpa.textContent = info.ipa || '';
+        
+        // 🌟 核心修正：優先讀取 def 與 ex，這能解決 undefined 問題
+        wmDef.textContent = info.def || info.meaning || ''; 
+        wmExText.textContent = info.ex || info.example || '';
+        wmExZh.textContent = info.ex_zh || '';
+        
+        if (wmExZh.textContent) {
+            wmExZh.classList.remove('hidden');
+        }
+
+        // 5. 處理儲存按鈕
+        const isSaved = await DB.isWordSaved(wordStr);
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'wm-btn' + (isSaved ? ' secondary' : '');
+        saveBtn.textContent = isSaved ? t('btnRemoveVocab') : t('btnAddVocab');
+        saveBtn.onclick = async () => {
+            await toggleWordSaved(wordStr, info);
+            showWordModal(wordStr); // 重新渲染按鈕狀態
+        };
+        wmActionArea.appendChild(saveBtn);
+    } catch (err) {
+        console.error('Word modal error:', err);
+        wmDef.textContent = 'Error loading details.';
+    }
+}
