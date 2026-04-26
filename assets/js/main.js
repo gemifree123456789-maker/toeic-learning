@@ -210,14 +210,6 @@ function setPracticeMode(mode) {
     const specialEl = document.getElementById('practicePanelSpecial');
     if(specialEl) specialEl.classList.toggle('hidden', mode !== 'special');
 
-    // 控制 Part 1 面板顯示隱藏
-    const part1El = document.getElementById('practicePanelPart1');
-    if(part1El) part1El.classList.toggle('hidden', mode !== 'part1');
-
-    // 🌟 新增：控制經典題庫面板顯示隱藏
-    const classicEl = document.getElementById('practicePanelClassic');
-    if(classicEl) classicEl.classList.toggle('hidden', mode !== 'classic');
-
     if (mode === 'speaking') resetSpeakingPracticeView();
     if (mode === 'exam') resetExamPracticeView();
 }
@@ -264,16 +256,13 @@ function renderScoreChips(containerId) {
     if (!el) return;
     el.innerHTML = '';
     scores.forEach(score => {
-        // 防呆處理：如果是 Part 1 且分數為 900，則不顯示
-        if (containerId === 'part1ScoreSelector' && score === 900) return;
-
         const chip = document.createElement('div');
         chip.className = `score-chip ${score === state.targetScore ? 'active' : ''}`;
         chip.innerText = score;
         chip.onclick = () => {
             state.targetScore = score;
             state.examState.score = score;
-            document.querySelectorAll('#scoreSelector .score-chip, #examScoreSelector .score-chip, #part1ScoreSelector .score-chip').forEach(c => {
+            document.querySelectorAll('#scoreSelector .score-chip, #examScoreSelector .score-chip').forEach(c => {
                 c.classList.toggle('active', Number(c.innerText) === score);
             });
             if (!state.speakingState.levelManuallySelected) {
@@ -286,7 +275,6 @@ function renderScoreChips(containerId) {
 }
 renderScoreChips('scoreSelector');
 renderScoreChips('examScoreSelector');
-renderScoreChips('part1ScoreSelector'); 
 if (!state.speakingState.level) {
     state.speakingState.level = getSpeakingLevelByScore(state.targetScore);
 }
@@ -1050,28 +1038,8 @@ GENERATE_BTN.onclick = async () => {
     try {
         await DB.init();
         
-        // 🌟 呼叫專項特訓的初始化器
+        // 🌟 呼叫完美回歸的初始化器
         initSpecialTraining();
-
-        // 🌟 動態載入全新的 Part 1 聽力模組 (安全載入機制)
-        try {
-            const part1Module = await import('./part1Training.js');
-            if (part1Module && part1Module.initPart1Training) {
-                part1Module.initPart1Training();
-            }
-        } catch (e) {
-            console.log('請於下一步建立 part1Training.js 檔案！');
-        }
-
-        // 🌟 動態載入經典題庫模組 (安全載入機制，絕對不當機)
-        try {
-            const classicModule = await import('./classicTraining.js');
-            if (classicModule && classicModule.initClassicTraining) {
-                classicModule.initClassicTraining();
-            }
-        } catch (e) {
-            console.warn('經典題庫載入失敗或檔案未建立', e);
-        }
 
         await renderDailyDashboard();
         window.addEventListener('daily-progress-updated', renderDailyDashboard);
@@ -1113,7 +1081,7 @@ GENERATE_BTN.onclick = async () => {
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        const gasUrl = "https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec"; 
+        const gasUrl = "[https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec](https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec)"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;

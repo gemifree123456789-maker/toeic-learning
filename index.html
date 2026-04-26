@@ -21,7 +21,6 @@
       @keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="./assets/js/questions.js"></script>
     <script>
       (function bootstrapAppAssets() {
         document.documentElement.classList.add('app-booting');
@@ -94,15 +93,12 @@
         <div class="practice-container">
             <h2 data-i18n="practiceModeTitle">練習模式</h2>
             <p class="subtitle" data-i18n="practiceModeSubtitle">選擇文章、口說或模擬考試</p>
-            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px; overflow-x: auto; white-space: nowrap;">
+            <div class="practice-mode-switch" id="practiceModeSwitch" style="display: flex; width: 100%; gap: 8px;">
                 <button class="practice-mode-btn active" data-mode="article" data-i18n="practiceModeArticle">文章練習</button>
                 <button class="practice-mode-btn" data-mode="speaking" data-i18n="practiceModeSpeaking">口說對話</button>
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
-                <button class="practice-mode-btn" id="tabPart1" data-mode="part1">Part 1 聽力</button>
-                <button class="practice-mode-btn" id="tabClassic" data-mode="classic">📚 閱讀特訓</button>
             </div>
-            
             <div class="practice-mode-panel" id="practicePanelArticle">
                 <h3 class="practice-label" data-i18n="targetScoreLabel">目標分數</h3>
                 <p class="practice-note" data-i18n="targetScoreNote">根據你的多益程度選擇適合難度</p>
@@ -117,46 +113,6 @@
                 </div>
                 <button class="generate-btn" id="btnGenerate" data-i18n="startLearningBtn">開始學習</button>
             </div>
-
-            <div class="practice-mode-panel hidden" id="practicePanelClassic">
-                <div id="classicConfigView">
-                    <div style="display: flex; flex-direction: column; gap: 20px;">
-                        <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                            <h3 style="font-size: 15px; font-weight: 700; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">⚡ 本地經典題庫 <span style="font-size: 11px; font-weight: normal; background: #cbd5e1; color: white; padding: 2px 6px; border-radius: 4px;">免等待</span></h3>
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button class="generate-btn secondary-btn" id="btnStartPart5" style="background: #fff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 10px; font-size: 14px;">Part 5: 單句填空</button>
-                                <button class="generate-btn secondary-btn" id="btnStartPart6" style="background: #fff; color: #16a34a; border: 1px solid #bbf7d0; padding: 10px; font-size: 14px;">Part 6: 短文填空</button>
-                                <button class="generate-btn secondary-btn" id="btnStartPart7" style="background: #fff; color: #ea580c; border: 1px solid #fed7aa; padding: 10px; font-size: 14px;">Part 7: 閱讀理解</button>
-                            </div>
-                        </div>
-
-                        <div style="background: #eef2ff; padding: 16px; border-radius: 12px; border: 1px solid #c7d2fe;">
-                            <h3 style="font-size: 15px; font-weight: 700; color: #4338ca; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">✨ AI 仿真特訓 <span style="font-size: 11px; font-weight: normal; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px;">無限題庫</span></h3>
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <p style="font-size: 12px; color: #6366f1; margin: 0;">目標難度分數</p>
-                                <strong id="difficultyValue" style="color: #4338ca; font-size: 18px; background: #fff; padding: 2px 8px; border-radius: 6px; border: 1px solid #c7d2fe;">700</strong>
-                            </div>
-                            <input type="range" id="aiDifficultySlider" min="500" max="990" step="50" value="700" style="width:100%; margin-bottom: 12px; accent-color: #6366f1;">
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button class="generate-btn" id="btnStartAIPart5" style="padding: 10px; font-size: 14px; background: #6366f1;">🚀 AI 生成 Part 5</button>
-                                <button class="generate-btn" id="btnStartAIPart6" style="padding: 10px; font-size: 14px; background: #4f46e5;">🚀 AI 生成 Part 6</button>
-                                <button class="generate-btn" id="btnStartAIPart7" style="padding: 10px; font-size: 14px; background: #3730a3;">🚀 AI 生成 Part 7</button>
-                            </div>
-                        </div>
-                    </div>
-                    <p style="font-size: 11px; color: #9ca3af; text-align: center; margin-top: 16px;">* AI 生成需消耗 API 並等待約 5-10 秒。</p>
-                </div>
-            </div>
-
-            <div class="practice-mode-panel hidden" id="practicePanelPart1">
-                <div id="part1ConfigView">
-                    <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇聽力難度</h3>
-                    <p class="practice-note" style="text-align: center;">目標 500~800 分，系統將自動調整照片複雜度與干擾陷阱</p>
-                    <div class="score-selector" id="part1ScoreSelector"></div>
-                    <button class="generate-btn" id="btnStartPart1" style="margin-top: 24px;">🚀 開始 6 題 Part 1 特訓</button>
-                </div>
-            </div>
-
             <div class="practice-mode-panel hidden" id="practicePanelSpecial">
                 <div id="specialConfigArea">
                     <h3 class="practice-label" style="text-align: center; margin-bottom: 8px;">1. 選擇特訓難度</h3>
@@ -349,6 +305,7 @@
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
             <h3 data-i18n="settingsTitle">設定 Gemini API</h3>
+
             <section class="settings-section">
                 <h3 class="practice-label settings-label-center" data-i18n="settingsApiLabel">Gemini API Key</h3>
                 <div class="input-group">
@@ -356,6 +313,7 @@
                     <button type="button" class="api-clear-btn" id="btnClearApiKey" data-i18n="settingsClear">一鍵清除</button>
                 </div>
             </section>
+
             <section class="settings-section" style="margin-top: 20px;">
                 <h3 class="practice-label settings-label-center">🎯 每日任務設定</h3>
                 <div class="input-group" style="display:flex; justify-content:space-between; margin-bottom:10px; background:#f9fafb; padding:10px; border-radius:8px;">
@@ -371,11 +329,13 @@
                     <input type="number" id="goalInputArticle" min="1" max="10" style="width:60px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; text-align:center;">
                 </div>
             </section>
+
             <section class="settings-section">
                 <h3 class="practice-label settings-label-center" data-i18n="settingsLanguageLabel">介面語言</h3>
                 <select id="localeSelect" class="topic-input"></select>
                 <p style="font-size:12px; color:#999; margin-top:8px;" data-i18n="settingsLanguageHint">AI 解說與翻譯將依此語言輸出。</p>
             </section>
+
             <section class="settings-section">
             <div class="cloud-section">
                 <h4>
@@ -401,6 +361,7 @@
                 </div>
             </div>
             </section>
+
             <div class="settings-bottom-actions">
                 <button class="generate-btn settings-action-btn" id="btnSaveApiKey" data-i18n="settingsSave">儲存</button>
                 <button class="wm-btn secondary settings-action-btn" id="btnCloseKeyModal" style="display: none;" data-i18n="settingsClose">關閉</button>
@@ -411,51 +372,21 @@
     <div class="modal-overlay" id="announcementModal"><div class="modal-card announcement-modal-card"><h3 id="announcementTitle">公告</h3><p id="announcementMessage" class="announcement-message">載入中...</p><button class="wm-btn secondary" id="btnCloseAnnouncementModal">關閉</button></div></div>
     <div class="srs-overlay hidden" id="srsOverlay"><div class="srs-content"><div class="srs-top-bar"><button class="srs-close-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="srsProgressText">1 / 9</span><span class="srs-phase-badge" id="srsPhaseBadge" data-i18n="srsPhaseBadgeDefault">英文 → 中文</span></div><div class="srs-question-area" id="srsQuestionArea"></div><div class="srs-options-area" id="srsOptionsArea"></div></div></div>
     <div class="srs-overlay hidden" id="specialQuizOverlay"><div class="srs-content" style="max-height: 90vh; overflow-y: auto;"><div class="srs-top-bar"><button class="srs-close-btn" id="btnCloseSpecial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><span class="srs-progress-text" id="specialProgressText">1 / 10</span><span class="srs-phase-badge" id="specialTopicBadge" style="background-color: var(--accent); color: white;">文法</span></div><div class="srs-question-area" id="specialQuestionArea" style="margin-bottom: 16px;"></div><div class="srs-options-area" id="specialOptionsArea"></div></div></div>
-    <div class="srs-overlay hidden" id="part1QuizOverlay">
-        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 600px;">
-            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
-                <button class="srs-close-btn" id="btnClosePart1"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                <span class="srs-progress-text" id="part1ProgressText" style="font-weight: bold; color: #4f46e5;">1 / 6</span>
-                <span class="srs-phase-badge" id="part1TopicBadge" style="background-color: #4f46e5; color: white;">Part 1 聽力</span>
-            </div>
-            <div id="part1QuestionArea" style="margin-bottom: 16px;">
-                <div style="width: 100%; aspect-ratio: 5 / 4; max-height: 350px; background: #e2e8f0; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 16px; position: relative;" id="part1ImageContainer">
-                    <span style="color: #64748b; font-size: 14px; position: absolute;" id="part1ImageStatus">載入圖片中...</span>
-                    <img id="part1Image" src="" style="width: 100%; height: 100%; object-fit: contain; display: none; position: relative; z-index: 1;" />
-                </div>
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <button id="btnPlayPart1Audio" style="background: #4f46e5; color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3); transition: all 0.2s;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                        <span id="part1AudioBtnText">播放音檔 (A, B, C, D)</span>
-                    </button>
-                </div>
-            </div>
-            <div class="srs-options-area" id="part1OptionsArea" style="display: flex; flex-direction: column; gap: 10px;"></div>
-        </div>
-    </div>
-
-    <div class="srs-overlay hidden" id="classicQuizOverlay">
-        <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 800px;">
-            <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
-                <button class="srs-close-btn" id="btnCloseClassic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                <span class="srs-progress-text" id="classicProgressText" style="font-weight: bold; color: #10b981;">1 / 10</span>
-                <span class="srs-phase-badge" id="classicTopicBadge" style="background-color: #10b981; color: white;">經典題庫</span>
-            </div>
-            <div id="classicQuestionArea" style="margin-bottom: 16px;"></div>
-            <div class="srs-options-area" id="classicOptionsArea" style="display: flex; flex-direction: column; gap: 10px;"></div>
-        </div>
-    </div>
-
+    
     <div class="srs-overlay hidden" id="grammarSecretsModal">
         <div class="srs-content" style="max-height: 90vh; overflow-y: auto; background: #f8fafc; width: 95%; max-width: 800px;">
             <div class="srs-top-bar" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px;">
                 <h3 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 700; display: flex; align-items: center; gap: 8px;">📘 專屬文法秘笈</h3>
+                
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button id="btnAiSummarize" style="background: #a855f7; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px; transition: transform 0.1s;">✨ AI 智慧濃縮</button>
                     <button id="btnRealPrintSecrets" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px; transition: transform 0.1s;">📄 列印秘笈</button>
-                    <button class="srs-close-btn" id="btnCloseSecrets"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                    <button class="srs-close-btn" id="btnCloseSecrets">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
                 </div>
             </div>
+
             <div id="secretsFilterArea" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed #cbd5e1;">
                 <button class="secret-filter-btn active" data-topic="all" style="background: #e0e7ff; border: 1px solid #818cf8; color: #4338ca; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">全部</button>
                 <button class="secret-filter-btn" data-topic="時態" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">時態</button>
@@ -466,25 +397,11 @@
                 <button class="secret-filter-btn" data-topic="比較級" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">比較級</button>
                 <button class="secret-filter-btn" data-topic="假設語氣" style="background: #fff; border: 1px solid #e5e7eb; color: #4b5563; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;">假設語氣</button>
             </div>
+
             <div id="grammarSecretsContent" style="padding: 0 5px 20px 5px;"></div>
         </div>
     </div>
 
     <audio id="mainAudio"></audio> 
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        const slider = document.getElementById('aiDifficultySlider');
-        const display = document.getElementById('difficultyValue');
-        if (slider && display) {
-          slider.oninput = (e) => {
-            display.textContent = e.target.value;
-            // 與專案原本的 state 連動
-            import('./assets/js/state.js').then(m => {
-              if (m.state) m.state.targetScore = parseInt(e.target.value);
-            });
-          };
-        }
-      });
-    </script>
 </body>
 </html>
