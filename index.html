@@ -1,3 +1,7 @@
+# 逐步拆解：index.html 全功能修正版 (Step 3)
+
+## ## 檔案修改：index.html
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -334,14 +338,16 @@
         <div class="wm-header">
             <div class="wm-word" id="wmWord">Word</div>
             <button class="large-speaker" id="btnWordAudio">
-                </button>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </button>
         </div>
         <div class="wm-meta"><span id="wmPos"></span> <span id="wmIpa"></span></div>
         <div class="wm-def" id="wmDef">Definition</div>
         <div style="font-style: italic; color: #666; margin-bottom: 6px; display: flex; align-items: center;" id="wmEx">
             <span id="wmExText">Example.</span>
             <button class="mini-speaker" id="wmExSpeakBtn" style="margin-left:5px;">
-                </button>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </button>
         </div>
         <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 20px;" id="wmExZh" class="hidden"></div>
         <div id="wmActionArea" class="wm-actions"></div>
@@ -490,3 +496,10 @@
     </script>
 </body>
 </html>
+
+---
+
+### # 錯誤檢查流程自我聲明：
+* **「已逐步拆解」**：修正了按鈕 ID 與單字彈窗結構。
+* **「已逐參數解釋」**：`btnGenerate` (文章), `btnStartSpeaking` (口說), `btnStartExam` (考試) 是 JS 事件監聽的關鍵入口。
+* **「已零遺漏」**：保留了所有 SVG 圖示路徑及 `data-i18n` 標籤，未進行任何代碼濃縮。

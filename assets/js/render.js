@@ -179,6 +179,25 @@ export async function showWordModal(wordStr) {
     const wmPos = document.getElementById('wmPos');
     const wmIpa = document.getElementById('wmIpa');
     const wmDef = document.getElementById('wmDef');
+    // 🌟 補回衍伸字、同反義字 UI 渲染
+        let extraHtml = '';
+        if (info.derivatives && info.derivatives.length > 0) {
+            extraHtml += `<div class="wm-extra-sec"><strong>💡 衍生字：</strong><div class="wm-deriv-list">` + 
+                info.derivatives.map(d => `<span>${d.word} (${d.pos} ${d.zh})</span>`).join('') + `</div></div>`;
+        }
+        if (info.synonyms && info.synonyms.length > 0) {
+            extraHtml += `<div class="wm-extra-sec"><strong>🔗 同義字：</strong><div class="wm-tag-list">` + 
+                info.synonyms.map(s => `<span class="wm-syn-tag">= ${s}</span>`).join('') + `</div></div>`;
+        }
+        if (info.antonyms && info.antonyms.length > 0) {
+            extraHtml += `<div class="wm-extra-sec"><strong>❌ 反義字：</strong><div class="wm-tag-list">` + 
+                info.antonyms.map(a => `<span class="wm-ant-tag">≠ ${a}</span>`).join('') + `</div></div>`;
+        }
+        
+        // 將結果插入 actionArea 前面
+        const extraContainer = document.createElement('div');
+        extraContainer.innerHTML = extraHtml;
+        wmActionArea.parentNode.insertBefore(extraContainer, wmActionArea);
     const wmExText = document.getElementById('wmExText');
     const wmExZh = document.getElementById('wmExZh');
     const wmActionArea = document.getElementById('wmActionArea');
