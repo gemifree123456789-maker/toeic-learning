@@ -1,4 +1,3 @@
-// assets/js/apiGemini.js
 // Gemini API calls: text generation, TTS, exam generation, and explanations.
 
 import { state, TEXT_MODEL, TTS_MODEL } from './state.js';
@@ -15,6 +14,7 @@ function ensureCandidateText(data) {
 function parseJsonCandidateText(rawText) {
     let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     cleaned = cleaned.replace(/\n/g, ' ').replace(/\r/g, '');
+
     try {
         return JSON.parse(cleaned);
     } catch (err) {
@@ -22,48 +22,54 @@ function parseJsonCandidateText(rawText) {
         const arrayEnd = cleaned.lastIndexOf(']');
         const objStart = cleaned.indexOf('{');
         const objEnd = cleaned.lastIndexOf('}');
+        
         let jsonStr = "";
         if (arrayStart !== -1 && arrayEnd !== -1 && (objStart === -1 || arrayStart < objStart)) {
             jsonStr = cleaned.substring(arrayStart, arrayEnd + 1);
         } else if (objStart !== -1 && objEnd !== -1) {
             jsonStr = cleaned.substring(objStart, objEnd + 1);
         }
+
         if (jsonStr) {
             try {
-                return JSON.parse(jsonStr);
+                const repairedJson = jsonStr.replace(/\\"/g, "'");
+                return JSON.parse(repairedJson);
             } catch (innerErr) {
-                console.error("JSON Parse Fail:", rawText);
-                throw new Error("AI 格式解析失敗");
+                console.error("JSON 深度解析失敗:", rawText);
+                throw new Error("AI 格式解析失敗，請重新嘗試。");
             }
         }
-        throw err;
+        throw new Error("找不到有效的 JSON 數據");
     }
 }
 
-async function fetchJsonFromPrompt(model, prompt) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        })
-    });
-    const data = await response.json();
-    return parseJsonCandidateText(ensureCandidateText(data));
+async function fetchJsonFromPrompt(model, prompt, retries = 2) {
+    for (let i = 0; i < retries; i++) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+            })
+        });
+
+        if (response.status === 429) {
+            if (i === retries - 1) throw new Error("HTTP_429");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+        }
+
+        const data = await response.json();
+        return parseJsonCandidateText(ensureCandidateText(data));
+    }
 }
 
 export async function fetchGeminiText(score, customTopic) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    const prompt = `You are a TOEIC tutor. Level: ${score}. Topic: ${customTopic || 'Daily'}. 
-    Output JSON ONLY:
-    {
-      "article": "Full passage",
-      "translation": "Translation",
-      "vocabulary": [{"word":"..","pos":"..","def":"..","ex":"..","ex_zh":".."}],
-      "segments": [{"en":"Sentence","zh":"翻譯"}]
-    }`;
+    const topicLine = customTopic ? `about "${customTopic}"` : `random TOEIC scenario`;
+    const prompt = `You are a TOEIC tutor. Target: ${score}. Generate JSON for a short passage. Lang: ${targetLang}.`;
     return fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
 
@@ -74,30 +80,109 @@ export async function fetchWordDetails(word, forceFetch = false) {
     }
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    const prompt = `Explain "${word}" for TOEIC in ${targetLang}. 
-    Output JSON ONLY:
-    {
-      "word": "${word}",
-      "pos": "part of speech",
-      "ipa": "IPA",
-      "def": "Definition",
-      "ex": "English example",
-      "ex_zh": "Translation",
-      "derivatives": [{"word":"..","pos":"..","zh":".."}],
-      "synonyms": [".."],
-      "antonyms": [".."]
-    }`;
+    const prompt = `Explain "${word}" for TOEIC card. Use ${targetLang}. Output JSON.`;
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     await DB.setWord(word, result);
     return result;
 }
 
+export async function validateWordWithLanguageTool(word) {
+    const query = String(word || '').trim();
+    if (!query) return { ok: false };
+    try {
+        const body = new URLSearchParams();
+        body.set('text', query);
+        body.set('language', 'en-US');
+        const response = await fetch('https://api.languagetool.org/v2/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        });
+        const data = await response.json();
+        return { ok: data.matches.length === 0 };
+    } catch (e) { return { ok: false }; }
+}
+
+function normalizeExamQuestion(category, item, idx) {
+    const rawOptions = Array.isArray(item.options) ? item.options.slice(0, 4) : [];
+    const options = rawOptions.map((option, oIdx) => ({
+        key: ['A', 'B', 'C', 'D'][oIdx],
+        text: typeof option === 'object' ? (option.text || "") : String(option)
+    }));
+    return {
+        id: item.id || `${category}-${idx + 1}`,
+        category, question: item.question || '', passage: item.passage || '',
+        options, answerKey: String(item.answerKey || 'A').toUpperCase()
+    };
+}
+
+function normalizeExamOutput(raw) {
+    return {
+        listening: (raw.listening || []).map((it, i) => normalizeExamQuestion('listening', it, i)),
+        reading: (raw.reading || []).map((it, i) => normalizeExamQuestion('reading', it, i)),
+        vocabulary: (raw.vocabulary || []).map((it, i) => normalizeExamQuestion('vocabulary', it, i)),
+        grammar: (raw.grammar || []).map((it, i) => normalizeExamQuestion('grammar', it, i))
+    };
+}
+
+export async function fetchExamQuestions(score) {
+    const locale = getLocaleMeta();
+    const prompt = `TOEIC mock exam. Target: ${score}. JSON format. 3 questions per part. Use ${locale.name}.`;
+    const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return normalizeExamOutput(raw);
+}
+
+export async function fetchExamWrongAnswerExplanations(payload) {
+    const locale = getLocaleMeta();
+    const prompt = `TOEIC teacher. Explain wrong answers from: ${JSON.stringify(payload)}. Use ${locale.name}. JSON format.`;
+    const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return result.items || [];
+}
+
+export async function fetchGeminiTTS(text, voiceName) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text }] }],
+            generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: voiceName }
+                    }
+                }
+            }
+        })
+    });
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].inlineData.data;
+}
+
+// 🌟 最終校準版：解決 Part 5 白畫面與 5/6/7 語言混亂問題
 export async function fetchAIPartQuestions(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
-    let structure = part === 5 
-        ? `[{"q":"..","opts":[".."],"ans":0,"exp":"..","trans":".."}]`
-        : `[{"txt":"..","qs":[{"q":"..","opts":[".."],"ans":0,"exp":"..","trans":".."}]}]`;
-    const prompt = `TOEIC Part ${part}, score ${score}. Lang: ${targetLang}. JSON: ${structure}`;
-    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    
+    // 根據 Part 決定不同的結構說明
+    let structureInstruction = "";
+    if (part === 5) {
+        structureInstruction = `[{"q":"[ENGLISH SENTENCE WITH _______]","opts":["[ENGLISH OPTION A]","[ENGLISH OPTION B]","[ENGLISH OPTION C]","[ENGLISH OPTION D]"],"ans":0,"exp":"[${targetLang} EXPLANATION]","trans":"[${targetLang} TRANSLATION]"}]`;
+    } else {
+        structureInstruction = `[{"txt":"[ENGLISH PASSAGE]","qs":[{"q":"[ENGLISH QUESTION]","opts":["[ENGLISH OPTION A]","..."],"ans":1,"exp":"[${targetLang}解析]","trans":"[${targetLang}翻譯]"}]}]`;
+    }
+
+    const prompt = `You are a professional TOEIC test maker. Level: ${score} points.
+    TASK: Generate Part ${part} questions.
+    
+    [CRITICAL LANGUAGE RULES]
+    - "txt", "q", "opts" MUST BE 100% ENGLISH. No Chinese allowed in these fields.
+    - "exp", "trans" MUST BE IN ${targetLang}.
+    
+    [DATA FORMAT]
+    - Return ONLY a valid JSON array.
+    - Use single quotes 'word' inside JSON strings.
+    - Structure: ${structureInstruction}`;
+
+    return await fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
