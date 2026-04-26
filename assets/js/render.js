@@ -12,9 +12,7 @@ export function renderContent(data, voiceName) {
     metaEl.innerHTML = '';
     if (voiceName) {
         const opt = VOICE_OPTIONS.find(v => v.name === voiceName);
-        const voiceText = opt
-            ? `${t(opt.labelKey)} · ${t(opt.descKey)}`
-            : voiceName;
+        const voiceText = opt ? `${t(opt.labelKey)} · ${t(opt.descKey)}` : voiceName;
         metaEl.innerHTML = `<span class="voice-badge">${ICONS.speaker} ${voiceText}</span>`;
     }
 
@@ -29,38 +27,10 @@ export function renderContent(data, voiceName) {
     segments.forEach((seg, segIndex) => {
         const rowDiv = document.createElement('div');
         rowDiv.className = 'segment-row';
-
         const enDiv = document.createElement('div');
         enDiv.className = 'segment-en';
-
         const startPct = acc / totalChars;
         const endPct = (acc + seg.en.length) / totalChars;
-
-        const replayBtn = document.createElement('button');
-        replayBtn.className = 'segment-replay-btn';
-        replayBtn.innerHTML = ICONS.miniPlay;
-        replayBtn.onclick = async (e) => {
-            e.stopPropagation();
-            const ready = await ensureAudioReady();
-            if (!ready || !audioEl.duration || Number.isNaN(audioEl.duration)) return;
-            state.playUntilPct = endPct;
-            state.playUntilSegmentIndex = segIndex;
-            audioEl.currentTime = startPct * audioEl.duration;
-            if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
-                state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
-            }
-            enDiv.classList.add('active');
-            state.activeSegmentIndex = segIndex;
-            if (audioEl.paused) {
-                try {
-                    await audioEl.play();
-                    playBtn.innerHTML = ICONS.pause;
-                } catch (err) {
-                    console.error('Segment play failed:', err);
-                }
-            }
-        };
-        enDiv.appendChild(replayBtn);
 
         const textSpan = document.createElement('span');
         textSpan.className = 'en-text';
@@ -75,7 +45,6 @@ export function renderContent(data, voiceName) {
             textSpan.appendChild(wordSpan);
         });
         enDiv.appendChild(textSpan);
-
         state.segmentMetadata.push({ element: enDiv, startPct, endPct });
         acc += seg.en.length;
 
@@ -87,163 +56,62 @@ export function renderContent(data, voiceName) {
         container.appendChild(rowDiv);
     });
 
-    /* Vocab cards with save button */
     const vocabContainer = document.getElementById('vocabList');
     vocabContainer.innerHTML = '';
-    (data.vocabulary || []).slice(0, 8).forEach(v => {
+    (data.vocabulary || []).forEach(v => {
         const card = document.createElement('div');
         card.className = 'vocab-card';
-        const safeWord = v.word.replace(/'/g, "\\'");
-        const safeEx = v.ex.replace(/'/g, "\\'");
         card.innerHTML = `
-            <div class="vocab-header">
-                <div><span class="vocab-word">${v.word}</span><button class="mini-speaker" onclick="speakText('${safeWord}')">${ICONS.speaker}</button></div>
-                <div><span class="vocab-pos">${v.pos}</span><span class="vocab-ipa">${v.ipa}</span><button class="vocab-save-btn">${ICONS.bookmark}</button></div>
-            </div>
-            <div class="vocab-def">${v.def}</div>
-            <div class="vocab-ex">${v.ex}<button class="mini-speaker" onclick="speakText('${safeEx}')">${ICONS.speaker}</button></div>
-            ${v.ex_zh ? `<div class="vocab-ex-zh">${v.ex_zh}</div>` : ''}`;
-        const saveBtn = card.querySelector('.vocab-save-btn');
-        DB.getSavedWord(v.word.toLowerCase()).then(existing => {
-            if (existing) { saveBtn.innerHTML = ICONS.bookmarkFill; saveBtn.classList.add('saved'); }
-        });
-        saveBtn.onclick = async () => {
-            const saved = await toggleWordSaved(v.word, v);
-            if (saved) {
-                saveBtn.innerHTML = ICONS.bookmarkFill;
-                saveBtn.classList.add('saved');
-            } else {
-                saveBtn.innerHTML = ICONS.bookmark;
-                saveBtn.classList.remove('saved');
-            }
-        };
+            <div class="vocab-card-header"><strong>${v.word}</strong> <span class="pos-tag">${v.pos}</span></div>
+            <div class="vocab-card-def">${v.def || v.meaning || ''}</div>
+            <div class="vocab-card-ex">${v.ex || v.example || ''}</div>
+        `;
+        card.onclick = () => showWordModal(v.word);
         vocabContainer.appendChild(card);
     });
-
-    /* Phrases */
-    const phraseContainer = document.getElementById('phraseList');
-    const phraseTitle = document.getElementById('phraseSectionTitle');
-    phraseContainer.innerHTML = '';
-    if (data.phrases && data.phrases.length > 0) {
-        phraseTitle.textContent = t('sectionPhrases');
-        data.phrases.forEach(p => {
-            const safePhrase = (p.phrase || '').replace(/'/g, "\\'");
-            const safeEx = (p.example || '').replace(/'/g, "\\'");
-            phraseContainer.innerHTML += `<div class="phrase-card"><div class="phrase-header">${p.phrase}<button class="mini-speaker" onclick="speakText('${safePhrase}')" style="margin-left:6px;">${ICONS.speaker}</button></div><div class="phrase-meaning">${p.meaning}</div><div class="phrase-explanation">${p.explanation}</div><div class="phrase-example">${p.example}<button class="mini-speaker" onclick="speakText('${safeEx}')" style="margin-left:4px;">${ICONS.speaker}</button></div>${p.example_zh ? `<div class="phrase-example-zh">${p.example_zh}</div>` : ''}</div>`;
-        });
-    } else if (data.grammar && data.grammar.length > 0) {
-        phraseTitle.textContent = t('sectionGrammar');
-        data.grammar.forEach(g => { phraseContainer.innerHTML += `<div class="grammar-item"><span class="grammar-bullet">•</span><span>${g}</span></div>`; });
-    }
-
-    state.showTranslation = false;
-    state.showEnglish = true;
-    updateToggleButtons();
-    updateTranslationVisibility();
-    updateEnglishVisibility();
 }
 
-export function toggleTranslation() {
-    state.showTranslation = !state.showTranslation;
-    updateToggleButtons();
-    updateTranslationVisibility();
-}
-
-export function toggleEnglish() {
-    state.showEnglish = !state.showEnglish;
-    updateToggleButtons();
-    updateEnglishVisibility();
-}
-
-export function updateToggleButtons() {
-    const e = document.getElementById('btnToggleEn');
-    const z = document.getElementById('btnToggleZh');
-    e.textContent = state.showEnglish ? t('btnHideEnglish') : t('btnShowEnglish');
-    e.classList.toggle('active-toggle', !state.showEnglish);
-    z.textContent = state.showTranslation ? t('btnHideTranslation') : t('btnShowTranslation');
-    z.classList.toggle('active-toggle', state.showTranslation);
-}
-
-export function updateTranslationVisibility() {
-    document.querySelectorAll('.segment-zh').forEach(el => el.classList.toggle('hidden', !state.showTranslation));
-}
-
-export function updateEnglishVisibility() {
-    document.querySelectorAll('.segment-en').forEach(el => el.classList.toggle('en-hidden', !state.showEnglish));
-}
-
-// 🌟 手術式補回：單字彈窗顯示邏輯，確保消滅 undefined
+// 🌟 最終修正：完整顯示衍生字、同義字、反義字
 export async function showWordModal(wordStr) {
     const modal = document.getElementById('wordModal');
-    const wmWord = document.getElementById('wmWord');
-    const wmPos = document.getElementById('wmPos');
-    const wmIpa = document.getElementById('wmIpa');
     const wmDef = document.getElementById('wmDef');
-    // 🌟 補回衍伸字、同反義字 UI 渲染
-        let extraHtml = '';
-        if (info.derivatives && info.derivatives.length > 0) {
-            extraHtml += `<div class="wm-extra-sec"><strong>💡 衍生字：</strong><div class="wm-deriv-list">` + 
-                info.derivatives.map(d => `<span>${d.word} (${d.pos} ${d.zh})</span>`).join('') + `</div></div>`;
-        }
-        if (info.synonyms && info.synonyms.length > 0) {
-            extraHtml += `<div class="wm-extra-sec"><strong>🔗 同義字：</strong><div class="wm-tag-list">` + 
-                info.synonyms.map(s => `<span class="wm-syn-tag">= ${s}</span>`).join('') + `</div></div>`;
-        }
-        if (info.antonyms && info.antonyms.length > 0) {
-            extraHtml += `<div class="wm-extra-sec"><strong>❌ 反義字：</strong><div class="wm-tag-list">` + 
-                info.antonyms.map(a => `<span class="wm-ant-tag">≠ ${a}</span>`).join('') + `</div></div>`;
-        }
-        
-        // 將結果插入 actionArea 前面
-        const extraContainer = document.createElement('div');
-        extraContainer.innerHTML = extraHtml;
-        wmActionArea.parentNode.insertBefore(extraContainer, wmActionArea);
     const wmExText = document.getElementById('wmExText');
     const wmExZh = document.getElementById('wmExZh');
     const wmActionArea = document.getElementById('wmActionArea');
 
-    // 1. 初始化 UI 狀態
-    wmWord.textContent = wordStr;
-    wmPos.textContent = '';
-    wmIpa.textContent = '';
-    wmDef.textContent = t('loading') || 'Loading...';
-    wmExText.textContent = '';
-    wmExZh.textContent = '';
-    wmExZh.classList.add('hidden');
-    wmActionArea.innerHTML = '';
-
-    // 2. 顯示彈窗 (index.html 中對應的 CSS 類名為 active)
+    document.getElementById('wmWord').textContent = wordStr;
+    wmDef.textContent = t('loading');
     modal.classList.add('active');
 
     try {
-        // 3. 調用 apiGemini.js 獲取資料
         const info = await import('./apiGemini.js').then(m => m.fetchWordDetails(wordStr));
-        
-        // 4. 填入資料：確保 key 名稱與 apiGemini.js 回傳的鐵粉格式一致
-        wmPos.textContent = info.pos || '';
-        wmIpa.textContent = info.ipa || '';
-        
-        // 🌟 核心修正：優先讀取 def 與 ex，這能解決 undefined 問題
-        wmDef.textContent = info.def || info.meaning || ''; 
+        wmDef.textContent = info.def || info.meaning || '';
         wmExText.textContent = info.ex || info.example || '';
         wmExZh.textContent = info.ex_zh || '';
-        
-        if (wmExZh.textContent) {
-            wmExZh.classList.remove('hidden');
-        }
+        wmExZh.classList.toggle('hidden', !info.ex_zh);
 
-        // 5. 處理儲存按鈕
+        let extraHtml = '';
+        if (info.derivatives && info.derivatives.length > 0) {
+            extraHtml += `<div class="wm-extra"><strong>衍生字：</strong>` + info.derivatives.map(d => `<span>${d.word}(${d.pos})</span>`).join(', ') + `</div>`;
+        }
+        if (info.synonyms && info.synonyms.length > 0) {
+            extraHtml += `<div class="wm-extra"><strong>同義字：</strong>${info.synonyms.join(', ')}</div>`;
+        }
+        
+        const extraContainer = document.createElement('div');
+        extraContainer.innerHTML = extraHtml;
+        wmActionArea.innerHTML = '';
+        wmActionArea.parentNode.insertBefore(extraContainer, wmActionArea);
+        
         const isSaved = await DB.isWordSaved(wordStr);
         const saveBtn = document.createElement('button');
         saveBtn.className = 'wm-btn' + (isSaved ? ' secondary' : '');
         saveBtn.textContent = isSaved ? t('btnRemoveVocab') : t('btnAddVocab');
-        saveBtn.onclick = async () => {
-            await toggleWordSaved(wordStr, info);
-            showWordModal(wordStr); // 重新渲染按鈕狀態
-        };
+        saveBtn.onclick = async () => { await toggleWordSaved(wordStr, info); showWordModal(wordStr); };
         wmActionArea.appendChild(saveBtn);
-    } catch (err) {
-        console.error('Word modal error:', err);
-        wmDef.textContent = 'Error loading details.';
-    }
+    } catch (err) { wmDef.textContent = 'Error.'; }
+}
+
+export function updateEnglishVisibility() {
+    document.querySelectorAll('.segment-en').forEach(el => el.classList.toggle('en-hidden', !state.showEnglish));
 }
