@@ -21,6 +21,7 @@
       @keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="./questions.js"></script>
     <script>
       (function bootstrapAppAssets() {
         document.documentElement.classList.add('app-booting');
@@ -178,23 +179,33 @@
 <div class="practice-mode-panel hidden" id="practicePanelReading">
     <div id="readingConfigView">
         <h3 class="practice-label">閱讀特訓設定</h3>
-        <p class="practice-note">由 AI 動態生成符合你目標分數的 Part 5 - Part 7 全新考題。</p>
+        <p class="practice-note">選擇「本地題庫」來練習精選考題，或選擇「AI 生成」動態打造全新考題。</p>
         
         <div class="practice-section" style="margin-bottom: 20px;">
-            <h3 class="practice-label">選擇題型</h3>
-            <select id="readingPartSelect" class="topic-input" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db;">
-                <option value="5">Part 5 - 單句填空 (5題)</option>
-                <option value="6">Part 6 - 段落填空 (1篇4題)</option>
-                <option value="7">Part 7 - 閱讀理解 單篇 (3-4題)</option>
+            <h3 class="practice-label">題目來源</h3>
+            <select id="readingSourceSelect" class="topic-input" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db;" onchange="document.getElementById('readingScoreSection').style.display = this.value === 'ai' ? 'block' : 'none';">
+                <option value="local">本地題庫 (精選考古題)</option>
+                <option value="ai">AI 動態生成 (Gemini)</option>
             </select>
         </div>
 
-        <h3 class="practice-label">目標分數級別</h3>
-        <div class="score-selector" id="readingScoreSelector">
-            <button class="score-chip reading-score-chip" data-score="500">500分</button>
-            <button class="score-chip reading-score-chip" data-score="600">600分</button>
-            <button class="score-chip reading-score-chip active" data-score="750">750分</button>
-            <button class="score-chip reading-score-chip" data-score="900">900分</button>
+        <div class="practice-section" style="margin-bottom: 20px;">
+            <h3 class="practice-label">選擇題型</h3>
+            <select id="readingPartSelect" class="topic-input" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db;">
+                <option value="5">Part 5 - 單句填空 (隨機 5 題)</option>
+                <option value="6">Part 6 - 段落填空 (隨機 1 篇)</option>
+                <option value="7">Part 7 - 閱讀理解 (隨機 1 篇)</option>
+            </select>
+        </div>
+
+        <div id="readingScoreSection" style="display: none;">
+            <h3 class="practice-label">目標分數級別 (僅限 AI 模式)</h3>
+            <div class="score-selector" id="readingScoreSelector">
+                <button class="score-chip reading-score-chip" data-score="500">500分</button>
+                <button class="score-chip reading-score-chip" data-score="600">600分</button>
+                <button class="score-chip reading-score-chip active" data-score="750">750分</button>
+                <button class="score-chip reading-score-chip" data-score="900">900分</button>
+            </div>
         </div>
         
         <button class="generate-btn" id="btnStartReading">開始特訓</button>

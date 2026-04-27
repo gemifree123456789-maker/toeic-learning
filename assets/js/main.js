@@ -1,7 +1,5 @@
 // App entry point: initialisation, tab switching, event binding, module wiring.
 
-// App entry point: initialisation, tab switching, event binding, module wiring.
-
 import { state, VOICE_OPTIONS, VOICE_NAMES, ICONS } from './state.js';
 import { speakText } from './utils.js';
 import { DB } from './db.js';
@@ -18,7 +16,6 @@ import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
 import { initSpecialTraining } from './specialTraining.js'; 
-// 確保上面的 import 在你的架構中是正確的
 
 // 處理分數選擇 UI
 document.querySelectorAll('.reading-score-chip').forEach(btn => {
@@ -28,65 +25,156 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
+// 獲取本地題庫的輔助函式
+function getLocalQuestions(part) {
+    if (part === '5' && typeof Q_P5_T01 !== 'undefined') return Q_P5_T01;
+    if (part === '6' && typeof Q_P6_T01 !== 'undefined') return Q_P6_T01;
+    if (part === '7' && typeof Q_P7_T01 !== 'undefined') return Q_P7_T01;
+    return null;
+}
+
 // 開始閱讀特訓
-document.getElementById('btnStartReading')?.addEventListener('click', async () => {
-    const partSelect = document.getElementById('readingPartSelect').value;
-    const scoreSelect = document.querySelector('.reading-score-chip.active')?.dataset.score || '750';
-    const btn = document.getElementById('btnStartReading');
-    
-    try {
-        btn.disabled = true;
-        btn.textContent = 'AI 命題中，請稍候...';
-
-        // 1. 呼叫 API 獲取資料
-        const rawData = await fetchAIPart567(partSelect, scoreSelect);
-
-        // 2. 將資料格式化為 exam.js 吃得懂的格式
-        window.currentExamQuestions = rawData.questions.map((q, idx) => ({
-            id: `reading-p${partSelect}-${idx}`,
-            section: 'reading',
-            sectionLabel: `Part ${partSelect}`,
-            question: q.question,
-            passage: rawData.passage || '',
-            options: q.options,
-            answerKey: q.answerKey,
-            explanationSeed: q.explanationSeed
-        }));
-        window.currentExamAnswers = {}; // 清空作答紀錄
-
-        // 3. 切換畫面到 Exam Shell
-        document.getElementById('tabPractice').classList.add('hidden');
-        document.getElementById('examShell').classList.remove('hidden');
+const btnStartReading = document.getElementById('btnStartReading');
+if (btnStartReading) {
+    btnStartReading.addEventListener('click', async () => {
+        const partSelect = document.getElementById('readingPartSelect').value;
+        const sourceSelect = document.getElementById('readingSourceSelect').value; 
+        const scoreSelect = document.querySelector('.reading-score-chip.active')?.dataset.score || '750';
+        const configView = document.getElementById('readingConfigView');
         
-        // 4. 設定標題與渲染
-        document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (目標 ${scoreSelect} 分)</span>`;
-        const examContent = document.getElementById('examContent');
-        renderExamQuestions(examContent, window.currentExamQuestions, window.currentExamAnswers);
+        try {
+            btnStartReading.disabled = true;
+            btnStartReading.textContent = sourceSelect === 'ai' ? 'AI 命題中，請稍候...' : '載入題庫中...';
 
-        // 5. 設定交卷按鈕
-        const examActions = document.getElementById('examActions');
-        examActions.innerHTML = `<button class="generate-btn" id="btnSubmitReadingExam">交卷並看解析</button>`;
-        
-        document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
-            // 使用你原本 exam.js 的 gradeExam 邏輯
-            const result = gradeExam(window.currentExamQuestions, window.currentExamAnswers);
-            alert(`測驗結束！你答對了 ${result.correct} / ${result.total} 題。`);
-            // 這裡可以接上你原本的錯題解析畫面 (Exam Result View)
-        });
+            let finalQuestions = [];
 
-    } catch (error) {
-        console.error("閱讀特訓生成失敗:", error);
-        alert("題目生成失敗，請再試一次！");
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '開始特訓';
-    }
-});
+            if (sourceSelect === 'ai') {
+                const rawData = await fetchAIPart567(partSelect, scoreSelect);
+                finalQuestions = rawData.questions.map((q, idx) => ({
+                    id: `reading-p${partSelect}-${idx}`,
+                    section: 'reading',
+                    sectionLabel: `Part ${partSelect}`,
+                    question: q.question,
+                    passage: rawData.passage || '',
+                    options: q.options,
+                    answerKey: q.answerKey,
+                    explanationSeed: q.explanationSeed
+                }));
+            } else {
+                // 本地題庫模式 (載入 questions.js 的資料)
+                const localQ = getLocalQuestions(partSelect);
+                if (!localQ) throw new Error("找不到本地題庫，請確認 questions.js 已正確載入");
+
+                if (partSelect === '5') {
+                    const shuffled = [...localQ].sort(() => 0.5 - Math.random()).slice(0, 5);
+                    finalQuestions = shuffled.map((q, idx) => ({
+                        id: `local-p5-${idx}`, section: 'reading', sectionLabel: 'Part 5',
+                        question: q.q, passage: '',
+                        options: q.opts.map((optText, i) => ({ key: String.fromCharCode(65+i), text: optText })),
+                        answerKey: String.fromCharCode(65+q.ans),
+                        explanationSeed: q.exp + "<br><br><strong>翻譯：</strong>" + q.zh
+                    }));
+                } else if (partSelect === '6') {
+                     const set = localQ[Math.floor(Math.random() * localQ.length)];
+                     let pText = set.text;
+                     set.qs.forEach(q => { pText = pText.replace(`[${q.n}]`, `___(${q.n})___`); });
+                     pText = pText.replace(/\n/g, '<br>');
+                     
+                     finalQuestions = set.qs.map((q, idx) => ({
+                        id: `local-p6-${idx}`, section: 'reading', sectionLabel: 'Part 6',
+                        question: `Choose the best answer for blank (${q.n}).`, passage: pText,
+                        options: q.opts.map((optText, i) => ({ key: String.fromCharCode(65+i), text: optText })),
+                        answerKey: String.fromCharCode(65+q.ans),
+                        explanationSeed: q.exp + "<br><br><strong>翻譯：</strong>" + q.zh
+                     }));
+                } else if (partSelect === '7') {
+                     const set = localQ[Math.floor(Math.random() * localQ.length)];
+                     finalQuestions = set.qs.map((q, idx) => ({
+                        id: `local-p7-${idx}`, section: 'reading', sectionLabel: 'Part 7',
+                        question: q.q, passage: set.passage,
+                        options: q.opts.map((optText, i) => ({ key: String.fromCharCode(65+i), text: optText })),
+                        answerKey: String.fromCharCode(65+q.ans),
+                        explanationSeed: q.exp + "<br><br><strong>翻譯：</strong>" + q.zh
+                     }));
+                }
+            }
+
+            // 寫入系統狀態 (完美融合 examShell)
+            state.examState = {
+                questions: finalQuestions,
+                answers: {},
+                result: null,
+                explanations: null,
+                topic: `閱讀特訓 Part ${partSelect}`
+            };
+
+            // 切換畫面：隱藏設定區，並呼叫 setLearnRuntimeMode 來顯示介面
+            if (configView) configView.classList.add('hidden');
+            setLearnRuntimeMode('exam');
+            
+            // 渲染題目
+            document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
+            const examContent = document.getElementById('examContent');
+            renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
+
+            // 設定交卷按鈕
+            const examActions = document.getElementById('examActions');
+            examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
+            
+            document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
+                // 評分
+                state.examState.result = gradeExam(state.examState.questions, state.examState.answers);
+                
+                // 渲染成績與解析
+                examContent.innerHTML = `<div style="text-align:center; padding: 20px; font-size: 20px; font-weight: bold; color: #5856d6; background:#eef2ff; border-radius:12px; margin-bottom:20px;">
+                    測驗結束！答對了 ${state.examState.result.correct} / ${state.examState.result.total} 題
+                </div>`;
+                
+                state.examState.questions.forEach(q => {
+                    const isCorrect = state.examState.answers[q.id] === q.answerKey;
+                    const div = document.createElement('div');
+                    div.style.padding = '20px';
+                    div.style.marginBottom = '16px';
+                    div.style.background = isCorrect ? '#f0fdf4' : '#fef2f2';
+                    div.style.border = `1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'}`;
+                    div.style.borderRadius = '12px';
+                    div.innerHTML = `
+                        ${q.passage ? `<div style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee; line-height: 1.6;">${q.passage}</div>` : ''}
+                        <h4 style="margin-bottom: 10px; font-size: 16px; color: #111827;">${q.question}</h4>
+                        <p style="color: #444; margin: 8px 0; font-weight: bold;">
+                            你的答案: <span style="color: ${isCorrect ? '#16a34a' : '#dc2626'}">${state.examState.answers[q.id] || '未作答'}</span> 
+                            | 正確答案: <span style="color: #16a34a">${q.answerKey}</span>
+                        </p>
+                        <div style="background: rgba(255,255,255,0.6); padding: 12px; border-radius: 8px; font-size: 14.5px; color: #374151; line-height: 1.6; margin-top: 10px;">
+                            💡 <strong>解析：</strong><br>${q.explanationSeed}
+                        </div>
+                    `;
+                    examContent.appendChild(div);
+                });
+                
+                examActions.innerHTML = `<button class="generate-btn" id="btnExitReadingExam">結束特訓，回設定頁</button>`;
+                document.getElementById('btnExitReadingExam').addEventListener('click', () => {
+                    examContent.innerHTML = '';
+                    examActions.innerHTML = '';
+                    setLearnRuntimeMode('article'); // 關閉 exam 介面
+                    if (configView) configView.classList.remove('hidden'); // 恢復設定面板
+                    document.querySelector('.practice-mode-btn[data-mode="reading"]').click(); // 模擬點擊以刷新頁籤
+                });
+            });
+
+        } catch (error) {
+            console.error("特訓生成失敗:", error);
+            alert("題目生成失敗，請再試一次！\n" + error.message);
+        } finally {
+            btnStartReading.disabled = false;
+            btnStartReading.textContent = '開始特訓';
+        }
+    });
+}
 
 // 處理 Practice Tab 面板切換的擴充 (確保原本的 switch 邏輯能切到 reading 面板)
 document.querySelectorAll('.practice-mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        // ...你原本的按鈕 active 切換邏輯...
         const mode = e.target.dataset.mode;
         document.querySelectorAll('.practice-mode-panel').forEach(p => p.classList.add('hidden'));
         
@@ -94,7 +182,7 @@ document.querySelectorAll('.practice-mode-btn').forEach(btn => {
         else if (mode === 'speaking') document.getElementById('practicePanelSpeaking').classList.remove('hidden');
         else if (mode === 'exam') document.getElementById('practicePanelExam').classList.remove('hidden');
         else if (mode === 'special') document.getElementById('practicePanelSpecial').classList.remove('hidden');
-        else if (mode === 'reading') document.getElementById('practicePanelReading').classList.remove('hidden'); // 新增這行
+        else if (mode === 'reading') document.getElementById('practicePanelReading').classList.remove('hidden');
     });
 });
 
