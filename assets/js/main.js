@@ -3,7 +3,6 @@
 import { state, VOICE_OPTIONS, VOICE_NAMES, ICONS } from './state.js';
 import { speakText } from './utils.js';
 import { DB } from './db.js';
-// 這裡新增了 fetchAIPart1
 import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations, fetchAIPart567, fetchAIPart1 } from './apiGemini.js';
 import { DriveSync } from './driveSync.js';
 import { setupAudio } from './audioPlayer.js';
@@ -61,16 +60,28 @@ if (btnStartReading) {
                     const imagePrompt = `black and white photography, highly realistic, everyday scene, ${rawData.imagePrompt}`;
                     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=600&height=400&nologo=true`;
                     
-                    // 將圖片塞入 passage 區塊展示
-                    const imageHtml = `<div style="text-align:center;"><img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Generation+Failed'"></div>`;
+                    // 組合要朗讀的文字 (加入停頓點)
+                    const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
+                    const safePlayText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
+                    // 將圖片與「播放按鈕」塞入 passage 區塊展示
+                    const imageHtml = `
+                        <div style="text-align:center;">
+                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Generation+Failed'">
+                            <br>
+                            <button type="button" style="background:#378ADD; color:white; border:none; padding:12px 24px; border-radius:24px; font-size:16px; cursor:pointer; margin-bottom:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px;" onclick="window.speakText('${safePlayText}')">
+                                🔊 播放聽力選項 (A ~ D)
+                            </button>
+                        </div>
+                    `;
                     
                     finalQuestions = [{
                         id: `reading-p1-0`,
-                        section: 'listening',
+                        section: 'reading', // 關鍵修正：設為 reading 才能在考題區正確顯示 passage (圖片區塊)
                         sectionLabel: `Part 1`,
-                        question: 'Look at the picture and choose the best description.',
+                        question: 'Look at the picture and listen to the sentences. Choose the best description.',
                         passage: imageHtml,
-                        options: rawData.options.map(o => ({ key: o.key, text: o.text })),
+                        options: rawData.options.map(o => ({ key: o.key, text: `(請聆聽語音)` })), // 關鍵修正：作答前隱藏文字
                         answerKey: rawData.answerKey,
                         explanationSeed: rawData.explanationSeed,
                         part1Data: rawData.options // 保留中英對照資料給解答頁面用
