@@ -1091,3 +1091,7 @@ const Q_P7_ALL = [
     ]
   }
 ];
+
+window.Q_P5_T01 = typeof Q_P5_T01 !== 'undefined' ? Q_P5_T01 : null;
+window.Q_P6_T01 = typeof Q_P6_T01 !== 'undefined' ? Q_P6_T01 : null;
+window.Q_P7_T01 = typeof Q_P7_T01 !== 'undefined' ? Q_P7_T01 : null;
