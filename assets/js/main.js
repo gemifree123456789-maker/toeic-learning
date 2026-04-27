@@ -25,24 +25,38 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
-// 獲取本地題庫的輔助函式 (強化版：自動抓取並突破模組作用域限制)
+// 獲取本地題庫的輔助函式 (終極無敵防呆版：無視模組牆壁)
 async function getLocalQuestions(part) {
-    if (typeof Q_P5_T01 === 'undefined' && !window.Q_P5_T01) {
-        try {
-            const res = await fetch('./questions.js');
-            const text = await res.text();
-            const script = document.createElement('script');
-            script.textContent = text.replace(/const\s+(Q_P[567]_[A-Z0-9_]+)\s*=/g, 'window.$1 =');
-            document.head.appendChild(script);
-        } catch (e) {
-            console.error("無法載入 questions.js", e);
-        }
+    // 1. 先嘗試直接讀取 (如果環境允許)
+    try {
+        if (part === '5' && typeof Q_P5_T01 !== 'undefined') return Q_P5_T01;
+        if (part === '6' && typeof Q_P6_T01 !== 'undefined') return Q_P6_T01;
+        if (part === '7' && typeof Q_P7_T01 !== 'undefined') return Q_P7_T01;
+    } catch (e) {} // 忽略找不到的錯誤
+
+    // 2. 主動去抓 questions.js 檔案並強制寫入全域變數
+    try {
+        const res = await fetch('./questions.js');
+        if (!res.ok) throw new Error('無法讀取檔案');
+        const text = await res.text();
+        
+        // 將 const 替換成 window. 變數，強行突破作用域限制
+        const safeText = text.replace(/(?:const|let|var)\s+(Q_P[567]_[A-Z0-9_]+)\s*=/g, 'window.$1 =');
+        
+        const script = document.createElement('script');
+        script.textContent = safeText;
+        document.head.appendChild(script);
+
+        // 給瀏覽器一點點時間消化
+        await new Promise(r => setTimeout(r, 50));
+        
+        if (part === '5') return window.Q_P5_T01;
+        if (part === '6') return window.Q_P6_T01;
+        if (part === '7') return window.Q_P7_T01;
+    } catch (err) {
+        console.error("讀取 questions.js 失敗:", err);
+        return null;
     }
-    
-    if (part === '5') return window.Q_P5_T01 || (typeof Q_P5_T01 !== 'undefined' ? Q_P5_T01 : null);
-    if (part === '6') return window.Q_P6_T01 || (typeof Q_P6_T01 !== 'undefined' ? Q_P6_T01 : null);
-    if (part === '7') return window.Q_P7_T01 || (typeof Q_P7_T01 !== 'undefined' ? Q_P7_T01 : null);
-    return null;
 }
 
 // 開始閱讀特訓
@@ -75,7 +89,7 @@ if (btnStartReading) {
             } else {
                 // 本地題庫模式
                 const localQ = await getLocalQuestions(partSelect);
-                if (!localQ) throw new Error("找不到本地題庫，請確認 questions.js 已正確上傳至專案目錄");
+                if (!localQ) throw new Error("找不到題庫資料，請確認 questions.js 在專案根目錄。");
 
                 if (partSelect === '5') {
                     const shuffled = [...localQ].sort(() => 0.5 - Math.random()).slice(0, 5);
@@ -123,7 +137,7 @@ if (btnStartReading) {
             // 切換畫面：隱藏設定區，呼叫介面切換並跳轉至學習分頁
             if (configView) configView.classList.add('hidden');
             setLearnRuntimeMode('exam');
-            switchTab('learn'); // 自動跳轉到學習頁籤，避免畫面卡住
+            switchTab('learn'); 
             
             // 渲染題目
             document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
@@ -135,10 +149,8 @@ if (btnStartReading) {
             examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
             
             document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
-                // 評分
                 state.examState.result = gradeExam(state.examState.questions, state.examState.answers);
                 
-                // 渲染成績與解析
                 examContent.innerHTML = `<div style="text-align:center; padding: 20px; font-size: 20px; font-weight: bold; color: #5856d6; background:#eef2ff; border-radius:12px; margin-bottom:20px;">
                     測驗結束！答對了 ${state.examState.result.correct} / ${state.examState.result.total} 題
                 </div>`;
@@ -166,13 +178,25 @@ if (btnStartReading) {
                 });
                 
                 examActions.innerHTML = `<button class="generate-btn" id="btnExitReadingExam">結束特訓，回設定頁</button>`;
+                
+                // 修復卡住問題：重新綁定乾淨的退出邏輯
                 document.getElementById('btnExitReadingExam').addEventListener('click', () => {
                     examContent.innerHTML = '';
                     examActions.innerHTML = '';
-                    setLearnRuntimeMode('article'); // 關閉 exam 介面
-                    if (configView) configView.classList.remove('hidden'); // 恢復設定面板
-                    switchTab('practice'); // 自動跳回練習頁籤
-                    document.querySelector('.practice-mode-btn[data-mode="reading"]').click(); // 模擬點擊以刷新內部面板
+                    state.examState = { questions: [], answers: {}, result: null }; // 清空狀態
+                    
+                    setLearnRuntimeMode('article'); 
+                    switchTab('practice'); 
+                    
+                    if (configView) configView.classList.remove('hidden'); 
+                    
+                    document.querySelectorAll('.practice-mode-panel').forEach(p => p.classList.add('hidden'));
+                    const readingPanel = document.getElementById('practicePanelReading');
+                    if(readingPanel) readingPanel.classList.remove('hidden');
+                    
+                    document.querySelectorAll('.practice-mode-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.mode === 'reading');
+                    });
                 });
             });
 
@@ -186,7 +210,7 @@ if (btnStartReading) {
     });
 }
 
-// 處理 Practice Tab 面板切換的擴充 (確保原本的 switch 邏輯能切到 reading 面板)
+// 處理 Practice Tab 面板切換的擴充
 document.querySelectorAll('.practice-mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const mode = e.target.dataset.mode;
