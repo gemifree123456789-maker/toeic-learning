@@ -78,7 +78,7 @@ if (btnStartReading) {
                     // Part 1 專屬邏輯
                     const rawData = await fetchAIPart1(scoreSelect);
                     
-                    // 完美圖片處理：徹底清除所有標點符號，並改用最穩定的 /p/ 路徑
+                    // 💡 完美圖片處理：使用 image.pollinations.ai 才能正確回傳圖片檔案！
                     const rawPrompt = rawData.imagePrompt || "daily life";
                     const cleanPrompt = ("black and white realistic photography " + rawPrompt)
                         .replace(/[^a-zA-Z0-9\s]/g, ' ') // 把所有非英數字元(含標點)變成空白
@@ -86,14 +86,13 @@ if (btnStartReading) {
                         .replace(/\s+/g, '%20');         // 將連續空白轉為標準網址空格
                         
                     const randSeed = Math.floor(Math.random() * 1000000);
-                    // 使用 /p/ 轉址路徑，避開伺服器路徑解析錯誤
-                    const imgUrl = `https://pollinations.ai/p/${cleanPrompt}?width=600&height=400&nologo=true&seed=${randSeed}`;
+                    // 改回正確的 image.pollinations.ai/prompt/ 路徑
+                    const imgUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=600&height=400&nologo=true&seed=${randSeed}`;
                     
                     // 組合要朗讀的文字
                     const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
                     window.currentPart1AudioText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                    // 確保原始提示詞能安全印在錯誤備用框上
                     const safePromptHtml = rawPrompt.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     const imageHtml = `
                         <div style="text-align:center;">
