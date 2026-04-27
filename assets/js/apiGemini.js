@@ -274,3 +274,39 @@ export async function fetchGeminiTTS(text, voiceName) {
     }
     return data.candidates[0].content.parts[0].inlineData.data;
 }
+// 生成 TOEIC Part 5, 6, 7 閱讀特訓題目
+export async function fetchAIPart567(part, score) {
+    const locale = getLocaleMeta();
+    const targetLang = `${locale.name} (${locale.inLocal})`;
+
+    let prompt = `You are an expert TOEIC tutor. Generate a practice set for TOEIC Part ${part} targeting a score of ${score} (500-900).\n`;
+
+    if (part === '5') {
+        prompt += `Generate exactly 5 Incomplete Sentences questions.\n`;
+    } else if (part === '6') {
+        prompt += `Generate 1 Text Completion passage (Email/Memo/Notice) with exactly 4 questions. Use placeholders like [1], [2], [3], [4] in the passage.\n`;
+    } else if (part === '7') {
+        prompt += `Generate 1 Reading Comprehension single passage with 3-4 questions.\n`;
+    }
+
+    prompt += `Output STRICT JSON ONLY matching this format:
+    {
+      "passage": "Full passage text here with <br> for newlines. Leave empty string for Part 5.",
+      "questions": [
+        {
+          "question": "Question text here. For Part 6, use 'Choose the best answer for blank [1].'",
+          "options": [
+            {"key": "A", "text": "option A text"},
+            {"key": "B", "text": "option B text"},
+            {"key": "C", "text": "option C text"},
+            {"key": "D", "text": "option D text"}
+          ],
+          "answerKey": "A",
+          "explanationSeed": "Explanation of why this is correct and others are wrong in ${targetLang}"
+        }
+      ]
+    }`;
+
+    const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return raw;
+}

@@ -98,6 +98,7 @@
                 <button class="practice-mode-btn" data-mode="speaking" data-i18n="practiceModeSpeaking">口說對話</button>
                 <button class="practice-mode-btn" data-mode="exam" data-i18n="practiceModeExam">模擬考試</button>
                 <button class="practice-mode-btn" id="tabSpecial" data-mode="special">專項特訓</button>
+                <button class="practice-mode-btn" data-mode="reading">閱讀特訓 (Part 5-7)</button>
             </div>
             <div class="practice-mode-panel" id="practicePanelArticle">
                 <h3 class="practice-label" data-i18n="targetScoreLabel">目標分數</h3>
@@ -174,7 +175,31 @@
             </div>
         </div>
     </div>
+<div class="practice-mode-panel hidden" id="practicePanelReading">
+    <div id="readingConfigView">
+        <h3 class="practice-label">閱讀特訓設定</h3>
+        <p class="practice-note">由 AI 動態生成符合你目標分數的 Part 5 - Part 7 全新考題。</p>
+        
+        <div class="practice-section" style="margin-bottom: 20px;">
+            <h3 class="practice-label">選擇題型</h3>
+            <select id="readingPartSelect" class="topic-input" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db;">
+                <option value="5">Part 5 - 單句填空 (5題)</option>
+                <option value="6">Part 6 - 段落填空 (1篇4題)</option>
+                <option value="7">Part 7 - 閱讀理解 單篇 (3-4題)</option>
+            </select>
+        </div>
 
+        <h3 class="practice-label">目標分數級別</h3>
+        <div class="score-selector" id="readingScoreSelector">
+            <button class="score-chip reading-score-chip" data-score="500">500分</button>
+            <button class="score-chip reading-score-chip" data-score="600">600分</button>
+            <button class="score-chip reading-score-chip active" data-score="750">750分</button>
+            <button class="score-chip reading-score-chip" data-score="900">900分</button>
+        </div>
+        
+        <button class="generate-btn" id="btnStartReading">開始特訓</button>
+    </div>
+</div>    
     <div id="tabVocab" class="container hidden">
         <div class="vocab-tab-header">
             <h3 class="section-title" data-i18n="vocabNotebookTitle">單字本 Vocabulary</h3>

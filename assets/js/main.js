@@ -15,6 +15,87 @@ import { initInstallPrompt } from './installPrompt.js';
 import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
+import { fetchAIPart567 } from './apiGemini.js';
+import { renderExamQuestions, gradeExam } from './exam.js'; 
+// 確保上面的 import 在你的架構中是正確的
+
+// 處理分數選擇 UI
+document.querySelectorAll('.reading-score-chip').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.reading-score-chip').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+    });
+});
+
+// 開始閱讀特訓
+document.getElementById('btnStartReading')?.addEventListener('click', async () => {
+    const partSelect = document.getElementById('readingPartSelect').value;
+    const scoreSelect = document.querySelector('.reading-score-chip.active')?.dataset.score || '750';
+    const btn = document.getElementById('btnStartReading');
+    
+    try {
+        btn.disabled = true;
+        btn.textContent = 'AI 命題中，請稍候...';
+
+        // 1. 呼叫 API 獲取資料
+        const rawData = await fetchAIPart567(partSelect, scoreSelect);
+
+        // 2. 將資料格式化為 exam.js 吃得懂的格式
+        window.currentExamQuestions = rawData.questions.map((q, idx) => ({
+            id: `reading-p${partSelect}-${idx}`,
+            section: 'reading',
+            sectionLabel: `Part ${partSelect}`,
+            question: q.question,
+            passage: rawData.passage || '',
+            options: q.options,
+            answerKey: q.answerKey,
+            explanationSeed: q.explanationSeed
+        }));
+        window.currentExamAnswers = {}; // 清空作答紀錄
+
+        // 3. 切換畫面到 Exam Shell
+        document.getElementById('tabPractice').classList.add('hidden');
+        document.getElementById('examShell').classList.remove('hidden');
+        
+        // 4. 設定標題與渲染
+        document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (目標 ${scoreSelect} 分)</span>`;
+        const examContent = document.getElementById('examContent');
+        renderExamQuestions(examContent, window.currentExamQuestions, window.currentExamAnswers);
+
+        // 5. 設定交卷按鈕
+        const examActions = document.getElementById('examActions');
+        examActions.innerHTML = `<button class="generate-btn" id="btnSubmitReadingExam">交卷並看解析</button>`;
+        
+        document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
+            // 使用你原本 exam.js 的 gradeExam 邏輯
+            const result = gradeExam(window.currentExamQuestions, window.currentExamAnswers);
+            alert(`測驗結束！你答對了 ${result.correct} / ${result.total} 題。`);
+            // 這裡可以接上你原本的錯題解析畫面 (Exam Result View)
+        });
+
+    } catch (error) {
+        console.error("閱讀特訓生成失敗:", error);
+        alert("題目生成失敗，請再試一次！");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '開始特訓';
+    }
+});
+
+// 處理 Practice Tab 面板切換的擴充 (確保原本的 switch 邏輯能切到 reading 面板)
+document.querySelectorAll('.practice-mode-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // ...你原本的按鈕 active 切換邏輯...
+        const mode = e.target.dataset.mode;
+        document.querySelectorAll('.practice-mode-panel').forEach(p => p.classList.add('hidden'));
+        
+        if (mode === 'article') document.getElementById('practicePanelArticle').classList.remove('hidden');
+        else if (mode === 'speaking') document.getElementById('practicePanelSpeaking').classList.remove('hidden');
+        else if (mode === 'exam') document.getElementById('practicePanelExam').classList.remove('hidden');
+        else if (mode === 'special') document.getElementById('practicePanelSpecial').classList.remove('hidden');
+        else if (mode === 'reading') document.getElementById('practicePanelReading').classList.remove('hidden'); // 新增這行
+    });
+});
 
 // 🌟 核心保證：匯入特訓模組初始化器
 import { initSpecialTraining } from './specialTraining.js';
