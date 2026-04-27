@@ -25,7 +25,7 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
-// 獲取本地題庫的輔助函式 (終極防呆乾淨版)
+// 獲取本地題庫的輔助函式 
 function getLocalQuestions(part) {
     if (part === '5') {
         if (!window.Q_P5_T01) console.error("找不到 P5 題庫！請檢查 questions.js 路徑是否正確，以及檔案底部有沒有加上 window 魔法碼！");
@@ -36,28 +36,25 @@ function getLocalQuestions(part) {
     return null;
 }
 
-// ── 新增：Part 1 專屬四國語音隨機播放引擎 ──
+// ── Part 1 專屬四國語音隨機播放引擎 ──
 window.currentPart1AudioText = "";
 window.playPart1Audio = function() {
     if (!window.currentPart1AudioText) return;
     const text = window.currentPart1AudioText;
     
-    // 支援的四國口音 (美、英、澳、加)
     const accents = ['en-US', 'en-GB', 'en-AU', 'en-CA'];
     const randomAccent = accents[Math.floor(Math.random() * accents.length)];
     
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     
-    // 尋找符合該隨機口音的語音
     const matchedVoices = voices.filter(v => v.lang === randomAccent || v.lang.replace('_', '-') === randomAccent);
     if (matchedVoices.length > 0) {
-        // 若該口音有多個聲音，再隨機挑一個 (男女聲隨機)
         utterance.voice = matchedVoices[Math.floor(Math.random() * matchedVoices.length)];
     }
     
-    utterance.rate = 0.9; // 稍微放慢速度模擬多益聽力
-    window.speechSynthesis.cancel(); // 停止目前正在播放的聲音
+    utterance.rate = 0.9; 
+    window.speechSynthesis.cancel(); 
     window.speechSynthesis.speak(utterance);
 };
 
@@ -81,40 +78,36 @@ if (btnStartReading) {
                     // Part 1 專屬邏輯
                     const rawData = await fetchAIPart1(scoreSelect);
                     
-                    // 防呆處理：過濾掉特殊符號避免圖片網址破圖，並加上隨機 Seed 強制刷新
-                    const safeImagePrompt = (rawData.imagePrompt || "A realistic photo").replace(/[^a-zA-Z0-9\s,]/g, '');
-                    const seed = Math.floor(Math.random() * 1000000);
-                    const imgUrl = `https://image.pollinations.ai/prompt/black%20and%20white%20photography,%20realistic,%20${encodeURIComponent(safeImagePrompt)}?width=600&height=400&nologo=true&seed=${seed}`;
+                    // 防呆處理：過濾掉所有特殊符號，只保留英數字與空格，保證網址絕對不會破圖
+                    const safeImagePrompt = (rawData.imagePrompt || "daily life").replace(/[^a-zA-Z0-9\s]/g, '').trim();
+                    const randSeed = Math.floor(Math.random() * 1000000);
+                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent("black and white photo realistic " + safeImagePrompt + " " + randSeed)}?width=600&height=400&nologo=true`;
                     
-                    // 組合要朗讀的文字 (加入停頓點)
+                    // 組合要朗讀的文字
                     const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
                     window.currentPart1AudioText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                    // 將圖片與「重新播放按鈕」塞入 passage 區塊展示
+                    // 乾淨的圖片區塊 (移除了按鈕)
                     const imageHtml = `
                         <div style="text-align:center;">
-                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'">
-                            <br>
-                            <button type="button" style="background:#378ADD; color:white; border:none; padding:12px 24px; border-radius:24px; font-size:16px; cursor:pointer; margin-bottom:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px;" onclick="window.playPart1Audio()">
-                                🔊 重新播放聽力題音訊 (四國語音隨機)
-                            </button>
+                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 5px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'">
                         </div>
                     `;
                     
                     finalQuestions = [{
                         id: `reading-p1-0`,
-                        section: 'reading', // 設為 reading 才能顯示圖片區塊
+                        section: 'reading',
                         sectionLabel: `Part 1`,
-                        question: 'Look at the picture and listen to the sentences. Choose the best description.',
+                        question: 'Look at the picture and listen to the sentences.',
                         passage: imageHtml,
-                        // 關鍵修正：將 text 設為空字串，這樣畫面上就只會顯示 A. B. C. D.
+                        // 修正：完全清空文字，只顯示 A B C D
                         options: rawData.options.map(o => ({ key: o.key, text: '' })), 
                         answerKey: rawData.answerKey,
                         explanationSeed: rawData.explanationSeed,
-                        part1Data: rawData.options // 保留中英對照資料給解答頁面用
+                        part1Data: rawData.options 
                     }];
                 } else {
-                    // Part 5-7 原有邏輯
+                    // Part 5-7
                     const rawData = await fetchAIPart567(partSelect, scoreSelect);
                     finalQuestions = rawData.questions.map((q, idx) => ({
                         id: `reading-p${partSelect}-${idx}`,
@@ -168,7 +161,6 @@ if (btnStartReading) {
                 }
             }
 
-            // 寫入系統狀態
             state.examState = {
                 questions: finalQuestions,
                 answers: {},
@@ -185,16 +177,24 @@ if (btnStartReading) {
             const examContent = document.getElementById('examContent');
             renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
 
-            // 關鍵修正：若為 Part 1，畫面渲染完成後延遲 0.8 秒自動播放音訊
-            if (sourceSelect === 'ai' && partSelect === '1') {
-                setTimeout(() => {
-                    window.playPart1Audio();
-                }, 800);
-            }
-
+            // 動態配置交卷區塊 (若為 Part 1 則把播放按鈕塞在最底下)
             const examActions = document.getElementById('examActions');
-            examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
+            if (sourceSelect === 'ai' && partSelect === '1') {
+                examActions.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                        <button type="button" class="generate-btn" style="background:#378ADD;" id="btnReplayAudio">🔊 重新播放聽力題音訊 (四國語音隨機)</button>
+                        <button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>
+                    </div>
+                `;
+                document.getElementById('btnReplayAudio').addEventListener('click', () => window.playPart1Audio());
+                
+                // 延遲 0.8 秒自動播放第一次音訊
+                setTimeout(() => { window.playPart1Audio(); }, 800);
+            } else {
+                examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
+            }
             
+            // 提交考卷邏輯
             document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
                 window.speechSynthesis.cancel(); // 交卷時停止播放
                 state.examState.result = gradeExam(state.examState.questions, state.examState.answers);
@@ -212,7 +212,6 @@ if (btnStartReading) {
                     div.style.border = `1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'}`;
                     div.style.borderRadius = '12px';
                     
-                    // 針對 Part 1 動態渲染帶有喇叭與中文的選項面板
                     let part1ExtraHtml = '';
                     if (q.part1Data) {
                         part1ExtraHtml = `<div style="margin-top: 15px;">` + q.part1Data.map(opt => {
