@@ -3,7 +3,8 @@
 import { state, VOICE_OPTIONS, VOICE_NAMES, ICONS } from './state.js';
 import { speakText } from './utils.js';
 import { DB } from './db.js';
-import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations, fetchAIPart567 } from './apiGemini.js';
+// 這裡新增了 fetchAIPart1
+import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations, fetchAIPart567, fetchAIPart1 } from './apiGemini.js';
 import { DriveSync } from './driveSync.js';
 import { setupAudio } from './audioPlayer.js';
 import { renderContent, toggleEnglish, toggleTranslation, updateToggleButtons } from './render.js';
@@ -25,38 +26,15 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
-// 獲取本地題庫的輔助函式 (終極無敵防呆版：無視模組牆壁)
-async function getLocalQuestions(part) {
-    // 1. 先嘗試直接讀取 (如果環境允許)
-    try {
-        if (part === '5' && typeof Q_P5_T01 !== 'undefined') return Q_P5_T01;
-        if (part === '6' && typeof Q_P6_T01 !== 'undefined') return Q_P6_T01;
-        if (part === '7' && typeof Q_P7_T01 !== 'undefined') return Q_P7_T01;
-    } catch (e) {} // 忽略找不到的錯誤
-
-    // 2. 主動去抓 questions.js 檔案並強制寫入全域變數
-    try {
-        const res = await fetch('./questions.js');
-        if (!res.ok) throw new Error('無法讀取檔案');
-        const text = await res.text();
-        
-        // 將 const 替換成 window. 變數，強行突破作用域限制
-        const safeText = text.replace(/(?:const|let|var)\s+(Q_P[567]_[A-Z0-9_]+)\s*=/g, 'window.$1 =');
-        
-        const script = document.createElement('script');
-        script.textContent = safeText;
-        document.head.appendChild(script);
-
-        // 給瀏覽器一點點時間消化
-        await new Promise(r => setTimeout(r, 50));
-        
-        if (part === '5') return window.Q_P5_T01;
-        if (part === '6') return window.Q_P6_T01;
-        if (part === '7') return window.Q_P7_T01;
-    } catch (err) {
-        console.error("讀取 questions.js 失敗:", err);
-        return null;
+// 獲取本地題庫的輔助函式 (終極防呆乾淨版)
+function getLocalQuestions(part) {
+    if (part === '5') {
+        if (!window.Q_P5_T01) console.error("找不到 P5 題庫！請檢查 questions.js 路徑是否正確，以及檔案底部有沒有加上 window 魔法碼！");
+        return window.Q_P5_T01 || null;
     }
+    if (part === '6') return window.Q_P6_T01 || null;
+    if (part === '7') return window.Q_P7_T01 || null;
+    return null;
 }
 
 // 開始閱讀特訓
@@ -70,26 +48,53 @@ if (btnStartReading) {
         
         try {
             btnStartReading.disabled = true;
-            btnStartReading.textContent = sourceSelect === 'ai' ? 'AI 命題中，請稍候...' : '載入題庫中...';
+            btnStartReading.textContent = sourceSelect === 'ai' ? 'AI 命題與生圖中，請稍候...' : '載入題庫中...';
 
             let finalQuestions = [];
 
             if (sourceSelect === 'ai') {
-                const rawData = await fetchAIPart567(partSelect, scoreSelect);
-                finalQuestions = rawData.questions.map((q, idx) => ({
-                    id: `reading-p${partSelect}-${idx}`,
-                    section: 'reading',
-                    sectionLabel: `Part ${partSelect}`,
-                    question: q.question,
-                    passage: rawData.passage || '',
-                    options: q.options,
-                    answerKey: q.answerKey,
-                    explanationSeed: q.explanationSeed
-                }));
+                if (partSelect === '1') {
+                    // Part 1 專屬邏輯 (結合 Pollinations AI 免費生圖引擎)
+                    const rawData = await fetchAIPart1(scoreSelect);
+                    
+                    // 強制黑白、擬真攝影風格
+                    const imagePrompt = `black and white photography, highly realistic, everyday scene, ${rawData.imagePrompt}`;
+                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=600&height=400&nologo=true`;
+                    
+                    // 將圖片塞入 passage 區塊展示
+                    const imageHtml = `<div style="text-align:center;"><img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Generation+Failed'"></div>`;
+                    
+                    finalQuestions = [{
+                        id: `reading-p1-0`,
+                        section: 'listening',
+                        sectionLabel: `Part 1`,
+                        question: 'Look at the picture and choose the best description.',
+                        passage: imageHtml,
+                        options: rawData.options.map(o => ({ key: o.key, text: o.text })),
+                        answerKey: rawData.answerKey,
+                        explanationSeed: rawData.explanationSeed,
+                        part1Data: rawData.options // 保留中英對照資料給解答頁面用
+                    }];
+                } else {
+                    // Part 5-7 原有邏輯
+                    const rawData = await fetchAIPart567(partSelect, scoreSelect);
+                    finalQuestions = rawData.questions.map((q, idx) => ({
+                        id: `reading-p${partSelect}-${idx}`,
+                        section: 'reading',
+                        sectionLabel: `Part ${partSelect}`,
+                        question: q.question,
+                        passage: rawData.passage || '',
+                        options: q.options,
+                        answerKey: q.answerKey,
+                        explanationSeed: q.explanationSeed
+                    }));
+                }
             } else {
                 // 本地題庫模式
-                const localQ = await getLocalQuestions(partSelect);
-                if (!localQ) throw new Error("找不到題庫資料，請確認 questions.js 在專案根目錄。");
+                if (partSelect === '1') throw new Error("目前本地題庫尚未支援 Part 1，請選擇 AI 生成模式。");
+                
+                const localQ = getLocalQuestions(partSelect);
+                if (!localQ) throw new Error("找不到題庫資料，請確認 questions.js 設定正確。");
 
                 if (partSelect === '5') {
                     const shuffled = [...localQ].sort(() => 0.5 - Math.random()).slice(0, 5);
@@ -131,20 +136,17 @@ if (btnStartReading) {
                 answers: {},
                 result: null,
                 explanations: null,
-                topic: `閱讀特訓 Part ${partSelect}`
+                topic: `特訓 Part ${partSelect}`
             };
 
-            // 切換畫面：隱藏設定區，呼叫介面切換並跳轉至學習分頁
             if (configView) configView.classList.add('hidden');
             setLearnRuntimeMode('exam');
             switchTab('learn'); 
             
-            // 渲染題目
-            document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
+            document.getElementById('examMeta').innerHTML = `<span class="exam-title">模擬特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
             const examContent = document.getElementById('examContent');
             renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
 
-            // 設定交卷按鈕
             const examActions = document.getElementById('examActions');
             examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
             
@@ -163,6 +165,25 @@ if (btnStartReading) {
                     div.style.background = isCorrect ? '#f0fdf4' : '#fef2f2';
                     div.style.border = `1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'}`;
                     div.style.borderRadius = '12px';
+                    
+                    // 針對 Part 1 動態渲染帶有喇叭與中文的選項面板
+                    let part1ExtraHtml = '';
+                    if (q.part1Data) {
+                        part1ExtraHtml = `<div style="margin-top: 15px;">` + q.part1Data.map(opt => {
+                            const isAns = opt.key === q.answerKey;
+                            const safeText = opt.text.replace(/'/g, "\\'"); // 防呆處理避免引號壞掉
+                            return `<div style="margin-bottom: 8px; padding: 12px; background: ${isAns ? '#dcfce7' : '#f3f4f6'}; border-radius: 8px; border: 1px solid ${isAns ? '#86efac' : '#e5e7eb'};">
+                                <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                                    <div style="flex: 1;">
+                                        <strong style="color:#111827; font-size:15px;">(${opt.key}) ${opt.text}</strong>
+                                        <div style="font-size: 13.5px; color: #555; margin-top: 4px;">${opt.zh}</div>
+                                    </div>
+                                    <button style="background:#378ADD; color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:10px; transition:0.2s;" onclick="window.speakText('${safeText}')" title="聆聽發音" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">🔊</button>
+                                </div>
+                            </div>`;
+                        }).join('') + `</div>`;
+                    }
+
                     div.innerHTML = `
                         ${q.passage ? `<div style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee; line-height: 1.6;">${q.passage}</div>` : ''}
                         <h4 style="margin-bottom: 10px; font-size: 16px; color: #111827;">${q.question}</h4>
@@ -170,6 +191,7 @@ if (btnStartReading) {
                             你的答案: <span style="color: ${isCorrect ? '#16a34a' : '#dc2626'}">${state.examState.answers[q.id] || '未作答'}</span> 
                             | 正確答案: <span style="color: #16a34a">${q.answerKey}</span>
                         </p>
+                        ${part1ExtraHtml}
                         <div style="background: rgba(255,255,255,0.6); padding: 12px; border-radius: 8px; font-size: 14.5px; color: #374151; line-height: 1.6; margin-top: 10px;">
                             💡 <strong>解析：</strong><br>${q.explanationSeed}
                         </div>
@@ -179,11 +201,10 @@ if (btnStartReading) {
                 
                 examActions.innerHTML = `<button class="generate-btn" id="btnExitReadingExam">結束特訓，回設定頁</button>`;
                 
-                // 修復卡住問題：重新綁定乾淨的退出邏輯
                 document.getElementById('btnExitReadingExam').addEventListener('click', () => {
                     examContent.innerHTML = '';
                     examActions.innerHTML = '';
-                    state.examState = { questions: [], answers: {}, result: null }; // 清空狀態
+                    state.examState = { questions: [], answers: {}, result: null }; 
                     
                     setLearnRuntimeMode('article'); 
                     switchTab('practice'); 
@@ -1243,7 +1264,6 @@ GENERATE_BTN.onclick = async () => {
     try {
         await DB.init();
         
-        // 🌟 呼叫完美回歸的初始化器
         initSpecialTraining();
 
         await renderDailyDashboard();

@@ -310,3 +310,23 @@ export async function fetchAIPart567(part, score) {
     const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
     return raw;
 }
+// 生成 TOEIC Part 1 照片描述題 (結合 AI 生圖 Prompt)
+export async function fetchAIPart1(score) {
+    let prompt = `You are an expert TOEIC tutor. Generate exactly 1 TOEIC Part 1 (Photographs) question targeting a score of ${score} (500-900).
+    Output STRICT JSON ONLY matching this format:
+    {
+      "imagePrompt": "A descriptive English prompt for an AI image generator to create a realistic, everyday scene suitable for TOEIC Part 1 (e.g. 'A man working at a desk', 'People waiting at a bus stop'). Keep it under 15 words.",
+      "options": [
+        {"key": "A", "text": "Sentence A describing the image.", "zh": "Traditional Chinese translation of A"},
+        {"key": "B", "text": "Sentence B describing the image.", "zh": "Traditional Chinese translation of B"},
+        {"key": "C", "text": "Sentence C describing the image.", "zh": "Traditional Chinese translation of C"},
+        {"key": "D", "text": "Sentence D describing the image.", "zh": "Traditional Chinese translation of D"}
+      ],
+      "answerKey": "A",
+      "explanationSeed": "Explanation of why the correct option is true and others are false in Traditional Chinese."
+    }
+    Only one option must correctly describe the imagePrompt. The options should be short and natural.`;
+
+    const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return raw;
+}
