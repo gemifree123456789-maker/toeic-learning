@@ -136,13 +136,10 @@ export function renderExamQuestions(container, questions, answers) {
         const selectedKey = selectedChoice?.key || '';
         const options = getQuestionOptions(q);
         let passage = '';
-        
-        // 🌟 關鍵修改：移除了 q.passage 的 escapeHtml()，讓 HTML(圖片) 能夠被瀏覽器正常解析
         if (q.section === 'reading' && q.passage && q.passage !== lastReadingPassage) {
-            passage = `<div class="exam-passage">${q.passage}</div>`;
+            passage = `<div class="exam-passage">${escapeHtml(q.passage)}</div>`;
             lastReadingPassage = q.passage;
         }
-        
         const listenBtn = q.section === 'listening'
             ? `<button class="exam-option exam-listen-btn" data-action="listen" data-id="${escapeHtml(q.id)}">${escapeHtml(t('examPlayListeningAudioBtn'))}</button>`
             : '';
