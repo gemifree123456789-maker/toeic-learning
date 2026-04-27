@@ -36,6 +36,31 @@ function getLocalQuestions(part) {
     return null;
 }
 
+// ── 新增：Part 1 專屬四國語音隨機播放引擎 ──
+window.currentPart1AudioText = "";
+window.playPart1Audio = function() {
+    if (!window.currentPart1AudioText) return;
+    const text = window.currentPart1AudioText;
+    
+    // 支援的四國口音 (美、英、澳、加)
+    const accents = ['en-US', 'en-GB', 'en-AU', 'en-CA'];
+    const randomAccent = accents[Math.floor(Math.random() * accents.length)];
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    
+    // 尋找符合該隨機口音的語音
+    const matchedVoices = voices.filter(v => v.lang === randomAccent || v.lang.replace('_', '-') === randomAccent);
+    if (matchedVoices.length > 0) {
+        // 若該口音有多個聲音，再隨機挑一個 (男女聲隨機)
+        utterance.voice = matchedVoices[Math.floor(Math.random() * matchedVoices.length)];
+    }
+    
+    utterance.rate = 0.9; // 稍微放慢速度模擬多益聽力
+    window.speechSynthesis.cancel(); // 停止目前正在播放的聲音
+    window.speechSynthesis.speak(utterance);
+};
+
 // 開始閱讀特訓
 const btnStartReading = document.getElementById('btnStartReading');
 if (btnStartReading) {
@@ -53,35 +78,37 @@ if (btnStartReading) {
 
             if (sourceSelect === 'ai') {
                 if (partSelect === '1') {
-                    // Part 1 專屬邏輯 (結合 Pollinations AI 免費生圖引擎)
+                    // Part 1 專屬邏輯
                     const rawData = await fetchAIPart1(scoreSelect);
                     
-                    // 強制黑白、擬真攝影風格
-                    const imagePrompt = `black and white photography, highly realistic, everyday scene, ${rawData.imagePrompt}`;
-                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=600&height=400&nologo=true`;
+                    // 防呆處理：過濾掉特殊符號避免圖片網址破圖，並加上隨機 Seed 強制刷新
+                    const safeImagePrompt = (rawData.imagePrompt || "A realistic photo").replace(/[^a-zA-Z0-9\s,]/g, '');
+                    const seed = Math.floor(Math.random() * 1000000);
+                    const imgUrl = `https://image.pollinations.ai/prompt/black%20and%20white%20photography,%20realistic,%20${encodeURIComponent(safeImagePrompt)}?width=600&height=400&nologo=true&seed=${seed}`;
                     
                     // 組合要朗讀的文字 (加入停頓點)
                     const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
-                    const safePlayText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    window.currentPart1AudioText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                    // 將圖片與「播放按鈕」塞入 passage 區塊展示
+                    // 將圖片與「重新播放按鈕」塞入 passage 區塊展示
                     const imageHtml = `
                         <div style="text-align:center;">
-                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Generation+Failed'">
+                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 15px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'">
                             <br>
-                            <button type="button" style="background:#378ADD; color:white; border:none; padding:12px 24px; border-radius:24px; font-size:16px; cursor:pointer; margin-bottom:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px;" onclick="window.speakText('${safePlayText}')">
-                                🔊 播放聽力選項 (A ~ D)
+                            <button type="button" style="background:#378ADD; color:white; border:none; padding:12px 24px; border-radius:24px; font-size:16px; cursor:pointer; margin-bottom:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px;" onclick="window.playPart1Audio()">
+                                🔊 重新播放聽力題音訊 (四國語音隨機)
                             </button>
                         </div>
                     `;
                     
                     finalQuestions = [{
                         id: `reading-p1-0`,
-                        section: 'reading', // 關鍵修正：設為 reading 才能在考題區正確顯示 passage (圖片區塊)
+                        section: 'reading', // 設為 reading 才能顯示圖片區塊
                         sectionLabel: `Part 1`,
                         question: 'Look at the picture and listen to the sentences. Choose the best description.',
                         passage: imageHtml,
-                        options: rawData.options.map(o => ({ key: o.key, text: `(請聆聽語音)` })), // 關鍵修正：作答前隱藏文字
+                        // 關鍵修正：將 text 設為空字串，這樣畫面上就只會顯示 A. B. C. D.
+                        options: rawData.options.map(o => ({ key: o.key, text: '' })), 
                         answerKey: rawData.answerKey,
                         explanationSeed: rawData.explanationSeed,
                         part1Data: rawData.options // 保留中英對照資料給解答頁面用
@@ -158,10 +185,18 @@ if (btnStartReading) {
             const examContent = document.getElementById('examContent');
             renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
 
+            // 關鍵修正：若為 Part 1，畫面渲染完成後延遲 0.8 秒自動播放音訊
+            if (sourceSelect === 'ai' && partSelect === '1') {
+                setTimeout(() => {
+                    window.playPart1Audio();
+                }, 800);
+            }
+
             const examActions = document.getElementById('examActions');
             examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
             
             document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
+                window.speechSynthesis.cancel(); // 交卷時停止播放
                 state.examState.result = gradeExam(state.examState.questions, state.examState.answers);
                 
                 examContent.innerHTML = `<div style="text-align:center; padding: 20px; font-size: 20px; font-weight: bold; color: #5856d6; background:#eef2ff; border-radius:12px; margin-bottom:20px;">
@@ -182,7 +217,7 @@ if (btnStartReading) {
                     if (q.part1Data) {
                         part1ExtraHtml = `<div style="margin-top: 15px;">` + q.part1Data.map(opt => {
                             const isAns = opt.key === q.answerKey;
-                            const safeText = opt.text.replace(/'/g, "\\'"); // 防呆處理避免引號壞掉
+                            const safeText = opt.text.replace(/'/g, "\\'"); 
                             return `<div style="margin-bottom: 8px; padding: 12px; background: ${isAns ? '#dcfce7' : '#f3f4f6'}; border-radius: 8px; border: 1px solid ${isAns ? '#86efac' : '#e5e7eb'};">
                                 <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                                     <div style="flex: 1;">
@@ -213,6 +248,7 @@ if (btnStartReading) {
                 examActions.innerHTML = `<button class="generate-btn" id="btnExitReadingExam">結束特訓，回設定頁</button>`;
                 
                 document.getElementById('btnExitReadingExam').addEventListener('click', () => {
+                    window.speechSynthesis.cancel();
                     examContent.innerHTML = '';
                     examActions.innerHTML = '';
                     state.examState = { questions: [], answers: {}, result: null }; 
