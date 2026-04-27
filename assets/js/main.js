@@ -78,19 +78,23 @@ if (btnStartReading) {
                     // Part 1 專屬邏輯
                     const rawData = await fetchAIPart1(scoreSelect);
                     
-                    // 防呆處理：過濾掉所有特殊符號，只保留英數字與空格，保證網址絕對不會破圖
-                    const safeImagePrompt = (rawData.imagePrompt || "daily life").replace(/[^a-zA-Z0-9\s]/g, '').trim();
+                    // 完美圖片處理：將 seed 獨立為正確參數，並加上終極防呆機制
+                    const safeImagePrompt = rawData.imagePrompt ? rawData.imagePrompt.trim() : "daily life";
                     const randSeed = Math.floor(Math.random() * 1000000);
-                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent("black and white photo realistic " + safeImagePrompt + " " + randSeed)}?width=600&height=400&nologo=true`;
+                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent("black and white realistic photography, " + safeImagePrompt)}?width=600&height=400&nologo=true&seed=${randSeed}`;
                     
                     // 組合要朗讀的文字
                     const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
                     window.currentPart1AudioText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                    // 乾淨的圖片區塊 (移除了按鈕)
+                    // 終極防呆圖片區塊：若真的破圖，不僅顯示備用圖，還會直接把場景文字印出來，保證測驗能繼續！
+                    const safePromptHtml = safeImagePrompt.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     const imageHtml = `
                         <div style="text-align:center;">
-                            <img src="${imgUrl}" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 5px;" onerror="this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'">
+                            <img src="${imgUrl}" id="part1Img" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 5px;" onerror="this.onerror=null; this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'; document.getElementById('imgFallbackText').style.display='block';">
+                            <div id="imgFallbackText" style="display:none; font-size:14px; color:#d97706; margin-bottom: 10px; font-weight:bold; background: #fef3c7; padding: 8px; border-radius: 8px;">
+                                ⚠ 網路阻擋圖片載入。這是一張：「${safePromptHtml}」的照片 (請依此想像作答)
+                            </div>
                         </div>
                     `;
                     
@@ -100,7 +104,6 @@ if (btnStartReading) {
                         sectionLabel: `Part 1`,
                         question: 'Look at the picture and listen to the sentences.',
                         passage: imageHtml,
-                        // 修正：完全清空文字，只顯示 A B C D
                         options: rawData.options.map(o => ({ key: o.key, text: '' })), 
                         answerKey: rawData.answerKey,
                         explanationSeed: rawData.explanationSeed,
