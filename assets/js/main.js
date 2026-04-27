@@ -78,17 +78,23 @@ if (btnStartReading) {
                     // Part 1 專屬邏輯
                     const rawData = await fetchAIPart1(scoreSelect);
                     
-                    // 完美圖片處理：將 seed 獨立為正確參數，並加上終極防呆機制
-                    const safeImagePrompt = rawData.imagePrompt ? rawData.imagePrompt.trim() : "daily life";
+                    // 完美圖片處理：徹底清除所有標點符號，並改用最穩定的 /p/ 路徑
+                    const rawPrompt = rawData.imagePrompt || "daily life";
+                    const cleanPrompt = ("black and white realistic photography " + rawPrompt)
+                        .replace(/[^a-zA-Z0-9\s]/g, ' ') // 把所有非英數字元(含標點)變成空白
+                        .trim()
+                        .replace(/\s+/g, '%20');         // 將連續空白轉為標準網址空格
+                        
                     const randSeed = Math.floor(Math.random() * 1000000);
-                    const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent("black and white realistic photography, " + safeImagePrompt)}?width=600&height=400&nologo=true&seed=${randSeed}`;
+                    // 使用 /p/ 轉址路徑，避開伺服器路徑解析錯誤
+                    const imgUrl = `https://pollinations.ai/p/${cleanPrompt}?width=600&height=400&nologo=true&seed=${randSeed}`;
                     
                     // 組合要朗讀的文字
                     const playText = rawData.options.map(o => `Option ${o.key} . , ${o.text}`).join(" . . . ");
                     window.currentPart1AudioText = playText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                    // 終極防呆圖片區塊：若真的破圖，不僅顯示備用圖，還會直接把場景文字印出來，保證測驗能繼續！
-                    const safePromptHtml = safeImagePrompt.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    // 確保原始提示詞能安全印在錯誤備用框上
+                    const safePromptHtml = rawPrompt.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     const imageHtml = `
                         <div style="text-align:center;">
                             <img src="${imgUrl}" id="part1Img" alt="Part 1 Image" style="max-width:100%; max-height:350px; border-radius:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 5px;" onerror="this.onerror=null; this.src='https://placehold.co/600x400/eeeeee/999999?text=Image+Load+Failed'; document.getElementById('imgFallbackText').style.display='block';">
@@ -180,7 +186,6 @@ if (btnStartReading) {
             const examContent = document.getElementById('examContent');
             renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
 
-            // 動態配置交卷區塊 (若為 Part 1 則把播放按鈕塞在最底下)
             const examActions = document.getElementById('examActions');
             if (sourceSelect === 'ai' && partSelect === '1') {
                 examActions.innerHTML = `
@@ -190,16 +195,13 @@ if (btnStartReading) {
                     </div>
                 `;
                 document.getElementById('btnReplayAudio').addEventListener('click', () => window.playPart1Audio());
-                
-                // 延遲 0.8 秒自動播放第一次音訊
                 setTimeout(() => { window.playPart1Audio(); }, 800);
             } else {
                 examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
             }
             
-            // 提交考卷邏輯
             document.getElementById('btnSubmitReadingExam').addEventListener('click', () => {
-                window.speechSynthesis.cancel(); // 交卷時停止播放
+                window.speechSynthesis.cancel(); 
                 state.examState.result = gradeExam(state.examState.questions, state.examState.answers);
                 
                 examContent.innerHTML = `<div style="text-align:center; padding: 20px; font-size: 20px; font-weight: bold; color: #5856d6; background:#eef2ff; border-radius:12px; margin-bottom:20px;">
