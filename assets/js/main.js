@@ -25,11 +25,23 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
-// 獲取本地題庫的輔助函式
-function getLocalQuestions(part) {
-    if (part === '5' && typeof Q_P5_T01 !== 'undefined') return Q_P5_T01;
-    if (part === '6' && typeof Q_P6_T01 !== 'undefined') return Q_P6_T01;
-    if (part === '7' && typeof Q_P7_T01 !== 'undefined') return Q_P7_T01;
+// 獲取本地題庫的輔助函式 (強化版：自動抓取並突破模組作用域限制)
+async function getLocalQuestions(part) {
+    if (typeof Q_P5_T01 === 'undefined' && !window.Q_P5_T01) {
+        try {
+            const res = await fetch('./questions.js');
+            const text = await res.text();
+            const script = document.createElement('script');
+            script.textContent = text.replace(/const\s+(Q_P[567]_[A-Z0-9_]+)\s*=/g, 'window.$1 =');
+            document.head.appendChild(script);
+        } catch (e) {
+            console.error("無法載入 questions.js", e);
+        }
+    }
+    
+    if (part === '5') return window.Q_P5_T01 || (typeof Q_P5_T01 !== 'undefined' ? Q_P5_T01 : null);
+    if (part === '6') return window.Q_P6_T01 || (typeof Q_P6_T01 !== 'undefined' ? Q_P6_T01 : null);
+    if (part === '7') return window.Q_P7_T01 || (typeof Q_P7_T01 !== 'undefined' ? Q_P7_T01 : null);
     return null;
 }
 
@@ -61,9 +73,9 @@ if (btnStartReading) {
                     explanationSeed: q.explanationSeed
                 }));
             } else {
-                // 本地題庫模式 (載入 questions.js 的資料)
-                const localQ = getLocalQuestions(partSelect);
-                if (!localQ) throw new Error("找不到本地題庫，請確認 questions.js 已正確載入");
+                // 本地題庫模式
+                const localQ = await getLocalQuestions(partSelect);
+                if (!localQ) throw new Error("找不到本地題庫，請確認 questions.js 已正確上傳至專案目錄");
 
                 if (partSelect === '5') {
                     const shuffled = [...localQ].sort(() => 0.5 - Math.random()).slice(0, 5);
@@ -99,7 +111,7 @@ if (btnStartReading) {
                 }
             }
 
-            // 寫入系統狀態 (完美融合 examShell)
+            // 寫入系統狀態
             state.examState = {
                 questions: finalQuestions,
                 answers: {},
@@ -108,9 +120,10 @@ if (btnStartReading) {
                 topic: `閱讀特訓 Part ${partSelect}`
             };
 
-            // 切換畫面：隱藏設定區，並呼叫 setLearnRuntimeMode 來顯示介面
+            // 切換畫面：隱藏設定區，呼叫介面切換並跳轉至學習分頁
             if (configView) configView.classList.add('hidden');
             setLearnRuntimeMode('exam');
+            switchTab('learn'); // 自動跳轉到學習頁籤，避免畫面卡住
             
             // 渲染題目
             document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
@@ -158,7 +171,8 @@ if (btnStartReading) {
                     examActions.innerHTML = '';
                     setLearnRuntimeMode('article'); // 關閉 exam 介面
                     if (configView) configView.classList.remove('hidden'); // 恢復設定面板
-                    document.querySelector('.practice-mode-btn[data-mode="reading"]').click(); // 模擬點擊以刷新頁籤
+                    switchTab('practice'); // 自動跳回練習頁籤
+                    document.querySelector('.practice-mode-btn[data-mode="reading"]').click(); // 模擬點擊以刷新內部面板
                 });
             });
 
@@ -185,7 +199,6 @@ document.querySelectorAll('.practice-mode-btn').forEach(btn => {
         else if (mode === 'reading') document.getElementById('practicePanelReading').classList.remove('hidden');
     });
 });
-
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
@@ -1249,7 +1262,7 @@ GENERATE_BTN.onclick = async () => {
 const btnImport = document.getElementById('btnImportFromSheet');
 if (btnImport) {
     btnImport.addEventListener('click', async () => {
-        const gasUrl = "[https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec](https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec)"; 
+        const gasUrl = "https://script.google.com/macros/s/AKfycbzCqh0hmT5WA7MAWtpdrXbCJgz_sy-kZ1EcJ8bOzT8-YiNW6uEMH4iHCxo4NwsH_H7P/exec"; 
         
         btnImport.disabled = true;
         const originalText = btnImport.innerHTML;
