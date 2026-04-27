@@ -1,9 +1,11 @@
 // App entry point: initialisation, tab switching, event binding, module wiring.
 
+// App entry point: initialisation, tab switching, event binding, module wiring.
+
 import { state, VOICE_OPTIONS, VOICE_NAMES, ICONS } from './state.js';
 import { speakText } from './utils.js';
 import { DB } from './db.js';
-import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations } from './apiGemini.js';
+import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations, fetchAIPart567 } from './apiGemini.js';
 import { DriveSync } from './driveSync.js';
 import { setupAudio } from './audioPlayer.js';
 import { renderContent, toggleEnglish, toggleTranslation, updateToggleButtons } from './render.js';
@@ -15,8 +17,7 @@ import { initInstallPrompt } from './installPrompt.js';
 import { startSpeakingSession, stopSpeakingSession } from './speakingLive.js';
 import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload, playListeningQuestion, resolveChoice } from './exam.js';
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
-import { fetchAIPart567 } from './apiGemini.js';
-import { renderExamQuestions, gradeExam } from './exam.js'; 
+import { initSpecialTraining } from './specialTraining.js'; 
 // 確保上面的 import 在你的架構中是正確的
 
 // 處理分數選擇 UI
@@ -97,8 +98,6 @@ document.querySelectorAll('.practice-mode-btn').forEach(btn => {
     });
 });
 
-// 🌟 核心保證：匯入特訓模組初始化器
-import { initSpecialTraining } from './specialTraining.js';
 
 /* ── Wire cross-module callbacks ── */
 setSrsTrigger(startSrsReview);
