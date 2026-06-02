@@ -56,7 +56,6 @@ function clearActiveSegmentState() {
     state.activeSegmentIndex = -1;
 }
 
-// 註解：整合外部免收費語音合成端點或本機 Web Speech API 產生相容音訊
 export function playTextWithTTSFallback(text, langCode = 'en-US', callback = null) {
     if (!('speechSynthesis' in window)) {
         if (callback) callback();
@@ -80,7 +79,6 @@ export function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
-    // 註解：如果傳入的是純文字 prompt 而非 Base64 音訊資料，直接無縫切換到前端免費發音鏈路
     if (!base64.startsWith('UklGR') && base64.length < 1000) {
         setPlayerLoading(false);
         state.audioReady = true;
@@ -197,15 +195,15 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-audioEl.ontimeupdate = () => {
-    const d = audioEl.duration;
-    if (!d || Number.isNaN(d)) return;
-    const p = audioEl.currentTime / d;
-    progressBar.style.width = `${p * 100}%`;
+export function updateActiveSegment(p) {
+    if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {
-        const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
-        audioEl.currentTime = safeTime;
+        const d = audioEl.duration;
+        if (d && !Number.isNaN(d)) {
+            const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
+            audioEl.currentTime = safeTime;
+        }
         audioEl.pause();
         playBtn.innerHTML = ICONS.play;
         if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
@@ -232,6 +230,14 @@ audioEl.ontimeupdate = () => {
             state.segmentMetadata[idx].element.classList.add('active');
         state.activeSegmentIndex = idx;
     }
+}
+
+audioEl.ontimeupdate = () => {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const p = audioEl.currentTime / d;
+    progressBar.style.width = `${p * 100}%`;
+    updateActiveSegment(p);
 };
 
 audioEl.onended = () => {

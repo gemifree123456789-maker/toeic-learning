@@ -18,9 +18,8 @@ let silentGainNode = null;
 let outputCtx = null;
 let nextPlayTime = 0;
 let destroyed = false;
-let isMicTransmissionAllowed = true; // 註解：控制發音期間是否將麥克風資料流送往伺服器
+let isMicTransmissionAllowed = true; 
 
-// 註解：用來累加伺服器打字機文字片段的全局快取字串
 let accumulativeTextBuffer = "";
 
 const listeners = {
@@ -150,11 +149,12 @@ async function connectLive(topic, score = 700, level = '') {
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = t(levelConfig.labelKey);
     const config = {
-        // 核心改造點：變更 responseModalities 為 Modality.TEXT，全面終結音訊 Token 計費
         responseModalities: [Modality.TEXT],
         mediaResolution: MEDIA_RESOLUTION_LOW,
-        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation.
-Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
+        systemInstruction: {
+            parts: [{
+                // 註解：修復原本遺漏字串引號導致 ReferenceError 的重大 Bug
+                text: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
 
 Conversation behavior:
 - Keep each assistant turn natural and not overly short, usually 2-4 sentences.
@@ -162,13 +162,15 @@ Conversation behavior:
 - Sound like a real conversation partner, not a textbook.
 - Every 3-4 learner turns, provide one brief improvement tip.
 - If the learner makes a clear error, give one short inline correction, then continue naturally.
-- Output strictly plain text formats. Never attempt to stream binary audio bytes.
+- Output strictly plain text format. Never attempt to stream binary audio bytes.
 
 Level policy:
 ${levelConfig.policy}
 
 Domain scope:
 ${levelConfig.domains}`
+            }]
+        }
     };
 
     liveSession = await ai.live.connect({
@@ -185,12 +187,10 @@ ${levelConfig.domains}`
                 if (destroyed) return;
                 if (message?.serverContent?.interrupted) {
                     nextPlayTime = outputCtx ? outputCtx.currentTime : 0;
-                    // 註解：若使用者中斷 AI，同步停止前端語音合成器朗讀
                     stopAudio();
                 }
                 const parts = message?.serverContent?.modelTurn?.parts || [];
                 
-                // 註解：攔截打字機純文字流，將分散的字串流拼裝至全域快取緩衝器
                 for (const part of parts) {
                     if (typeof part?.text === 'string' && part.text.trim()) {
                         state.speakingState.isResponding = true;
@@ -199,21 +199,16 @@ ${levelConfig.domains}`
                     }
                 }
 
-                // 註解：當收悉 turnComplete 訊號，代表 AI 整句話完成，正式交付前端發音
                 if (message?.serverContent?.turnComplete) {
                     state.speakingState.isResponding = false;
-                    const finalPhraseText = accumulativeTextBuffer.trim();
-                    accumulativeTextBuffer = ""; // 清空緩衝器
+                    const finalOutputText = accumulativeTextBuffer.trim();
+                    accumulativeTextBuffer = "";
 
-                    if (finalPhraseText) {
-                        emitLog('ai', finalPhraseText); // 將完整文字渲染至對話框
-                        
-                        // 註解：暫停向 WebSockets 端點傳送麥克風音訊，防範音響發音回授
+                    if (finalOutputText) {
+                        emitLog('ai', finalOutputText); 
                         isMicTransmissionAllowed = false;
 
-                        // 註解：調用完全免費的本地端發音引擎播放英文
-                        playTextWithTTS(finalPhraseText, 'en-US', () => {
-                            // 註解：發音完畢後，釋放麥克風，重新接受使用者口說回答
+                        playTextWithTTS(finalOutputText, 'en-US', () => {
                             isMicTransmissionAllowed = true;
                             emitStatus(t('speakingWaitingUser'));
                         });
@@ -251,7 +246,7 @@ Keep your first response warm, useful, and specific instead of too brief.`
 }
 
 function sendRealtimePcm(floatChunk) {
-    if (!liveSession || destroyed || !isMicTransmissionAllowed) return; // 註解：防回授期間直接阻斷數據傳輸
+    if (!liveSession || destroyed || !isMicTransmissionAllowed) return; 
     const downsampled = downsampleTo16k(floatChunk, audioCtx.sampleRate);
     const pcm16 = floatToInt16(downsampled);
     liveSession.sendRealtimeInput({
@@ -330,8 +325,8 @@ export async function startSpeakingSession(input, callbacks = {}) {
     destroyed = false;
     state.speakingState.finalTopic = topic;
     state.speakingState.isResponding = false;
-    isMicTransmissionAllowed = true; // 註解：初始化允許傳輸
-    accumulativeTextBuffer = ""; // 初始化緩衝區
+    isMicTransmissionAllowed = true; 
+    accumulativeTextBuffer = ""; 
 
     await connectLive(topic, score, level);
     await setupMicStream();
@@ -340,7 +335,7 @@ export async function startSpeakingSession(input, callbacks = {}) {
 
 export async function stopSpeakingSession() {
     destroyed = true;
-    stopAudio(); // 註解：中斷口說會話時，同步將前端可能正在朗讀的 TTS 掐斷
+    stopAudio(); 
     if (workletNode) {
         workletNode.port.onmessage = null;
         workletNode.disconnect();

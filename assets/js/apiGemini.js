@@ -74,7 +74,6 @@ export async function fetchWordDetails(word, forceFetch = false) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    // 🌟 核心升級：在 Prompt 中強制要求回傳同義字與反義字
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string.", "synonyms": "Comma-separated list of 1-2 most common synonyms with brief ${targetLang} meaning, e.g. purchase (購買). If none, leave empty.", "antonyms": "Provide exactly 1 common antonym with brief ${targetLang} meaning, e.g. sell (賣出). If none, leave empty."}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
@@ -258,7 +257,6 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-// 註解：修正原 fetchTopicKeywords 的調用 Bug，將原先傳遞的 topic 修正回正軌參數 prompt 變數
 export async function fetchTopicKeywords(topic) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
