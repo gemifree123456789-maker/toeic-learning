@@ -3,7 +3,6 @@
 import { GoogleGenAI, Modality } from 'https://esm.run/@google/genai';
 import { LIVE_AUDIO_MODEL, state } from './state.js';
 import { t } from './i18n.js';
-import { playTextWithTTS, stopAudio } from './audioPlayer.js';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 const MEDIA_RESOLUTION_LOW = 'MEDIA_RESOLUTION_LOW'; // ~66-70 tokens/image
@@ -18,10 +17,6 @@ let silentGainNode = null;
 let outputCtx = null;
 let nextPlayTime = 0;
 let destroyed = false;
-let isMicTransmissionAllowed = true; 
-
-// 註解：用來累加伺服器文字流片段的快取變數
-let accumulativeTextBuffer = "";
 
 const listeners = {
     status: null,
@@ -150,10 +145,10 @@ async function connectLive(topic, score = 700, level = '') {
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = t(levelConfig.labelKey);
     const config = {
-        // 註解：修正 responseModalities 為 Modality.TEXT，完全切斷付費語音流
-        responseModalities: [Modality.TEXT],
+        responseModalities: [Modality.AUDIO],
         mediaResolution: MEDIA_RESOLUTION_LOW,
-        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
+        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation.
+Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
 
 Conversation behavior:
 - Keep each assistant turn natural and not overly short, usually 2-4 sentences.
@@ -161,7 +156,6 @@ Conversation behavior:
 - Sound like a real conversation partner, not a textbook.
 - Every 3-4 learner turns, provide one brief improvement tip.
 - If the learner makes a clear error, give one short inline correction, then continue naturally.
-- Output strictly plain text format. Never attempt to stream binary audio bytes.
 
 Level policy:
 ${levelConfig.policy}
@@ -184,36 +178,20 @@ ${levelConfig.domains}`
                 if (destroyed) return;
                 if (message?.serverContent?.interrupted) {
                     nextPlayTime = outputCtx ? outputCtx.currentTime : 0;
-                    stopAudio();
                 }
                 const parts = message?.serverContent?.modelTurn?.parts || [];
-                
-                // 註解：累加捕獲打字機純文字
-                for (const part of parts) {
-                    if (typeof part?.text === 'string' && part.text.trim()) {
-                        state.speakingState.isResponding = true;
-                        emitStatus(t('speakingAiResponding'));
-                        accumulativeTextBuffer += part.text;
-                    }
-                }
+                const textPart = parts.find(p => typeof p?.text === 'string' && p.text.trim());
+                if (textPart?.text) emitLog('ai', textPart.text);
 
-                // 註解：當句子完整接收完畢 (turnComplete)，移交前端本機語音合成，並鎖定麥克風傳輸
+                const audioParts = parts.filter(p => p?.inlineData?.data);
+                if (audioParts.length > 0) {
+                    state.speakingState.isResponding = true;
+                    emitStatus(t('speakingAiResponding'));
+                    audioParts.forEach(part => playPcm16Chunk(part.inlineData.data, 24000));
+                }
                 if (message?.serverContent?.turnComplete) {
                     state.speakingState.isResponding = false;
-                    const finalOutputText = accumulativeTextBuffer.trim();
-                    accumulativeTextBuffer = "";
-
-                    if (finalOutputText) {
-                        emitLog('ai', finalOutputText); 
-                        isMicTransmissionAllowed = false;
-
-                        playTextWithTTS(finalOutputText, 'en-US', () => {
-                            isMicTransmissionAllowed = true;
-                            emitStatus(t('speakingWaitingUser'));
-                        });
-                    } else {
-                        emitStatus(t('speakingWaitingUser'));
-                    }
+                    emitStatus(t('speakingWaitingUser'));
                 }
             },
             onerror: (e) => {
@@ -245,7 +223,7 @@ Keep your first response warm, useful, and specific instead of too brief.`
 }
 
 function sendRealtimePcm(floatChunk) {
-    if (!liveSession || destroyed || !isMicTransmissionAllowed) return; 
+    if (!liveSession || destroyed) return;
     const downsampled = downsampleTo16k(floatChunk, audioCtx.sampleRate);
     const pcm16 = floatToInt16(downsampled);
     liveSession.sendRealtimeInput({
@@ -324,8 +302,6 @@ export async function startSpeakingSession(input, callbacks = {}) {
     destroyed = false;
     state.speakingState.finalTopic = topic;
     state.speakingState.isResponding = false;
-    isMicTransmissionAllowed = true; 
-    accumulativeTextBuffer = ""; 
 
     await connectLive(topic, score, level);
     await setupMicStream();
@@ -334,7 +310,6 @@ export async function startSpeakingSession(input, callbacks = {}) {
 
 export async function stopSpeakingSession() {
     destroyed = true;
-    stopAudio(); 
     if (workletNode) {
         workletNode.port.onmessage = null;
         workletNode.disconnect();
@@ -368,7 +343,5 @@ export async function stopSpeakingSession() {
     state.speakingState.isConnected = false;
     state.speakingState.isRecording = false;
     state.speakingState.isResponding = false;
-    isMicTransmissionAllowed = true;
-    accumulativeTextBuffer = "";
     emitConnected(false);
 }

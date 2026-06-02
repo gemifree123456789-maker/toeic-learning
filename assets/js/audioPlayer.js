@@ -49,38 +49,11 @@ function pcmToWav(pcm, sr) {
     return new Blob([b], { type: 'audio/wav' });
 }
 
-export function clearActiveSegmentState() {
+function clearActiveSegmentState() {
     if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
         state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
     }
     state.activeSegmentIndex = -1;
-}
-
-// 註解：離線本機完全免費前端 Web Speech 朗讀引擎
-export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
-    if (!('speechSynthesis' in window)) {
-        if (onEndCallback) onEndCallback();
-        return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langCode;
-    utterance.rate = state.playbackSpeed || 1.0;
-    utterance.pitch = 1.0;
-    utterance.onend = () => { if (onEndCallback) onEndCallback(); };
-    utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
-    window.speechSynthesis.speak(utterance);
-}
-
-export function stopAudio() {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-    if (audioEl) audioEl.pause();
-    if (playBtn) playBtn.innerHTML = ICONS.play;
-    if (progressBar) progressBar.style.width = '0%';
-    state.playUntilPct = null;
-    state.playUntilSegmentIndex = null;
 }
 
 export function setupAudio(base64) {
@@ -91,14 +64,6 @@ export function setupAudio(base64) {
     state.audioReady = false;
     audioEl.pause();
     progressBar.style.width = '0%';
-
-    // 註解：相容攔截。若收到的是 apiGemini 攔截傳回的純文字，直接呼叫本機離線免費用量發音
-    if (!base64.startsWith('UklGR') && base64.length < 1000) {
-        setPlayerLoading(false);
-        state.audioReady = true;
-        playTextWithTTS(base64, 'en-US');
-        return;
-    }
 
     const bc = atob(base64), bn = new Array(bc.length);
     for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
@@ -144,6 +109,8 @@ export async function ensureAudioReady(timeoutMs = 8000) {
         }, timeoutMs);
     });
 }
+
+export { audioEl, playBtn, clearActiveSegmentState };
 
 /* Event bindings */
 btnSpeed.onclick = () => {
@@ -207,19 +174,18 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-// 註解：還原標準的局部函數命名，並修復 p 參數的時間軸比對作用域
-function updateActiveSegment(p) {
-    if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
+audioEl.ontimeupdate = () => {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const p = audioEl.currentTime / d;
+    progressBar.style.width = `${p * 100}%`;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {
-        const d = audioEl.duration;
-        if (d && !Number.isNaN(d)) {
-            const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
-            audioEl.currentTime = safeTime;
-        }
+        const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
+        audioEl.currentTime = safeTime;
         audioEl.pause();
         playBtn.innerHTML = ICONS.play;
-        if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
+        if (state.playUntilSegmentIndex !== null && state.segmentMetadata[state.playUntilSegmentIndex]) {
             if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
                 state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
             }
@@ -243,14 +209,6 @@ function updateActiveSegment(p) {
             state.segmentMetadata[idx].element.classList.add('active');
         state.activeSegmentIndex = idx;
     }
-}
-
-audioEl.ontimeupdate = () => {
-    const d = audioEl.duration;
-    if (!d || Number.isNaN(d)) return;
-    const p = audioEl.currentTime / d;
-    progressBar.style.width = `${p * 100}%`;
-    updateActiveSegment(p);
 };
 
 audioEl.onended = () => {
