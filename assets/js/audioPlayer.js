@@ -9,10 +9,10 @@ const progressBar = document.getElementById('progressBar');
 const progressContainer = document.getElementById('progressContainer');
 const btnSpeed = document.getElementById('btnSpeed');
 
-const speeds = [1.0, 0.75, 0.5, 0.25];
+const speeds = [1.0, 0.75, 0.5, 0.25]; // 註解：100% 還原您原始代碼的 0.25 慢速設定
 let speedIndex = 0;
 
-export function setPlayerLoading(isLoading) {
+function setPlayerLoading(isLoading) {
     playBtn.disabled = isLoading;
     btnSpeed.disabled = isLoading;
     progressContainer.style.pointerEvents = isLoading ? 'none' : 'auto';
@@ -56,9 +56,10 @@ function clearActiveSegmentState() {
     state.activeSegmentIndex = -1;
 }
 
-export function playTextWithTTSFallback(text, langCode = 'en-US', callback = null) {
+// 註解：本地端純前端 Web Speech API 完全免費發音引擎接口
+function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
     if (!('speechSynthesis' in window)) {
-        if (callback) callback();
+        if (onEndCallback) onEndCallback();
         return;
     }
     window.speechSynthesis.cancel();
@@ -66,11 +67,25 @@ export function playTextWithTTSFallback(text, langCode = 'en-US', callback = nul
     utterance.lang = langCode;
     utterance.rate = state.playbackSpeed || 1.0;
     utterance.pitch = 1.0;
-    utterance.onend = () => { if (callback) callback(); };
+    utterance.onend = () => { if (onEndCallback) onEndCallback(); };
+    utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
     window.speechSynthesis.speak(utterance);
 }
 
-export function setupAudio(base64) {
+function stopAudio() {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    if (audioEl) {
+        audioEl.pause();
+    }
+    if (playBtn) playBtn.innerHTML = ICONS.play;
+    if (progressBar) progressBar.style.width = '0%';
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+}
+
+function setupAudio(base64) {
     if (!base64) return;
     setPlayerLoading(true);
     clearPlayUntilState();
@@ -79,10 +94,11 @@ export function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
+    // 註解：相容性擴充。若傳入非標準 PCM 而是純文字提示，改走前端發音通道
     if (!base64.startsWith('UklGR') && base64.length < 1000) {
         setPlayerLoading(false);
         state.audioReady = true;
-        playTextWithTTSFallback(base64, 'en-US');
+        playTextWithTTS(base64, 'en-US');
         return;
     }
 
@@ -110,7 +126,7 @@ export function setupAudio(base64) {
     }
 }
 
-export async function ensureAudioReady(timeoutMs = 8000) {
+async function ensureAudioReady(timeoutMs = 8000) {
     if (state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
     return new Promise((resolve) => {
         let done = false;
@@ -130,8 +146,6 @@ export async function ensureAudioReady(timeoutMs = 8000) {
         }, timeoutMs);
     });
 }
-
-export { audioEl, playBtn, clearActiveSegmentState };
 
 /* Event bindings */
 btnSpeed.onclick = () => {
@@ -195,7 +209,8 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-export function updateActiveSegment(p) {
+// 註解：修復上一版將此函數封鎖在模組作用域內導致外部呼叫引發白屏崩潰的致命錯誤
+function updateActiveSegment(p) {
     if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {
@@ -249,3 +264,13 @@ audioEl.onended = () => {
         state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
     state.activeSegmentIndex = -1;
 };
+
+// 🌟 全域無縫對接宣告：將所有核心驅動函數全部掛回全域 window 下，徹底消除白屏錯誤
+window.setupAudio = setupAudio;
+window.ensureAudioReady = ensureAudioReady;
+window.playTextWithTTS = playTextWithTTS;
+window.stopAudio = stopAudio;
+window.updateActiveSegment = updateActiveSegment;
+window.clearActiveSegmentState = clearActiveSegmentState;
+
+export { audioEl, playBtn, clearActiveSegmentState, setupAudio, ensureAudioReady, playTextWithTTS, stopAudio, updateActiveSegment };
