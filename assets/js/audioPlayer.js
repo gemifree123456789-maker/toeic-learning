@@ -1,25 +1,21 @@
-// Audio player bar: Refactored to Web Speech API (FREE Tier) with iOS support.
+// Audio player bar: play/pause, speed control, progress, segment highlighting.
 
 import { state, ICONS } from './state.js';
 
+const audioEl = document.getElementById('mainAudio');
 const playerBar = document.getElementById('playerBar');
 const playBtn = document.getElementById('btnPlayPause');
 const progressBar = document.getElementById('progressBar');
 const progressContainer = document.getElementById('progressContainer');
 const btnSpeed = document.getElementById('btnSpeed');
 
-// 支援的語速設定
-const speeds = [1.0, 0.75, 0.5, 1.25];
+const speeds = [1.0, 0.75, 0.5, 0.25];
 let speedIndex = 0;
-let currentUtterance = null;
-let textToSpeak = "";
-let isSpeakingActive = false;
 
 export function setPlayerLoading(isLoading) {
-    if (!playBtn || !btnSpeed) return;
     playBtn.disabled = isLoading;
     btnSpeed.disabled = isLoading;
-    if (progressContainer) progressContainer.style.pointerEvents = isLoading ? 'none' : 'auto';
+    progressContainer.style.pointerEvents = isLoading ? 'none' : 'auto';
     if (isLoading) {
         playBtn.innerHTML = ICONS.play;
         btnSpeed.innerText = '載入中';
@@ -29,119 +25,198 @@ export function setPlayerLoading(isLoading) {
     document.dispatchEvent(new CustomEvent('player-loading-changed'));
 }
 
-// 核心整合接口：用來播放純文字並進行多國語音合成
-export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
-    if (!('speechSynthesis' in window)) {
-        console.error("當前瀏覽器不支持 Web Speech 語音合成。");
-        if (onEndCallback) onEndCallback();
+function writeString(v, o, s) {
+    for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i));
+}
+
+function pcmToWav(pcm, sr) {
+    const b = new ArrayBuffer(44 + pcm.length);
+    const v = new DataView(b);
+    writeString(v, 0, 'RIFF');
+    v.setUint32(4, 36 + pcm.length, true);
+    writeString(v, 8, 'WAVE');
+    writeString(v, 12, 'fmt ');
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true);
+    v.setUint32(28, sr * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    writeString(v, 36, 'data');
+    v.setUint32(40, pcm.length, true);
+    new Uint8Array(b, 44).set(pcm);
+    return new Blob([b], { type: 'audio/wav' });
+}
+
+function clearActiveSegmentState() {
+    if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
+        state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+    }
+    state.activeSegmentIndex = -1;
+}
+
+export function setupAudio(base64) {
+    if (!base64) return;
+    setPlayerLoading(true);
+    clearPlayUntilState();
+    clearActiveSegmentState();
+    state.audioReady = false;
+    audioEl.pause();
+    progressBar.style.width = '0%';
+
+    const bc = atob(base64), bn = new Array(bc.length);
+    for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
+    const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
+    if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
+    state.audioBlobUrl = URL.createObjectURL(wavBlob);
+    audioEl.src = state.audioBlobUrl;
+    audioEl.playbackRate = state.playbackSpeed;
+
+    const markAudioReady = () => {
+        state.audioReady = true;
+        setPlayerLoading(false);
+    };
+
+    if (audioEl.readyState >= 1 && audioEl.duration && !Number.isNaN(audioEl.duration)) {
+        markAudioReady();
+    } else {
+        audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
+        audioEl.addEventListener('error', () => {
+            state.audioReady = false;
+            setPlayerLoading(false);
+        }, { once: true });
+    }
+}
+
+export async function ensureAudioReady(timeoutMs = 8000) {
+    if (state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (ok) => {
+            if (done) return;
+            done = true;
+            audioEl.removeEventListener('loadedmetadata', onReady);
+            resolve(ok);
+        };
+        const onReady = () => {
+            state.audioReady = true;
+            finish(!!audioEl.duration && !Number.isNaN(audioEl.duration));
+        };
+        audioEl.addEventListener('loadedmetadata', onReady, { once: true });
+        setTimeout(() => {
+            finish(state.audioReady && !!audioEl.duration && !Number.isNaN(audioEl.duration));
+        }, timeoutMs);
+    });
+}
+
+export { audioEl, playBtn, clearActiveSegmentState };
+
+/* Event bindings */
+btnSpeed.onclick = () => {
+    speedIndex = (speedIndex + 1) % speeds.length;
+    const s = speeds[speedIndex];
+    state.playbackSpeed = s;
+    audioEl.playbackRate = s;
+    btnSpeed.innerText = s === 1.0 ? '1.0x' : s + 'x';
+};
+
+playBtn.onclick = () => {
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+    if (audioEl.paused) { audioEl.play(); playBtn.innerHTML = ICONS.pause; }
+    else { audioEl.pause(); playBtn.innerHTML = ICONS.play; }
+};
+
+function clearPlayUntilState() {
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+}
+
+function seekFromClientX(clientX) {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const r = progressContainer.getBoundingClientRect();
+    const raw = (clientX - r.left) / r.width;
+    const p = Math.max(0, Math.min(1, raw));
+    audioEl.currentTime = p * d;
+}
+
+let isDraggingProgress = false;
+progressContainer.onpointerdown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    isDraggingProgress = true;
+    progressContainer.classList.add('dragging');
+    if (progressContainer.setPointerCapture) progressContainer.setPointerCapture(e.pointerId);
+    clearPlayUntilState();
+    seekFromClientX(e.clientX);
+};
+
+progressContainer.onpointermove = (e) => {
+    if (!isDraggingProgress) return;
+    e.preventDefault();
+    seekFromClientX(e.clientX);
+};
+
+function endProgressDrag(e) {
+    if (!isDraggingProgress) return;
+    isDraggingProgress = false;
+    progressContainer.classList.remove('dragging');
+    if (e && progressContainer.releasePointerCapture) {
+        try { progressContainer.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+    if (e) seekFromClientX(e.clientX);
+}
+
+progressContainer.onpointerup = endProgressDrag;
+progressContainer.onpointercancel = endProgressDrag;
+
+state.activeSegmentIndex = -1;
+
+audioEl.ontimeupdate = () => {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const p = audioEl.currentTime / d;
+    progressBar.style.width = `${p * 100}%`;
+
+    if (state.playUntilPct !== null && p >= state.playUntilPct) {
+        const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
+        audioEl.currentTime = safeTime;
+        audioEl.pause();
+        playBtn.innerHTML = ICONS.play;
+        if (state.playUntilSegmentIndex !== null && state.segmentMetadata[state.playUntilSegmentIndex]) {
+            if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
+                state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+            }
+            state.segmentMetadata[state.playUntilSegmentIndex].element.classList.add('active');
+            state.activeSegmentIndex = state.playUntilSegmentIndex;
+        }
+        state.playUntilPct = null;
+        state.playUntilSegmentIndex = null;
         return;
     }
 
-    // 停止當前所有語音
-    window.speechSynthesis.cancel();
-    textToSpeak = text;
-    isSpeakingActive = true;
-
-    if (playBtn) playBtn.innerHTML = ICONS.pause;
-    if (playerBar) playerBar.classList.add('visible');
-
-    currentUtterance = new SpeechSynthesisUtterance(text);
-    currentUtterance.lang = langCode;
-    currentUtterance.rate = state.playbackSpeed || 1.0;
-    currentUtterance.pitch = 1.0;
-
-    // 模擬進度條（因原生 TTS 無即時百分比，此處做簡單平滑模擬）
-    if (progressBar) progressBar.style.width = '0%';
-    let startSim = Date.now();
-    // 預估說完所需時間 (一般一分鐘 150 字)
-    let estimatedDuration = (text.split(' ').length / 150) * 60 * 1000 / currentUtterance.rate;
-    if (estimatedDuration < 2000) estimatedDuration = 2000;
-
-    const progressInterval = setInterval(() => {
-        if (!isSpeakingActive) {
-            clearInterval(progressInterval);
-            return;
-        }
-        let elapsed = Date.now() - startSim;
-        let pct = Math.min((elapsed / estimatedDuration) * 100, 95); // 最高卡在 95% 等待真正結束
-        if (progressBar) progressBar.style.width = `${pct}%`;
-    }, 100);
-
-    currentUtterance.onend = () => {
-        isSpeakingActive = false;
-        clearInterval(progressInterval);
-        if (progressBar) progressBar.style.width = '100%';
-        if (playBtn) playBtn.innerHTML = ICONS.play;
-        setTimeout(() => { if (progressBar) progressBar.style.width = '0%'; }, 500);
-        if (onEndCallback) onEndCallback();
-    };
-
-    currentUtterance.onerror = (e) => {
-        isSpeakingActive = false;
-        clearInterval(progressInterval);
-        if (playBtn) playBtn.innerHTML = ICONS.play;
-        console.error("TTS 發音失敗:", e);
-        if (onEndCallback) onEndCallback();
-    };
-
-    window.speechSynthesis.speak(currentUtterance);
-}
-
-// 停止播放
-export function stopAudio() {
-    isSpeakingActive = false;
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+    let idx = -1;
+    for (let i = 0; i < state.segmentMetadata.length; i++) {
+        const s = state.segmentMetadata[i];
+        if (p >= s.startPct && p < s.endPct) { idx = i; break; }
     }
-    if (playBtn) playBtn.innerHTML = ICONS.play;
-    if (progressBar) progressBar.style.width = '0%';
-}
-
-// iOS/iPad 設備專用：點擊預熱解鎖防靜音機制
-export function unlockAudioOnIOS() {
-    if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance('');
-        window.speechSynthesis.speak(u);
-        console.log("iOS 瀏覽器音訊環境激活完畢");
+    if (idx !== state.activeSegmentIndex) {
+        if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex])
+            state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+        if (idx >= 0 && state.segmentMetadata[idx])
+            state.segmentMetadata[idx].element.classList.add('active');
+        state.activeSegmentIndex = idx;
     }
-}
+};
 
-// 監聽控制列按鈕事件
-if (playBtn) {
-    playBtn.onclick = () => {
-        if (isSpeakingActive) {
-            // 原生 TTS 暫停
-            window.speechSynthesis.pause();
-            isSpeakingActive = false;
-            playBtn.innerHTML = ICONS.play;
-        } else if (textToSpeak) {
-            if (window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
-                isSpeakingActive = true;
-                playBtn.innerHTML = ICONS.pause;
-            } else {
-                // 重新發聲
-                const lang = state.speakingState?.finalTopic ? 'en-US' : 'zh-TW';
-                playTextWithTTS(textToSpeak, lang);
-            }
-        }
-    };
-}
-
-if (btnSpeed) {
-    btnSpeed.onclick = () => {
-        speedIndex = (speedIndex + 1) % speeds.length;
-        state.playbackSpeed = speeds[speedIndex];
-        btnSpeed.innerText = state.playbackSpeed + 'x';
-        
-        // 如果正在播放，即時套用語速變更
-        if (isSpeakingActive && textToSpeak) {
-            const lang = state.speakingState?.finalTopic ? 'en-US' : 'zh-TW';
-            playTextWithTTS(textToSpeak, lang);
-        }
-    };
-}
-
-// 保留空函數以避免其他引用檔案 (如段落點擊功能) 拋出未定義錯誤
-export function playSegment(index) { console.log("段落跳轉播放:", index); }
-export function updateActiveSegment(pct) {}
+audioEl.onended = () => {
+    playBtn.innerHTML = ICONS.play;
+    progressBar.style.width = '0%';
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+    if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex])
+        state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+    state.activeSegmentIndex = -1;
+};
