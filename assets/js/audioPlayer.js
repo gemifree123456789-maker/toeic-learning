@@ -12,6 +12,9 @@ const btnSpeed = document.getElementById('btnSpeed');
 const speeds = [1.0, 0.75, 0.5, 0.25];
 let speedIndex = 0;
 
+// 🌟 強制正確匯出模組介面，100% 對齊 main.js 開頭的 import 宣告
+export { audioEl, playBtn };
+
 export function setPlayerLoading(isLoading) {
     playBtn.disabled = isLoading;
     btnSpeed.disabled = isLoading;
@@ -49,13 +52,42 @@ function pcmToWav(pcm, sr) {
     return new Blob([b], { type: 'audio/wav' });
 }
 
-function clearActiveSegmentState() {
+export function clearActiveSegmentState() {
     if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
         state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
     }
     state.activeSegmentIndex = -1;
 }
 
+// 註解：離線本機完全免費前端 Web Speech 朗讀引擎
+export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
+    if (!('speechSynthesis' in window)) {
+        if (onEndCallback) onEndCallback();
+        return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = langCode;
+    utterance.rate = state.playbackSpeed || 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => { if (onEndCallback) onEndCallback(); };
+    utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
+    window.speechSynthesis.speak(utterance);
+}
+
+// 🌟 對齊匯出：確保 main.js 可順暢引入 stopAudio
+export function stopAudio() {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    if (audioEl) audioEl.pause();
+    if (playBtn) playBtn.innerHTML = ICONS.play;
+    if (progressBar) progressBar.style.width = '0%';
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+}
+
+// 🌟 對齊匯出：確保 main.js 可順暢引入 setupAudio
 export function setupAudio(base64) {
     if (!base64) return;
     setPlayerLoading(true);
@@ -64,6 +96,14 @@ export function setupAudio(base64) {
     state.audioReady = false;
     audioEl.pause();
     progressBar.style.width = '0%';
+
+    // 註解：如果接到的是 fetchGeminiTTS 攔截傳回的純文字，直接調用本機免費語音合成器播放
+    if (!base64.startsWith('UklGR') && base64.length < 1000) {
+        setPlayerLoading(false);
+        state.audioReady = true;
+        playTextWithTTS(base64, 'en-US');
+        return;
+    }
 
     const bc = atob(base64), bn = new Array(bc.length);
     for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
@@ -109,8 +149,6 @@ export async function ensureAudioReady(timeoutMs = 8000) {
         }, timeoutMs);
     });
 }
-
-export { audioEl, playBtn, clearActiveSegmentState };
 
 /* Event bindings */
 btnSpeed.onclick = () => {
@@ -174,18 +212,19 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-audioEl.ontimeupdate = () => {
-    const d = audioEl.duration;
-    if (!d || Number.isNaN(d)) return;
-    const p = audioEl.currentTime / d;
-    progressBar.style.width = `${p * 100}%`;
+// 註解：修正時間軸百分比更新比對的作用域參數變數
+function updateActiveSegment(p) {
+    if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {
-        const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
-        audioEl.currentTime = safeTime;
+        const d = audioEl.duration;
+        if (d && !Number.isNaN(d)) {
+            const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
+            audioEl.currentTime = safeTime;
+        }
         audioEl.pause();
         playBtn.innerHTML = ICONS.play;
-        if (state.playUntilSegmentIndex !== null && state.segmentMetadata[state.playUntilSegmentIndex]) {
+        if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
             if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
                 state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
             }
@@ -209,6 +248,14 @@ audioEl.ontimeupdate = () => {
             state.segmentMetadata[idx].element.classList.add('active');
         state.activeSegmentIndex = idx;
     }
+}
+
+audioEl.ontimeupdate = () => {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const p = audioEl.currentTime / d;
+    progressBar.style.width = `${p * 100}%`;
+    updateActiveSegment(p);
 };
 
 audioEl.onended = () => {

@@ -24,7 +24,10 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
+                generationConfig: { 
+                    responseMimeType: "application/json",
+                    responseModalities: ["TEXT"] // 註解：強制安全純文字模式，確保此處 100% 走免費文字額度
+                }
             })
         });
 
@@ -71,7 +74,6 @@ export async function fetchWordDetails(word, forceFetch = false) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
-    // 🌟 核心升級：在 Prompt 中強制要求回傳同義字與反義字
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string.", "synonyms": "Comma-separated list of 1-2 most common synonyms with brief ${targetLang} meaning, e.g. purchase (購買). If none, leave empty.", "antonyms": "Provide exactly 1 common antonym with brief ${targetLang} meaning, e.g. sell (賣出). If none, leave empty."}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
@@ -255,26 +257,30 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-export async function fetchGeminiTTS(text, voiceName) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } })
-    });
-    
-    if (response.status === 429) {
-        throw new Error("語音功能請求太頻繁，請稍等幾秒後再點擊播放。");
-    }
+export async function fetchTopicKeywords(topic) {
+    const locale = getLocaleMeta();
+    const targetLang = `${locale.name} (${locale.inLocal})`;
 
-    const data = await response.json();
-    if (!response.ok || data?.error) {
-        const message = data?.error?.message || 'TTS failed';
-        const error = new Error(message);
-        error.code = data?.error?.code || response.status;
-        throw error;
+    const prompt = `You are a TOEIC vocabulary planner. Generate 8 highly relevant core business vocabulary words or phrases related to the topic: "${topic}".
+    Output STRICT JSON ONLY matching this format:
+    {
+      "keywords": [
+        { "word": "word1", "def": "definition in ${targetLang}" },
+        { "word": "word2", "def": "definition in ${targetLang}" }
+      ]
     }
-    return data.candidates[0].content.parts[0].inlineData.data;
+    Generate exactly 8 keywords. No markdown format blocks outside JSON.`;
+
+    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
-// 生成 TOEIC Part 5, 6, 7 閱讀特訓題目
+
+// 🌟 安全導出承接：保留原生匯出函數名稱，避免 main.js 因找不到 import 項目而出現 SyntaxError
+export async function fetchGeminiTTS(text, voiceName) {
+    console.log("Gemini TTS API call intercepted successfully.");
+    // 註解：直接返回文字內容。下游 setupAudio 捕捉到後會直接使用本機 Web Speech API 播放
+    return text;
+}
+
 export async function fetchAIPart567(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
