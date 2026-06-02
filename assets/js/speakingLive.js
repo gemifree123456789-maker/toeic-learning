@@ -139,12 +139,13 @@ function playPcm16Chunk(base64Data, sampleRate = 24000) {
 }
 
 async function connectLive(topic, score = 700, level = '') {
-    emitStatus(window.t('speakingConnecting')); // 註解：改用全域 window.t
-    const ai = new google.genai.GoogleGenAI({ apiKey: window.state.apiKey }); // 註解：直接抓取網頁 CDN 匯入的全域庫
+    emitStatus(window.t('speakingConnecting'));
+    // 註解：直接讀取 CDN 注入的 window.google.genai 物件，安全切入免費純文字連線
+    const ai = new window.google.genai.GoogleGenAI({ apiKey: window.state.apiKey });
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = window.t(levelConfig.labelKey);
     const config = {
-        responseModalities: [google.genai.Modality.TEXT], // 註解：切入免費純文字通道
+        responseModalities: [window.google.genai.Modality.TEXT],
         mediaResolution: MEDIA_RESOLUTION_LOW,
         systemInstruction: {
             parts: [{

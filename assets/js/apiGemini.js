@@ -14,7 +14,6 @@ function parseJsonCandidateText(rawText) {
 
 // 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
 async function fetchJsonFromPrompt(model, prompt, retries = 2) {
-    // 註解：改為讀取全域 window.state
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${window.state.apiKey}`, {
             method: 'POST',
@@ -23,7 +22,7 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
                     responseMimeType: "application/json",
-                    responseModalities: ["TEXT"] // 強制安全純文字模式，確保此處走免費文字額度
+                    responseModalities: ["TEXT"] // 註解：強制安全純文字模式，隔離多模態扣款
                 }
             })
         });
@@ -43,7 +42,7 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
 }
 
 async function fetchGeminiText(score, customTopic) {
-    const locale = window.getLocaleMeta(); // 註解：改用全域 window.getLocaleMeta
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     const topicLine = customTopic
         ? `about "${customTopic}" suitable for this level.`
@@ -65,7 +64,7 @@ async function fetchGeminiText(score, customTopic) {
 
 async function fetchWordDetails(word, forceFetch = false) {
     if (!forceFetch) {
-        const cached = await window.DB.getWord(word); // 註解：改用全域 window.DB
+        const cached = await window.DB.getWord(word);
         if (cached) return cached;
     }
     const locale = window.getLocaleMeta();
@@ -169,6 +168,7 @@ function normalizeExamQuestion(category, item, idx) {
     };
 }
 
+// 註解：處理完整的模擬試卷回傳結構與題數封裝限制
 function normalizeExamOutput(raw) {
     const listening = (Array.isArray(raw?.listening) ? raw.listening : [])
         .slice(0, 3)
@@ -307,9 +307,9 @@ async function fetchAIPart567(part, score) {
     return raw;
 }
 
-// 🌟 全域無縫掛載宣告 (完全相容 index.html 按順序載入，不破壞原生結構)
+// 🌟 全域掛載宣告：修復上個版本 window.fetchWordDetails 宣告錯字引發 SyntaxError 的重大 Bug
 window.fetchGeminiText = fetchGeminiText;
-window.fetchWordDetails = word, forceFetch = false;
+window.fetchWordDetails = fetchWordDetails;
 window.validateWordWithLanguageTool = validateWordWithLanguageTool;
 window.fetchExamQuestions = fetchExamQuestions;
 window.fetchExamWrongAnswerExplanations = fetchExamWrongAnswerExplanations;

@@ -15,7 +15,7 @@ function setPlayerLoading(isLoading) {
     btnSpeed.disabled = isLoading;
     progressContainer.style.pointerEvents = isLoading ? 'none' : 'auto';
     if (isLoading) {
-        playBtn.innerHTML = window.ICONS.play; // 註解：改用全域 window.ICONS
+        playBtn.innerHTML = window.ICONS.play;
         btnSpeed.innerText = '載入中';
     } else {
         btnSpeed.innerText = window.state.playbackSpeed === 1.0 ? '1.0x' : window.state.playbackSpeed + 'x';
@@ -54,6 +54,7 @@ function clearActiveSegmentState() {
     window.state.activeSegmentIndex = -1;
 }
 
+// 註解：整合本機完全免費的離線 TTS 朗讀引擎
 function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
     if (!('speechSynthesis' in window)) {
         if (onEndCallback) onEndCallback();
@@ -91,6 +92,7 @@ function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
+    // 註解：如果上游文字介面直接丟入純文字 Prompt，自動使用前端無預算朗讀引擎承接
     if (!base64.startsWith('UklGR') && base64.length < 1000) {
         setPlayerLoading(false);
         window.state.audioReady = true;
