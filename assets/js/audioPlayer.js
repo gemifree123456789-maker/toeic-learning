@@ -1,5 +1,7 @@
 // Audio player bar: play/pause, speed control, progress, segment highlighting.
 
+import { state, ICONS } from './state.js';
+
 const audioEl = document.getElementById('mainAudio');
 const playerBar = document.getElementById('playerBar');
 const playBtn = document.getElementById('btnPlayPause');
@@ -10,15 +12,15 @@ const btnSpeed = document.getElementById('btnSpeed');
 const speeds = [1.0, 0.75, 0.5, 0.25];
 let speedIndex = 0;
 
-function setPlayerLoading(isLoading) {
+export function setPlayerLoading(isLoading) {
     playBtn.disabled = isLoading;
     btnSpeed.disabled = isLoading;
     progressContainer.style.pointerEvents = isLoading ? 'none' : 'auto';
     if (isLoading) {
-        playBtn.innerHTML = window.ICONS.play;
+        playBtn.innerHTML = ICONS.play;
         btnSpeed.innerText = '載入中';
     } else {
-        btnSpeed.innerText = window.state.playbackSpeed === 1.0 ? '1.0x' : window.state.playbackSpeed + 'x';
+        btnSpeed.innerText = state.playbackSpeed === 1.0 ? '1.0x' : state.playbackSpeed + 'x';
     }
     document.dispatchEvent(new CustomEvent('player-loading-changed'));
 }
@@ -47,15 +49,15 @@ function pcmToWav(pcm, sr) {
     return new Blob([b], { type: 'audio/wav' });
 }
 
-function clearActiveSegmentState() {
-    if (window.state.activeSegmentIndex >= 0 && window.state.segmentMetadata[window.state.activeSegmentIndex]) {
-        window.state.segmentMetadata[window.state.activeSegmentIndex].element.classList.remove('active');
+export function clearActiveSegmentState() {
+    if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
+        state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
     }
-    window.state.activeSegmentIndex = -1;
+    state.activeSegmentIndex = -1;
 }
 
-// 註解：整合本機完全免費的離線 TTS 朗讀引擎
-function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
+// 註解：離線本機完全免費前端 Web Speech 朗讀引擎
+export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
     if (!('speechSynthesis' in window)) {
         if (onEndCallback) onEndCallback();
         return;
@@ -63,39 +65,37 @@ function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = langCode;
-    utterance.rate = window.state.playbackSpeed || 1.0;
+    utterance.rate = state.playbackSpeed || 1.0;
     utterance.pitch = 1.0;
     utterance.onend = () => { if (onEndCallback) onEndCallback(); };
     utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
     window.speechSynthesis.speak(utterance);
 }
 
-function stopAudio() {
+export function stopAudio() {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
     }
-    if (audioEl) {
-        audioEl.pause();
-    }
-    if (playBtn) playBtn.innerHTML = window.ICONS.play;
+    if (audioEl) audioEl.pause();
+    if (playBtn) playBtn.innerHTML = ICONS.play;
     if (progressBar) progressBar.style.width = '0%';
-    window.state.playUntilPct = null;
-    window.state.playUntilSegmentIndex = null;
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
 }
 
-function setupAudio(base64) {
+export function setupAudio(base64) {
     if (!base64) return;
     setPlayerLoading(true);
     clearPlayUntilState();
     clearActiveSegmentState();
-    window.state.audioReady = false;
+    state.audioReady = false;
     audioEl.pause();
     progressBar.style.width = '0%';
 
-    // 註解：如果上游文字介面直接丟入純文字 Prompt，自動使用前端無預算朗讀引擎承接
+    // 註解：相容攔截。若收到的是 apiGemini 攔截傳回的純文字，直接呼叫本機離線免費用量發音
     if (!base64.startsWith('UklGR') && base64.length < 1000) {
         setPlayerLoading(false);
-        window.state.audioReady = true;
+        state.audioReady = true;
         playTextWithTTS(base64, 'en-US');
         return;
     }
@@ -103,13 +103,13 @@ function setupAudio(base64) {
     const bc = atob(base64), bn = new Array(bc.length);
     for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
     const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
-    if (window.state.audioBlobUrl) URL.revokeObjectURL(window.state.audioBlobUrl);
-    window.state.audioBlobUrl = URL.createObjectURL(wavBlob);
-    audioEl.src = window.state.audioBlobUrl;
-    audioEl.playbackRate = window.state.playbackSpeed;
+    if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
+    state.audioBlobUrl = URL.createObjectURL(wavBlob);
+    audioEl.src = state.audioBlobUrl;
+    audioEl.playbackRate = state.playbackSpeed;
 
     const markAudioReady = () => {
-        window.state.audioReady = true;
+        state.audioReady = true;
         setPlayerLoading(false);
     };
 
@@ -118,14 +118,14 @@ function setupAudio(base64) {
     } else {
         audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
         audioEl.addEventListener('error', () => {
-            window.state.audioReady = false;
+            state.audioReady = false;
             setPlayerLoading(false);
         }, { once: true });
     }
 }
 
-async function ensureAudioReady(timeoutMs = 8000) {
-    if (window.state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
+export async function ensureAudioReady(timeoutMs = 8000) {
+    if (state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
     return new Promise((resolve) => {
         let done = false;
         const finish = (ok) => {
@@ -135,12 +135,12 @@ async function ensureAudioReady(timeoutMs = 8000) {
             resolve(ok);
         };
         const onReady = () => {
-            window.state.audioReady = true;
+            state.audioReady = true;
             finish(!!audioEl.duration && !Number.isNaN(audioEl.duration));
         };
         audioEl.addEventListener('loadedmetadata', onReady, { once: true });
         setTimeout(() => {
-            finish(window.state.audioReady && !!audioEl.duration && !Number.isNaN(audioEl.duration));
+            finish(state.audioReady && !!audioEl.duration && !Number.isNaN(audioEl.duration));
         }, timeoutMs);
     });
 }
@@ -149,21 +149,21 @@ async function ensureAudioReady(timeoutMs = 8000) {
 btnSpeed.onclick = () => {
     speedIndex = (speedIndex + 1) % speeds.length;
     const s = speeds[speedIndex];
-    window.state.playbackSpeed = s;
+    state.playbackSpeed = s;
     audioEl.playbackRate = s;
     btnSpeed.innerText = s === 1.0 ? '1.0x' : s + 'x';
 };
 
 playBtn.onclick = () => {
-    window.state.playUntilPct = null;
-    window.state.playUntilSegmentIndex = null;
-    if (audioEl.paused) { audioEl.play(); playBtn.innerHTML = window.ICONS.pause; }
-    else { audioEl.pause(); playBtn.innerHTML = window.ICONS.play; }
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+    if (audioEl.paused) { audioEl.play(); playBtn.innerHTML = ICONS.pause; }
+    else { audioEl.pause(); playBtn.innerHTML = ICONS.play; }
 };
 
 function clearPlayUntilState() {
-    window.state.playUntilPct = null;
-    window.state.playUntilSegmentIndex = null;
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
 }
 
 function seekFromClientX(clientX) {
@@ -205,42 +205,43 @@ function endProgressDrag(e) {
 progressContainer.onpointerup = endProgressDrag;
 progressContainer.onpointercancel = endProgressDrag;
 
-window.state.activeSegmentIndex = -1;
+state.activeSegmentIndex = -1;
 
+// 註解：還原標準的局部函數命名，並修復 p 參數的時間軸比對作用域
 function updateActiveSegment(p) {
-    if (!window.state.segmentMetadata || window.state.segmentMetadata.length === 0) return;
+    if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
 
-    if (window.state.playUntilPct !== null && p >= window.state.playUntilPct) {
+    if (state.playUntilPct !== null && p >= state.playUntilPct) {
         const d = audioEl.duration;
         if (d && !Number.isNaN(d)) {
-            const safeTime = Math.max(0, (window.state.playUntilPct * d) - 0.01);
+            const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
             audioEl.currentTime = safeTime;
         }
         audioEl.pause();
-        playBtn.innerHTML = window.ICONS.play;
-        if (window.state.playUntilSegmentIndex !== null && window.state.playUntilSegmentIndex >= 0 && window.state.segmentMetadata[window.state.playUntilSegmentIndex]) {
-            if (window.state.activeSegmentIndex >= 0 && window.state.activeSegmentIndex !== window.state.playUntilSegmentIndex && window.state.segmentMetadata[window.state.activeSegmentIndex]) {
-                window.state.segmentMetadata[window.state.activeSegmentIndex].element.classList.remove('active');
+        playBtn.innerHTML = ICONS.play;
+        if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
+            if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
+                state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
             }
-            window.state.segmentMetadata[window.state.playUntilSegmentIndex].element.classList.add('active');
-            window.state.activeSegmentIndex = window.state.playUntilSegmentIndex;
+            state.segmentMetadata[state.playUntilSegmentIndex].element.classList.add('active');
+            state.activeSegmentIndex = state.playUntilSegmentIndex;
         }
-        window.state.playUntilPct = null;
-        window.state.playUntilSegmentIndex = null;
+        state.playUntilPct = null;
+        state.playUntilSegmentIndex = null;
         return;
     }
 
     let idx = -1;
-    for (let i = 0; i < window.state.segmentMetadata.length; i++) {
-        const s = window.state.segmentMetadata[i];
+    for (let i = 0; i < state.segmentMetadata.length; i++) {
+        const s = state.segmentMetadata[i];
         if (p >= s.startPct && p < s.endPct) { idx = i; break; }
     }
-    if (idx !== window.state.activeSegmentIndex) {
-        if (window.state.activeSegmentIndex >= 0 && window.state.segmentMetadata[window.state.activeSegmentIndex])
-            window.state.segmentMetadata[window.state.activeSegmentIndex].element.classList.remove('active');
-        if (idx >= 0 && window.state.segmentMetadata[idx])
-            window.state.segmentMetadata[idx].element.classList.add('active');
-        window.state.activeSegmentIndex = idx;
+    if (idx !== state.activeSegmentIndex) {
+        if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex])
+            state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+        if (idx >= 0 && state.segmentMetadata[idx])
+            state.segmentMetadata[idx].element.classList.add('active');
+        state.activeSegmentIndex = idx;
     }
 }
 
@@ -253,21 +254,11 @@ audioEl.ontimeupdate = () => {
 };
 
 audioEl.onended = () => {
-    playBtn.innerHTML = window.ICONS.play;
+    playBtn.innerHTML = ICONS.play;
     progressBar.style.width = '0%';
-    window.state.playUntilPct = null;
-    window.state.playUntilSegmentIndex = null;
-    if (window.state.activeSegmentIndex >= 0 && window.state.segmentMetadata[window.state.activeSegmentIndex])
-        window.state.segmentMetadata[window.state.activeSegmentIndex].element.classList.remove('active');
-    window.state.activeSegmentIndex = -1;
+    state.playUntilPct = null;
+    state.playUntilSegmentIndex = null;
+    if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex])
+        state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
+    state.activeSegmentIndex = -1;
 };
-
-// 🌟 全域無縫掛載宣告
-window.setupAudio = setupAudio;
-window.ensureAudioReady = ensureAudioReady;
-window.playTextWithTTS = playTextWithTTS;
-window.stopAudio = stopAudio;
-window.updateActiveSegment = updateActiveSegment;
-window.clearActiveSegmentState = clearActiveSegmentState;
-window.audioEl = audioEl;
-window.playBtn = playBtn;

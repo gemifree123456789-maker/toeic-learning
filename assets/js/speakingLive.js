@@ -1,5 +1,10 @@
 // Live speaking session over Gemini native audio model (SDK mode).
 
+import { GoogleGenAI, Modality } from 'https://esm.run/@google/genai';
+import { LIVE_AUDIO_MODEL, state } from './state.js';
+import { t } from './i18n.js';
+import { playTextWithTTS, stopAudio } from './audioPlayer.js';
+
 const INPUT_MIME = 'audio/pcm;rate=16000';
 const MEDIA_RESOLUTION_LOW = 'MEDIA_RESOLUTION_LOW'; // ~66-70 tokens/image
 
@@ -15,6 +20,7 @@ let nextPlayTime = 0;
 let destroyed = false;
 let isMicTransmissionAllowed = true; 
 
+// 註解：用來累加伺服器文字流片段的快取變數
 let accumulativeTextBuffer = "";
 
 const listeners = {
@@ -139,17 +145,15 @@ function playPcm16Chunk(base64Data, sampleRate = 24000) {
 }
 
 async function connectLive(topic, score = 700, level = '') {
-    emitStatus(window.t('speakingConnecting'));
-    // 註解：直接讀取 CDN 注入的 window.google.genai 物件，安全切入免費純文字連線
-    const ai = new window.google.genai.GoogleGenAI({ apiKey: window.state.apiKey });
+    emitStatus(t('speakingConnecting'));
+    const ai = new GoogleGenAI({ apiKey: state.apiKey });
     const levelConfig = getSpeakingLevelConfig(level, score);
-    const levelLabel = window.t(levelConfig.labelKey);
+    const levelLabel = t(levelConfig.labelKey);
     const config = {
-        responseModalities: [window.google.genai.Modality.TEXT],
+        // 註解：修正 responseModalities 為 Modality.TEXT，完全切斷付費語音流
+        responseModalities: [Modality.TEXT],
         mediaResolution: MEDIA_RESOLUTION_LOW,
-        systemInstruction: {
-            parts: [{
-                text: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
+        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
 
 Conversation behavior:
 - Keep each assistant turn natural and not overly short, usually 2-4 sentences.
@@ -164,38 +168,38 @@ ${levelConfig.policy}
 
 Domain scope:
 ${levelConfig.domains}`
-            }]
-        }
     };
 
     liveSession = await ai.live.connect({
-        model: window.LIVE_AUDIO_MODEL,
+        model: LIVE_AUDIO_MODEL,
         config,
         callbacks: {
             onopen: () => {
-                window.state.speakingState.isConnected = true;
+                state.speakingState.isConnected = true;
                 emitConnected(true);
-                emitLog('system', window.t('speakingTopicLevelLog', { topic, level: levelLabel }));
-                emitStatus(window.t('speakingConnectedPreparingMic'));
+                emitLog('system', t('speakingTopicLevelLog', { topic, level: levelLabel }));
+                emitStatus(t('speakingConnectedPreparingMic'));
             },
             onmessage: (message) => {
                 if (destroyed) return;
                 if (message?.serverContent?.interrupted) {
                     nextPlayTime = outputCtx ? outputCtx.currentTime : 0;
-                    window.stopAudio();
+                    stopAudio();
                 }
                 const parts = message?.serverContent?.modelTurn?.parts || [];
                 
+                // 註解：累加捕獲打字機純文字
                 for (const part of parts) {
                     if (typeof part?.text === 'string' && part.text.trim()) {
-                        window.state.speakingState.isResponding = true;
-                        emitStatus(window.t('speakingAiResponding'));
+                        state.speakingState.isResponding = true;
+                        emitStatus(t('speakingAiResponding'));
                         accumulativeTextBuffer += part.text;
                     }
                 }
 
+                // 註解：當句子完整接收完畢 (turnComplete)，移交前端本機語音合成，並鎖定麥克風傳輸
                 if (message?.serverContent?.turnComplete) {
-                    window.state.speakingState.isResponding = false;
+                    state.speakingState.isResponding = false;
                     const finalOutputText = accumulativeTextBuffer.trim();
                     accumulativeTextBuffer = "";
 
@@ -203,29 +207,29 @@ ${levelConfig.domains}`
                         emitLog('ai', finalOutputText); 
                         isMicTransmissionAllowed = false;
 
-                        window.playTextWithTTS(finalOutputText, 'en-US', () => {
+                        playTextWithTTS(finalOutputText, 'en-US', () => {
                             isMicTransmissionAllowed = true;
-                            emitStatus(window.t('speakingWaitingUser'));
+                            emitStatus(t('speakingWaitingUser'));
                         });
                     } else {
-                        emitStatus(window.t('speakingWaitingUser'));
+                        emitStatus(t('speakingWaitingUser'));
                     }
                 }
             },
             onerror: (e) => {
-                emitStatus(window.t('speakingConnectionError', { message: e?.message || 'unknown' }));
+                emitStatus(t('speakingConnectionError', { message: e?.message || 'unknown' }));
             },
             onclose: (e) => {
-                window.state.speakingState.isConnected = false;
-                window.state.speakingState.isRecording = false;
+                state.speakingState.isConnected = false;
+                state.speakingState.isRecording = false;
                 emitConnected(false);
-                emitStatus(window.t('speakingStoppedReason', { reason: e?.reason || 'closed' }));
+                emitStatus(t('speakingStoppedReason', { reason: e?.reason || 'closed' }));
             }
         }
     });
 
-    emitStatus(window.t('speakingAiOpening'));
-    window.state.speakingState.isResponding = true;
+    emitStatus(t('speakingAiOpening'));
+    state.speakingState.isResponding = true;
     liveSession.sendClientContent({
         turns: [{
             role: 'user',
@@ -296,41 +300,41 @@ async function setupMicStream() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     try {
         await setupMicWithWorklet();
-        emitLog('system', window.t('speakingAudioWorkletEnabled'));
+        emitLog('system', t('speakingAudioWorkletEnabled'));
     } catch (error) {
         console.warn('AudioWorklet unavailable, fallback ScriptProcessorNode', error);
         setupMicWithScriptProcessorFallback();
-        emitLog('system', window.t('speakingAudioWorkletFallback'));
+        emitLog('system', t('speakingAudioWorkletFallback'));
     }
-    window.state.speakingState.isRecording = true;
-    emitStatus(window.t('speakingInProgress'));
+    state.speakingState.isRecording = true;
+    emitStatus(t('speakingInProgress'));
 }
 
-async function startSpeakingSession(input, callbacks = {}) {
+export async function startSpeakingSession(input, callbacks = {}) {
     const topic = typeof input === 'string' ? input : String(input?.topic || '').trim();
     const score = typeof input === 'object' && input !== null ? Number(input.score) || 700 : 700;
     const level = typeof input === 'object' && input !== null ? String(input.level || '').trim() : '';
-    if (!window.state.apiKey) throw new Error(window.t('alertSetApiKeyFirst'));
-    if (!topic) throw new Error(window.t('alertSelectTopicFirst'));
+    if (!state.apiKey) throw new Error(t('alertSetApiKeyFirst'));
+    if (!topic) throw new Error(t('alertSelectTopicFirst'));
     if (liveSession || mediaStream) await stopSpeakingSession();
 
     listeners.status = callbacks.onStatus || null;
     listeners.log = callbacks.onLog || null;
     listeners.connected = callbacks.onConnected || null;
     destroyed = false;
-    window.state.speakingState.finalTopic = topic;
-    window.state.speakingState.isResponding = false;
+    state.speakingState.finalTopic = topic;
+    state.speakingState.isResponding = false;
     isMicTransmissionAllowed = true; 
     accumulativeTextBuffer = ""; 
 
     await connectLive(topic, score, level);
     await setupMicStream();
-    emitLog('system', window.t('speakingSessionStarted'));
+    emitLog('system', t('speakingSessionStarted'));
 }
 
-async function stopSpeakingSession() {
+export async function stopSpeakingSession() {
     destroyed = true;
-    window.stopAudio(); 
+    stopAudio(); 
     if (workletNode) {
         workletNode.port.onmessage = null;
         workletNode.disconnect();
@@ -361,14 +365,10 @@ async function stopSpeakingSession() {
         liveSession.close();
         liveSession = null;
     }
-    window.state.speakingState.isConnected = false;
-    window.state.speakingState.isRecording = false;
-    window.state.speakingState.isResponding = false;
+    state.speakingState.isConnected = false;
+    state.speakingState.isRecording = false;
+    state.speakingState.isResponding = false;
     isMicTransmissionAllowed = true;
     accumulativeTextBuffer = "";
     emitConnected(false);
 }
-
-// 🌟 全域無縫掛載宣告
-window.startSpeakingSession = startSpeakingSession;
-window.stopSpeakingSession = stopSpeakingSession;
