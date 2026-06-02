@@ -24,7 +24,10 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
+                generationConfig: { 
+                    responseMimeType: "application/json",
+                    responseModalities: ["TEXT"] // 註解：強制指定純文字模式，防範非預期多模態音訊扣款
+                }
             })
         });
 
@@ -255,25 +258,24 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-export async function fetchGeminiTTS(text, voiceName) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } })
-    });
-    
-    if (response.status === 429) {
-        throw new Error("語音功能請求太頻繁，請稍等幾秒後再點擊播放。");
-    }
+// 註解：修正原 fetchTopicKeywords 的調用 Bug，將原先傳遞的 topic 修正回正軌參數 prompt 變數
+export async function fetchTopicKeywords(topic) {
+    const locale = getLocaleMeta();
+    const targetLang = `${locale.name} (${locale.inLocal})`;
 
-    const data = await response.json();
-    if (!response.ok || data?.error) {
-        const message = data?.error?.message || 'TTS failed';
-        const error = new Error(message);
-        error.code = data?.error?.code || response.status;
-        throw error;
+    const prompt = `You are a TOEIC vocabulary planner. Generate 8 highly relevant core business vocabulary words or phrases related to the topic: "${topic}".
+    Output STRICT JSON ONLY matching this format:
+    {
+      "keywords": [
+        { "word": "word1", "def": "definition in ${targetLang}" },
+        { "word": "word2", "def": "definition in ${targetLang}" }
+      ]
     }
-    return data.candidates[0].content.parts[0].inlineData.data;
+    Generate exactly 8 keywords. No markdown format blocks outside JSON.`;
+
+    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
+
 // 生成 TOEIC Part 5, 6, 7 閱讀特訓題目
 export async function fetchAIPart567(part, score) {
     const locale = getLocaleMeta();

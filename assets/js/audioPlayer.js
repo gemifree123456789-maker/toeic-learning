@@ -56,6 +56,21 @@ function clearActiveSegmentState() {
     state.activeSegmentIndex = -1;
 }
 
+// 註解：整合外部免收費語音合成端點或本機 Web Speech API 產生相容音訊
+export function playTextWithTTSFallback(text, langCode = 'en-US', callback = null) {
+    if (!('speechSynthesis' in window)) {
+        if (callback) callback();
+        return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = langCode;
+    utterance.rate = state.playbackSpeed || 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => { if (callback) callback(); };
+    window.speechSynthesis.speak(utterance);
+}
+
 export function setupAudio(base64) {
     if (!base64) return;
     setPlayerLoading(true);
@@ -64,6 +79,14 @@ export function setupAudio(base64) {
     state.audioReady = false;
     audioEl.pause();
     progressBar.style.width = '0%';
+
+    // 註解：如果傳入的是純文字 prompt 而非 Base64 音訊資料，直接無縫切換到前端免費發音鏈路
+    if (!base64.startsWith('UklGR') && base64.length < 1000) {
+        setPlayerLoading(false);
+        state.audioReady = true;
+        playTextWithTTSFallback(base64, 'en-US');
+        return;
+    }
 
     const bc = atob(base64), bn = new Array(bc.length);
     for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
@@ -185,7 +208,7 @@ audioEl.ontimeupdate = () => {
         audioEl.currentTime = safeTime;
         audioEl.pause();
         playBtn.innerHTML = ICONS.play;
-        if (state.playUntilSegmentIndex !== null && state.segmentMetadata[state.playUntilSegmentIndex]) {
+        if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
             if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
                 state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
             }
