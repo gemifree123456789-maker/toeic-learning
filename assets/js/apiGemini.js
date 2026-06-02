@@ -1,9 +1,5 @@
 // Gemini API calls: text generation, TTS, exam generation, and explanations.
 
-import { state, TEXT_MODEL, TTS_MODEL } from './state.js';
-import { DB } from './db.js';
-import { getLocaleMeta } from './i18n.js';
-
 function ensureCandidateText(data) {
     if (data?.error) throw new Error(data.error.message || 'Gemini API error');
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -18,15 +14,16 @@ function parseJsonCandidateText(rawText) {
 
 // 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
 async function fetchJsonFromPrompt(model, prompt, retries = 2) {
+    // 註解：改為讀取全域 window.state
     for (let i = 0; i < retries; i++) {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${window.state.apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
                     responseMimeType: "application/json",
-                    responseModalities: ["TEXT"] // 註解：強制指定純文字模式，防範非預期多模態音訊扣款
+                    responseModalities: ["TEXT"] // 強制安全純文字模式，確保此處走免費文字額度
                 }
             })
         });
@@ -45,8 +42,8 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
     }
 }
 
-export async function fetchGeminiText(score, customTopic) {
-    const locale = getLocaleMeta();
+async function fetchGeminiText(score, customTopic) {
+    const locale = window.getLocaleMeta(); // 註解：改用全域 window.getLocaleMeta
     const targetLang = `${locale.name} (${locale.inLocal})`;
     const topicLine = customTopic
         ? `about "${customTopic}" suitable for this level.`
@@ -63,25 +60,25 @@ export async function fetchGeminiText(score, customTopic) {
         }
         For "phrases": pick 2-3 commonly used phrases from the passage. Return ONLY raw JSON.
     `;
-    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
 }
 
-export async function fetchWordDetails(word, forceFetch = false) {
+async function fetchWordDetails(word, forceFetch = false) {
     if (!forceFetch) {
-        const cached = await DB.getWord(word);
+        const cached = await window.DB.getWord(word); // 註解：改用全域 window.DB
         if (cached) return cached;
     }
-    const locale = getLocaleMeta();
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string.", "synonyms": "Comma-separated list of 1-2 most common synonyms with brief ${targetLang} meaning, e.g. purchase (購買). If none, leave empty.", "antonyms": "Provide exactly 1 common antonym with brief ${targetLang} meaning, e.g. sell (賣出). If none, leave empty."}`;
     
-    const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
-    await DB.setWord(word, result);
+    const result = await fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
+    await window.DB.setWord(word, result);
     return result;
 }
 
-export async function validateWordWithLanguageTool(word) {
+async function validateWordWithLanguageTool(word) {
     const query = String(word || '').trim();
     if (!query) {
         return { ok: false, reason: 'empty', message: 'Empty word' };
@@ -204,8 +201,8 @@ function normalizeExamOutput(raw) {
     return { listening, reading, vocabulary: vocab, grammar };
 }
 
-export async function fetchExamQuestions(score) {
-    const locale = getLocaleMeta();
+async function fetchExamQuestions(score) {
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     const prompt = `
         You are a TOEIC mock exam generator.
@@ -230,12 +227,12 @@ export async function fetchExamQuestions(score) {
         - Use ${targetLang} for explanations if needed, but question can be English.
         - Return raw JSON only.
     `;
-    const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    const raw = await fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
     return normalizeExamOutput(raw);
 }
 
-export async function fetchExamWrongAnswerExplanations(payload) {
-    const locale = getLocaleMeta();
+async function fetchExamWrongAnswerExplanations(payload) {
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     const prompt = `
         You are a TOEIC teacher. Explain each wrong answer one by one.
@@ -253,12 +250,12 @@ export async function fetchExamWrongAnswerExplanations(payload) {
         Wrong-answer payload:
         ${JSON.stringify(payload)}
     `;
-    const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    const result = await fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-export async function fetchTopicKeywords(topic) {
-    const locale = getLocaleMeta();
+async function fetchTopicKeywords(topic) {
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
 
     const prompt = `You are a TOEIC vocabulary planner. Generate 8 highly relevant core business vocabulary words or phrases related to the topic: "${topic}".
@@ -271,12 +268,11 @@ export async function fetchTopicKeywords(topic) {
     }
     Generate exactly 8 keywords. No markdown format blocks outside JSON.`;
 
-    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    return fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
 }
 
-// 生成 TOEIC Part 5, 6, 7 閱讀特訓題目
-export async function fetchAIPart567(part, score) {
-    const locale = getLocaleMeta();
+async function fetchAIPart567(part, score) {
+    const locale = window.getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
 
     let prompt = `You are an expert TOEIC tutor. Generate a practice set for TOEIC Part ${part} targeting a score of ${score} (500-900).\n`;
@@ -307,6 +303,15 @@ export async function fetchAIPart567(part, score) {
       ]
     }`;
 
-    const raw = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
+    const raw = await fetchJsonFromPrompt(window.TEXT_MODEL, prompt);
     return raw;
 }
+
+// 🌟 全域無縫掛載宣告 (完全相容 index.html 按順序載入，不破壞原生結構)
+window.fetchGeminiText = fetchGeminiText;
+window.fetchWordDetails = word, forceFetch = false;
+window.validateWordWithLanguageTool = validateWordWithLanguageTool;
+window.fetchExamQuestions = fetchExamQuestions;
+window.fetchExamWrongAnswerExplanations = fetchExamWrongAnswerExplanations;
+window.fetchTopicKeywords = fetchTopicKeywords;
+window.fetchAIPart567 = fetchAIPart567;
