@@ -16,7 +16,7 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-// 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
+// 帶有快速退避的高階自動重試機制
 async function fetchJsonFromPrompt(model, prompt, retries = 2) {
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
@@ -26,16 +26,15 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
                     responseMimeType: "application/json",
-                    responseModalities: ["TEXT"] // 註解：強制安全純文字模式，確保此處 100% 走免費文字額度
+                    responseModalities: ["TEXT"] 
                 }
             })
         });
 
         if (response.status === 429) {
             if (i === retries - 1) {
-                throw new Error("HTTP_429"); // 快速拋出錯誤代碼給外層處理
+                throw new Error("HTTP_429"); 
             }
-            // 極短暫退避：只等 2 秒就重試，不再傻等 15 秒
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
         }
@@ -274,10 +273,8 @@ export async function fetchTopicKeywords(topic) {
     return fetchJsonFromPrompt(TEXT_MODEL, prompt);
 }
 
-// 🌟 安全導出承接：保留原生匯出函數名稱，避免 main.js 因找不到 import 項目而出現 SyntaxError
+// 攔截原本的語音合成呼叫，直接返回純文字交給 audioPlayer.js 發音
 export async function fetchGeminiTTS(text, voiceName) {
-    console.log("Gemini TTS API call intercepted successfully.");
-    // 註解：直接返回文字內容。下游 setupAudio 捕捉到後會直接使用本機 Web Speech API 播放
     return text;
 }
 

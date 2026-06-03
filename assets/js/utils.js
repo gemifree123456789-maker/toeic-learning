@@ -9,22 +9,49 @@ export function shuffleArray(arr) {
     return a;
 }
 
-export function speakText(text) {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US';
-    u.rate = 0.9;
-    window.speechSynthesis.speak(u);
+export function toLowerWord(word) {
+    return String(word || '').trim().toLowerCase();
 }
 
-export function speakTextPromise(text) {
-    return new Promise(resolve => {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'en-US';
-        u.rate = 0.9;
-        u.onend = resolve;
-        u.onerror = resolve;
-        window.speechSynthesis.speak(u);
+function getRandomToeicVoice() {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+    
+    const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
+    
+    const englishVoices = voices.filter(v => {
+        if (!v.lang.startsWith('en')) return false;
+        const nameLower = String(v.name).toLowerCase();
+        const uriLower = String(v.voiceURI || '').toLowerCase();
+        return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
     });
+    
+    if (englishVoices.length > 0) {
+        return englishVoices[Math.floor(Math.random() * englishVoices.length)];
+    }
+    return null;
+}
+
+// 確保全域共用的發音函數使用免費的 TTS
+export function speakText(text, lang = 'en-US') {
+    if (!text || !('speechSynthesis' in window)) return;
+    
+    window.speechSynthesis.cancel();
+    // 移除 HTML 標籤
+    const cleanText = text.replace(/<[^>]*>?/gm, '');
+    
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = lang;
+    
+    // 如果是英文，試著給一個好聽的口音
+    if (lang.startsWith('en')) {
+        const voice = getRandomToeicVoice();
+        if (voice) utterance.voice = voice;
+    }
+    
+    // 語速稍微放慢適合學習
+    utterance.rate = 0.9;
+    
+    window.speechSynthesis.speak(utterance);
 }

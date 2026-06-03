@@ -12,7 +12,6 @@ const btnSpeed = document.getElementById('btnSpeed');
 const speeds = [1.0, 0.75, 0.5, 0.25];
 let speedIndex = 0;
 
-// 🌟 強制正確匯出模組介面，100% 對齊 main.js 開頭的 import 宣告
 export { audioEl, playBtn };
 
 export function setPlayerLoading(isLoading) {
@@ -59,23 +58,38 @@ export function clearActiveSegmentState() {
     state.activeSegmentIndex = -1;
 }
 
-// 註解：離線本機完全免費前端 Web Speech 朗讀引擎
+// 本機免費 Web Speech 朗讀引擎
 export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
     if (!('speechSynthesis' in window)) {
+        console.error("Browser does not support Speech Synthesis");
         if (onEndCallback) onEndCallback();
         return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    
+    const cleanText = text.replace(/<[^>]*>?/gm, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = langCode;
     utterance.rate = state.playbackSpeed || 1.0;
     utterance.pitch = 1.0;
+    
     utterance.onend = () => { if (onEndCallback) onEndCallback(); };
-    utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
+    utterance.onerror = (e) => { 
+        console.error("TTS Error:", e);
+        if (onEndCallback) onEndCallback(); 
+    };
+    
     window.speechSynthesis.speak(utterance);
 }
 
-// 🌟 對齊匯出：確保 main.js 可順暢引入 stopAudio
+// iOS 語音解鎖機制
+export function unlockAudioOnIOS() {
+    if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance('');
+        window.speechSynthesis.speak(u);
+    }
+}
+
 export function stopAudio() {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -87,7 +101,6 @@ export function stopAudio() {
     state.playUntilSegmentIndex = null;
 }
 
-// 🌟 對齊匯出：確保 main.js 可順暢引入 setupAudio
 export function setupAudio(base64) {
     if (!base64) return;
     setPlayerLoading(true);
@@ -97,40 +110,56 @@ export function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
-    // 註解：如果接到的是 fetchGeminiTTS 攔截傳回的純文字，直接調用本機免費語音合成器播放
-    if (!base64.startsWith('UklGR') && base64.length < 1000) {
+    // 終極防護：精準判斷是否為純文字。Base64 不會包含空白，若包含即為文字。
+    const isText = base64.includes(' ') || !/^[A-Za-z0-9+/=]+$/.test(base64.replace(/\s/g, ''));
+
+    if (isText) {
         setPlayerLoading(false);
         state.audioReady = true;
         playTextWithTTS(base64, 'en-US');
+        
+        // 模擬音訊準備就緒，讓 UI 不會卡在載入中
+        setTimeout(() => {
+            const event = new Event('loadedmetadata');
+            audioEl.dispatchEvent(event);
+        }, 100);
         return;
     }
 
-    const bc = atob(base64), bn = new Array(bc.length);
-    for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
-    const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
-    if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
-    state.audioBlobUrl = URL.createObjectURL(wavBlob);
-    audioEl.src = state.audioBlobUrl;
-    audioEl.playbackRate = state.playbackSpeed;
+    try {
+        const bc = atob(base64);
+        const bn = new Array(bc.length);
+        for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
+        const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
+        if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
+        state.audioBlobUrl = URL.createObjectURL(wavBlob);
+        audioEl.src = state.audioBlobUrl;
+        audioEl.playbackRate = state.playbackSpeed;
 
-    const markAudioReady = () => {
-        state.audioReady = true;
-        setPlayerLoading(false);
-    };
-
-    if (audioEl.readyState >= 1 && audioEl.duration && !Number.isNaN(audioEl.duration)) {
-        markAudioReady();
-    } else {
-        audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
-        audioEl.addEventListener('error', () => {
-            state.audioReady = false;
+        const markAudioReady = () => {
+            state.audioReady = true;
             setPlayerLoading(false);
-        }, { once: true });
+        };
+
+        if (audioEl.readyState >= 1 && audioEl.duration && !Number.isNaN(audioEl.duration)) {
+            markAudioReady();
+        } else {
+            audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
+            audioEl.addEventListener('error', () => {
+                state.audioReady = false;
+                setPlayerLoading(false);
+            }, { once: true });
+        }
+    } catch (e) {
+        console.error("解碼 Base64 失敗，強制轉為文字朗讀:", e);
+        setPlayerLoading(false);
+        playTextWithTTS(base64, 'en-US');
     }
 }
 
 export async function ensureAudioReady(timeoutMs = 8000) {
-    if (state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
+    if (state.audioReady) return true; // 若是 TTS 模式會立刻返回 true
+    
     return new Promise((resolve) => {
         let done = false;
         const finish = (ok) => {
@@ -162,8 +191,26 @@ btnSpeed.onclick = () => {
 playBtn.onclick = () => {
     state.playUntilPct = null;
     state.playUntilSegmentIndex = null;
-    if (audioEl.paused) { audioEl.play(); playBtn.innerHTML = ICONS.pause; }
-    else { audioEl.pause(); playBtn.innerHTML = ICONS.play; }
+    
+    // 如果目前正在用 speechSynthesis 播放
+    if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+            playBtn.innerHTML = ICONS.pause;
+        } else {
+            window.speechSynthesis.pause();
+            playBtn.innerHTML = ICONS.play;
+        }
+        return;
+    }
+    
+    if (audioEl.paused) { 
+        audioEl.play(); 
+        playBtn.innerHTML = ICONS.pause; 
+    } else { 
+        audioEl.pause(); 
+        playBtn.innerHTML = ICONS.play; 
+    }
 };
 
 function clearPlayUntilState() {
@@ -212,8 +259,7 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-// 註解：修正時間軸百分比更新比對的作用域參數變數
-function updateActiveSegment(p) {
+export function updateActiveSegment(p) {
     if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {

@@ -3,7 +3,7 @@
 import { GoogleGenAI, Modality } from 'https://esm.run/@google/genai';
 import { LIVE_AUDIO_MODEL, state } from './state.js';
 import { t } from './i18n.js';
-import { playTextWithTTS, stopAudio } from './audioPlayer.js';
+import { playTextWithTTS, stopAudio, unlockAudioOnIOS } from './audioPlayer.js';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 const MEDIA_RESOLUTION_LOW = 'MEDIA_RESOLUTION_LOW'; // ~66-70 tokens/image
@@ -20,7 +20,6 @@ let nextPlayTime = 0;
 let destroyed = false;
 let isMicTransmissionAllowed = true; 
 
-// 註解：收集即時 WebSockets 純文字的字串快取
 let accumulativeTextBuffer = "";
 
 const listeners = {
@@ -150,7 +149,7 @@ async function connectLive(topic, score = 700, level = '') {
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = t(levelConfig.labelKey);
     const config = {
-        // 核心改造點：變更為 Modality.TEXT 免費純文字通道，終結音訊串流收費
+        // 使用 TEXT 模式避免計費
         responseModalities: [Modality.TEXT],
         mediaResolution: MEDIA_RESOLUTION_LOW,
         systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
@@ -183,12 +182,10 @@ ${levelConfig.domains}`
             onmessage: (message) => {
                 if (destroyed) return;
                 if (message?.serverContent?.interrupted) {
-                    nextPlayTime = outputCtx ? outputCtx.currentTime : 0;
                     stopAudio();
                 }
                 const parts = message?.serverContent?.modelTurn?.parts || [];
                 
-                // 註解：補獲打字機純文字片段
                 for (const part of parts) {
                     if (typeof part?.text === 'string' && part.text.trim()) {
                         state.speakingState.isResponding = true;
@@ -197,7 +194,6 @@ ${levelConfig.domains}`
                     }
                 }
 
-                // 註解：當句子完整接收完畢 (turnComplete)，移交前端本機語音合成，並鎖定麥克風傳輸防回授
                 if (message?.serverContent?.turnComplete) {
                     state.speakingState.isResponding = false;
                     const finalOutputText = accumulativeTextBuffer.trim();
@@ -317,6 +313,9 @@ export async function startSpeakingSession(input, callbacks = {}) {
     if (!state.apiKey) throw new Error(t('alertSetApiKeyFirst'));
     if (!topic) throw new Error(t('alertSelectTopicFirst'));
     if (liveSession || mediaStream) await stopSpeakingSession();
+
+    // 觸發 iOS 語音解鎖
+    unlockAudioOnIOS();
 
     listeners.status = callbacks.onStatus || null;
     listeners.log = callbacks.onLog || null;
