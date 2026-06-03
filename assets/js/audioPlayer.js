@@ -12,8 +12,6 @@ const btnSpeed = document.getElementById('btnSpeed');
 const speeds = [1.0, 0.75, 0.5, 0.25];
 let speedIndex = 0;
 
-export { audioEl, playBtn };
-
 export function setPlayerLoading(isLoading) {
     playBtn.disabled = isLoading;
     btnSpeed.disabled = isLoading;
@@ -51,54 +49,11 @@ function pcmToWav(pcm, sr) {
     return new Blob([b], { type: 'audio/wav' });
 }
 
-export function clearActiveSegmentState() {
+function clearActiveSegmentState() {
     if (state.activeSegmentIndex >= 0 && state.segmentMetadata[state.activeSegmentIndex]) {
         state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
     }
     state.activeSegmentIndex = -1;
-}
-
-// 本機免費 Web Speech 朗讀引擎
-export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) {
-    if (!('speechSynthesis' in window)) {
-        console.error("Browser does not support Speech Synthesis");
-        if (onEndCallback) onEndCallback();
-        return;
-    }
-    window.speechSynthesis.cancel();
-    
-    const cleanText = text.replace(/<[^>]*>?/gm, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = langCode;
-    utterance.rate = state.playbackSpeed || 1.0;
-    utterance.pitch = 1.0;
-    
-    utterance.onend = () => { if (onEndCallback) onEndCallback(); };
-    utterance.onerror = (e) => { 
-        console.error("TTS Error:", e);
-        if (onEndCallback) onEndCallback(); 
-    };
-    
-    window.speechSynthesis.speak(utterance);
-}
-
-// iOS 語音解鎖機制：必須在按鈕點擊事件的最開頭呼叫
-export function unlockAudioOnIOS() {
-    if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance('');
-        window.speechSynthesis.speak(u);
-    }
-}
-
-export function stopAudio() {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-    if (audioEl) audioEl.pause();
-    if (playBtn) playBtn.innerHTML = ICONS.play;
-    if (progressBar) progressBar.style.width = '0%';
-    state.playUntilPct = null;
-    state.playUntilSegmentIndex = null;
 }
 
 export function setupAudio(base64) {
@@ -110,57 +65,32 @@ export function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
-    // 【終極防護】：改用字串長度精準判斷是否為純文字。
-    // PCM 轉出來的 Base64 長度動輒數萬起跳，而英文句子不可能大於 15000 字元。
-    // 這徹底解決了單字 (如 "apple") 被誤認為 Base64 導致 atob 崩潰的 Invalid string length 錯誤。
-    const isText = base64.length < 15000;
+    const bc = atob(base64), bn = new Array(bc.length);
+    for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
+    const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
+    if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
+    state.audioBlobUrl = URL.createObjectURL(wavBlob);
+    audioEl.src = state.audioBlobUrl;
+    audioEl.playbackRate = state.playbackSpeed;
 
-    if (isText) {
-        setPlayerLoading(false);
+    const markAudioReady = () => {
         state.audioReady = true;
-        playTextWithTTS(base64, 'en-US');
-        
-        setTimeout(() => {
-            const event = new Event('loadedmetadata');
-            audioEl.dispatchEvent(event);
-        }, 100);
-        return;
-    }
-
-    try {
-        const bc = atob(base64);
-        const bn = new Array(bc.length);
-        for (let i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
-        const wavBlob = pcmToWav(new Uint8Array(bn), 24000);
-        if (state.audioBlobUrl) URL.revokeObjectURL(state.audioBlobUrl);
-        state.audioBlobUrl = URL.createObjectURL(wavBlob);
-        audioEl.src = state.audioBlobUrl;
-        audioEl.playbackRate = state.playbackSpeed;
-
-        const markAudioReady = () => {
-            state.audioReady = true;
-            setPlayerLoading(false);
-        };
-
-        if (audioEl.readyState >= 1 && audioEl.duration && !Number.isNaN(audioEl.duration)) {
-            markAudioReady();
-        } else {
-            audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
-            audioEl.addEventListener('error', () => {
-                state.audioReady = false;
-                setPlayerLoading(false);
-            }, { once: true });
-        }
-    } catch (e) {
-        console.error("解碼 Base64 失敗，強制轉為文字朗讀:", e);
         setPlayerLoading(false);
-        playTextWithTTS(base64, 'en-US');
+    };
+
+    if (audioEl.readyState >= 1 && audioEl.duration && !Number.isNaN(audioEl.duration)) {
+        markAudioReady();
+    } else {
+        audioEl.addEventListener('loadedmetadata', markAudioReady, { once: true });
+        audioEl.addEventListener('error', () => {
+            state.audioReady = false;
+            setPlayerLoading(false);
+        }, { once: true });
     }
 }
 
 export async function ensureAudioReady(timeoutMs = 8000) {
-    if (state.audioReady) return true;
-    
+    if (state.audioReady && audioEl.duration && !Number.isNaN(audioEl.duration)) return true;
     return new Promise((resolve) => {
         let done = false;
         const finish = (ok) => {
@@ -180,6 +110,8 @@ export async function ensureAudioReady(timeoutMs = 8000) {
     });
 }
 
+export { audioEl, playBtn, clearActiveSegmentState };
+
 /* Event bindings */
 btnSpeed.onclick = () => {
     speedIndex = (speedIndex + 1) % speeds.length;
@@ -192,25 +124,8 @@ btnSpeed.onclick = () => {
 playBtn.onclick = () => {
     state.playUntilPct = null;
     state.playUntilSegmentIndex = null;
-    
-    if (window.speechSynthesis && window.speechSynthesis.speaking) {
-        if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-            playBtn.innerHTML = ICONS.pause;
-        } else {
-            window.speechSynthesis.pause();
-            playBtn.innerHTML = ICONS.play;
-        }
-        return;
-    }
-    
-    if (audioEl.paused) { 
-        audioEl.play(); 
-        playBtn.innerHTML = ICONS.pause; 
-    } else { 
-        audioEl.pause(); 
-        playBtn.innerHTML = ICONS.play; 
-    }
+    if (audioEl.paused) { audioEl.play(); playBtn.innerHTML = ICONS.pause; }
+    else { audioEl.pause(); playBtn.innerHTML = ICONS.play; }
 };
 
 function clearPlayUntilState() {
@@ -259,18 +174,18 @@ progressContainer.onpointercancel = endProgressDrag;
 
 state.activeSegmentIndex = -1;
 
-export function updateActiveSegment(p) {
-    if (!state.segmentMetadata || state.segmentMetadata.length === 0) return;
+audioEl.ontimeupdate = () => {
+    const d = audioEl.duration;
+    if (!d || Number.isNaN(d)) return;
+    const p = audioEl.currentTime / d;
+    progressBar.style.width = `${p * 100}%`;
 
     if (state.playUntilPct !== null && p >= state.playUntilPct) {
-        const d = audioEl.duration;
-        if (d && !Number.isNaN(d)) {
-            const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
-            audioEl.currentTime = safeTime;
-        }
+        const safeTime = Math.max(0, (state.playUntilPct * d) - 0.01);
+        audioEl.currentTime = safeTime;
         audioEl.pause();
         playBtn.innerHTML = ICONS.play;
-        if (state.playUntilSegmentIndex !== null && state.playUntilSegmentIndex >= 0 && state.segmentMetadata[state.playUntilSegmentIndex]) {
+        if (state.playUntilSegmentIndex !== null && state.segmentMetadata[state.playUntilSegmentIndex]) {
             if (state.activeSegmentIndex >= 0 && state.activeSegmentIndex !== state.playUntilSegmentIndex && state.segmentMetadata[state.activeSegmentIndex]) {
                 state.segmentMetadata[state.activeSegmentIndex].element.classList.remove('active');
             }
@@ -294,14 +209,6 @@ export function updateActiveSegment(p) {
             state.segmentMetadata[idx].element.classList.add('active');
         state.activeSegmentIndex = idx;
     }
-}
-
-audioEl.ontimeupdate = () => {
-    const d = audioEl.duration;
-    if (!d || Number.isNaN(d)) return;
-    const p = audioEl.currentTime / d;
-    progressBar.style.width = `${p * 100}%`;
-    updateActiveSegment(p);
 };
 
 audioEl.onended = () => {

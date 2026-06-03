@@ -1,10 +1,8 @@
 // Live speaking session over Gemini native audio model (SDK mode).
 
-import { GoogleGenAI } from 'https://esm.run/@google/genai';
+import { GoogleGenAI, Modality } from 'https://esm.run/@google/genai';
 import { LIVE_AUDIO_MODEL, state } from './state.js';
 import { t } from './i18n.js';
-// 引入音訊播放器與停止控制，實現完全免費前端發音
-import { playTextWithTTS, stopAudio } from './audioPlayer.js';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 const MEDIA_RESOLUTION_LOW = 'MEDIA_RESOLUTION_LOW'; // ~66-70 tokens/image
@@ -19,12 +17,6 @@ let silentGainNode = null;
 let outputCtx = null;
 let nextPlayTime = 0;
 let destroyed = false;
-
-// 防回授麥克風鎖定開關
-let isMicTransmissionAllowed = true; 
-
-// 累積伺服器打字機文字的緩衝區
-let accumulativeTextBuffer = "";
 
 const listeners = {
     status: null,
@@ -152,12 +144,11 @@ async function connectLive(topic, score = 700, level = '') {
     const ai = new GoogleGenAI({ apiKey: state.apiKey });
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = t(levelConfig.labelKey);
-    
     const config = {
-        // 🌟 終極防護：改為原生字串 ["TEXT"]，跳脫 Modality.TEXT 可能為 undefined 的 SDK 崩潰風險
-        responseModalities: ["TEXT"],
+        responseModalities: [Modality.AUDIO],
         mediaResolution: MEDIA_RESOLUTION_LOW,
-        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
+        systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation.
+Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
 
 Conversation behavior:
 - Keep each assistant turn natural and not overly short, usually 2-4 sentences.
@@ -165,7 +156,6 @@ Conversation behavior:
 - Sound like a real conversation partner, not a textbook.
 - Every 3-4 learner turns, provide one brief improvement tip.
 - If the learner makes a clear error, give one short inline correction, then continue naturally.
-- Output strictly plain text format. Never attempt to stream binary audio bytes.
 
 Level policy:
 ${levelConfig.policy}
@@ -186,44 +176,22 @@ ${levelConfig.domains}`
             },
             onmessage: (message) => {
                 if (destroyed) return;
-                
-                // 若使用者主動中斷發言，停止播放目前的朗讀
                 if (message?.serverContent?.interrupted) {
-                    stopAudio();
+                    nextPlayTime = outputCtx ? outputCtx.currentTime : 0;
                 }
-                
                 const parts = message?.serverContent?.modelTurn?.parts || [];
-                
-                // 將收到的文字流進行拼接
-                for (const part of parts) {
-                    if (typeof part?.text === 'string' && part.text.trim()) {
-                        state.speakingState.isResponding = true;
-                        emitStatus(t('speakingAiResponding'));
-                        accumulativeTextBuffer += part.text;
-                    }
-                }
+                const textPart = parts.find(p => typeof p?.text === 'string' && p.text.trim());
+                if (textPart?.text) emitLog('ai', textPart.text);
 
-                // AI 回應完畢
+                const audioParts = parts.filter(p => p?.inlineData?.data);
+                if (audioParts.length > 0) {
+                    state.speakingState.isResponding = true;
+                    emitStatus(t('speakingAiResponding'));
+                    audioParts.forEach(part => playPcm16Chunk(part.inlineData.data, 24000));
+                }
                 if (message?.serverContent?.turnComplete) {
                     state.speakingState.isResponding = false;
-                    const finalOutputText = accumulativeTextBuffer.trim();
-                    accumulativeTextBuffer = "";
-
-                    if (finalOutputText) {
-                        emitLog('ai', finalOutputText); 
-                        
-                        // 鎖定麥克風傳輸，防止回授
-                        isMicTransmissionAllowed = false;
-
-                        // 呼叫前端 TTS 播放文字
-                        playTextWithTTS(finalOutputText, 'en-US', () => {
-                            // 播放完畢後解鎖麥克風
-                            isMicTransmissionAllowed = true;
-                            emitStatus(t('speakingWaitingUser'));
-                        });
-                    } else {
-                        emitStatus(t('speakingWaitingUser'));
-                    }
+                    emitStatus(t('speakingWaitingUser'));
                 }
             },
             onerror: (e) => {
@@ -255,8 +223,7 @@ Keep your first response warm, useful, and specific instead of too brief.`
 }
 
 function sendRealtimePcm(floatChunk) {
-    // 嚴格攔截：如果麥克風不被允許傳輸（例如喇叭正在發音），直接丟棄音訊包
-    if (!liveSession || destroyed || !isMicTransmissionAllowed) return; 
+    if (!liveSession || destroyed) return;
     const downsampled = downsampleTo16k(floatChunk, audioCtx.sampleRate);
     const pcm16 = floatToInt16(downsampled);
     liveSession.sendRealtimeInput({
@@ -335,10 +302,6 @@ export async function startSpeakingSession(input, callbacks = {}) {
     destroyed = false;
     state.speakingState.finalTopic = topic;
     state.speakingState.isResponding = false;
-    
-    // 初始化時允許傳輸
-    isMicTransmissionAllowed = true; 
-    accumulativeTextBuffer = ""; 
 
     await connectLive(topic, score, level);
     await setupMicStream();
@@ -347,7 +310,6 @@ export async function startSpeakingSession(input, callbacks = {}) {
 
 export async function stopSpeakingSession() {
     destroyed = true;
-    stopAudio(); 
     if (workletNode) {
         workletNode.port.onmessage = null;
         workletNode.disconnect();
@@ -367,7 +329,7 @@ export async function stopSpeakingSession() {
         silentGainNode = null;
     }
     if (audioCtx) {
-        try { await audioCtx.close(); } catch(e){}
+        await audioCtx.close();
         audioCtx = null;
     }
     if (mediaStream) {
@@ -375,13 +337,11 @@ export async function stopSpeakingSession() {
         mediaStream = null;
     }
     if (liveSession) {
-        try { liveSession.close(); } catch(e){}
+        liveSession.close();
         liveSession = null;
     }
     state.speakingState.isConnected = false;
     state.speakingState.isRecording = false;
     state.speakingState.isResponding = false;
-    isMicTransmissionAllowed = true;
-    accumulativeTextBuffer = "";
     emitConnected(false);
 }

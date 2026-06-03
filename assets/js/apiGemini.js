@@ -16,7 +16,7 @@ function parseJsonCandidateText(rawText) {
     return JSON.parse(cleaned);
 }
 
-// 帶有快速退避的高階自動重試機制
+// 帶有快速退避的高階自動重試機制 (已切除 15 秒延遲)
 async function fetchJsonFromPrompt(model, prompt, retries = 2) {
     for (let i = 0; i < retries; i++) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.apiKey}`, {
@@ -24,17 +24,15 @@ async function fetchJsonFromPrompt(model, prompt, retries = 2) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { 
-                    responseMimeType: "application/json",
-                    responseModalities: ["TEXT"] 
-                }
+                generationConfig: { responseMimeType: "application/json" }
             })
         });
 
         if (response.status === 429) {
             if (i === retries - 1) {
-                throw new Error("HTTP_429"); 
+                throw new Error("HTTP_429"); // 快速拋出錯誤代碼給外層處理
             }
+            // 極短暫退避：只等 2 秒就重試，不再傻等 15 秒
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
         }
@@ -73,6 +71,7 @@ export async function fetchWordDetails(word, forceFetch = false) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
     
+    // 🌟 核心升級：在 Prompt 中強制要求回傳同義字與反義字
     const prompt = `Explain the word "${word}" for a TOEIC student. Keep it concise like a vocabulary card. Output JSON strictly: {"word":"${word}","pos":"part of speech (e.g. n./v./adj.)","ipa":"IPA symbol","category":"Business/Legal/Finance/Marketing/HR/Tech/Travel/Life/Other","def":"Brief ${targetLang} definition (one short phrase)","ex":"One simple short English example sentence.","ex_zh":"${targetLang} translation of the example sentence","derivatives":"Comma-separated list of word family derivatives with their POS and brief ${targetLang} meaning, e.g. official (adj. 官方的), officially (adv. 官方地). If none, leave empty string.", "synonyms": "Comma-separated list of 1-2 most common synonyms with brief ${targetLang} meaning, e.g. purchase (購買). If none, leave empty.", "antonyms": "Provide exactly 1 common antonym with brief ${targetLang} meaning, e.g. sell (賣出). If none, leave empty."}`;
     
     const result = await fetchJsonFromPrompt(TEXT_MODEL, prompt);
@@ -256,28 +255,26 @@ export async function fetchExamWrongAnswerExplanations(payload) {
     return Array.isArray(result?.items) ? result.items : [];
 }
 
-export async function fetchTopicKeywords(topic) {
-    const locale = getLocaleMeta();
-    const targetLang = `${locale.name} (${locale.inLocal})`;
-
-    const prompt = `You are a TOEIC vocabulary planner. Generate 8 highly relevant core business vocabulary words or phrases related to the topic: "${topic}".
-    Output STRICT JSON ONLY matching this format:
-    {
-      "keywords": [
-        { "word": "word1", "def": "definition in ${targetLang}" },
-        { "word": "word2", "def": "definition in ${targetLang}" }
-      ]
-    }
-    Generate exactly 8 keywords. No markdown format blocks outside JSON.`;
-
-    return fetchJsonFromPrompt(TEXT_MODEL, prompt);
-}
-
-// 攔截原本的語音合成呼叫，直接返回純文字交給 audioPlayer.js 發音
 export async function fetchGeminiTTS(text, voiceName) {
-    return text;
-}
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${state.apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } })
+    });
+    
+    if (response.status === 429) {
+        throw new Error("語音功能請求太頻繁，請稍等幾秒後再點擊播放。");
+    }
 
+    const data = await response.json();
+    if (!response.ok || data?.error) {
+        const message = data?.error?.message || 'TTS failed';
+        const error = new Error(message);
+        error.code = data?.error?.code || response.status;
+        throw error;
+    }
+    return data.candidates[0].content.parts[0].inlineData.data;
+}
+// 生成 TOEIC Part 5, 6, 7 閱讀特訓題目
 export async function fetchAIPart567(part, score) {
     const locale = getLocaleMeta();
     const targetLang = `${locale.name} (${locale.inLocal})`;
