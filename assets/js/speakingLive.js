@@ -1,9 +1,10 @@
 // Live speaking session over Gemini native audio model (SDK mode).
 
-import { GoogleGenAI, Modality } from 'https://esm.run/@google/genai';
+import { GoogleGenAI } from 'https://esm.run/@google/genai';
 import { LIVE_AUDIO_MODEL, state } from './state.js';
 import { t } from './i18n.js';
-import { playTextWithTTS, stopAudio, unlockAudioOnIOS } from './audioPlayer.js';
+// 引入音訊播放器與停止控制，實現完全免費前端發音
+import { playTextWithTTS, stopAudio } from './audioPlayer.js';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 const MEDIA_RESOLUTION_LOW = 'MEDIA_RESOLUTION_LOW'; // ~66-70 tokens/image
@@ -18,8 +19,11 @@ let silentGainNode = null;
 let outputCtx = null;
 let nextPlayTime = 0;
 let destroyed = false;
+
+// 防回授麥克風鎖定開關
 let isMicTransmissionAllowed = true; 
 
+// 累積伺服器打字機文字的緩衝區
 let accumulativeTextBuffer = "";
 
 const listeners = {
@@ -148,9 +152,10 @@ async function connectLive(topic, score = 700, level = '') {
     const ai = new GoogleGenAI({ apiKey: state.apiKey });
     const levelConfig = getSpeakingLevelConfig(level, score);
     const levelLabel = t(levelConfig.labelKey);
+    
     const config = {
-        // 使用 TEXT 模式避免計費
-        responseModalities: [Modality.TEXT],
+        // 🌟 終極防護：改為原生字串 ["TEXT"]，跳脫 Modality.TEXT 可能為 undefined 的 SDK 崩潰風險
+        responseModalities: ["TEXT"],
         mediaResolution: MEDIA_RESOLUTION_LOW,
         systemInstruction: `You are a TOEIC live speaking coach in an interactive conversation. Learner level: ${levelConfig.promptLevel}. Topic: "${topic}".
 
@@ -181,11 +186,15 @@ ${levelConfig.domains}`
             },
             onmessage: (message) => {
                 if (destroyed) return;
+                
+                // 若使用者主動中斷發言，停止播放目前的朗讀
                 if (message?.serverContent?.interrupted) {
                     stopAudio();
                 }
+                
                 const parts = message?.serverContent?.modelTurn?.parts || [];
                 
+                // 將收到的文字流進行拼接
                 for (const part of parts) {
                     if (typeof part?.text === 'string' && part.text.trim()) {
                         state.speakingState.isResponding = true;
@@ -194,6 +203,7 @@ ${levelConfig.domains}`
                     }
                 }
 
+                // AI 回應完畢
                 if (message?.serverContent?.turnComplete) {
                     state.speakingState.isResponding = false;
                     const finalOutputText = accumulativeTextBuffer.trim();
@@ -201,9 +211,13 @@ ${levelConfig.domains}`
 
                     if (finalOutputText) {
                         emitLog('ai', finalOutputText); 
+                        
+                        // 鎖定麥克風傳輸，防止回授
                         isMicTransmissionAllowed = false;
 
+                        // 呼叫前端 TTS 播放文字
                         playTextWithTTS(finalOutputText, 'en-US', () => {
+                            // 播放完畢後解鎖麥克風
                             isMicTransmissionAllowed = true;
                             emitStatus(t('speakingWaitingUser'));
                         });
@@ -241,6 +255,7 @@ Keep your first response warm, useful, and specific instead of too brief.`
 }
 
 function sendRealtimePcm(floatChunk) {
+    // 嚴格攔截：如果麥克風不被允許傳輸（例如喇叭正在發音），直接丟棄音訊包
     if (!liveSession || destroyed || !isMicTransmissionAllowed) return; 
     const downsampled = downsampleTo16k(floatChunk, audioCtx.sampleRate);
     const pcm16 = floatToInt16(downsampled);
@@ -314,15 +329,14 @@ export async function startSpeakingSession(input, callbacks = {}) {
     if (!topic) throw new Error(t('alertSelectTopicFirst'));
     if (liveSession || mediaStream) await stopSpeakingSession();
 
-    // 觸發 iOS 語音解鎖
-    unlockAudioOnIOS();
-
     listeners.status = callbacks.onStatus || null;
     listeners.log = callbacks.onLog || null;
     listeners.connected = callbacks.onConnected || null;
     destroyed = false;
     state.speakingState.finalTopic = topic;
     state.speakingState.isResponding = false;
+    
+    // 初始化時允許傳輸
     isMicTransmissionAllowed = true; 
     accumulativeTextBuffer = ""; 
 

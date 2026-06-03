@@ -5,7 +5,8 @@ import { speakText } from './utils.js';
 import { DB } from './db.js';
 import { fetchGeminiText, fetchGeminiTTS, fetchExamQuestions, fetchExamWrongAnswerExplanations, fetchAIPart567 } from './apiGemini.js';
 import { DriveSync } from './driveSync.js';
-import { setupAudio } from './audioPlayer.js';
+// 引入 unlockAudioOnIOS 以解鎖設備限制
+import { setupAudio, unlockAudioOnIOS } from './audioPlayer.js';
 import { renderContent, toggleEnglish, toggleTranslation, updateToggleButtons } from './render.js';
 import { closeModal, renderVocabTab, setSrsTrigger, setVocabSubtab, handleLookupSearch } from './vocab.js';
 import { startSrsReview, closeSrsReview, finishSrsReview, setOnFinish } from './srs.js';
@@ -17,7 +18,6 @@ import { flattenExamQuestions, renderExamQuestions, gradeExam, buildWrongPayload
 import { SUPPORTED_LOCALES, applyTranslations, detectBrowserLocale, getLocale, setLocale, t } from './i18n.js';
 import { initSpecialTraining } from './specialTraining.js'; 
 
-// 處理分數選擇 UI
 document.querySelectorAll('.reading-score-chip').forEach(btn => {
     btn.addEventListener('click', (e) => {
         document.querySelectorAll('.reading-score-chip').forEach(b => b.classList.remove('active'));
@@ -25,31 +25,22 @@ document.querySelectorAll('.reading-score-chip').forEach(btn => {
     });
 });
 
-// 獲取本地題庫的輔助函式 (終極無敵防呆版：無視模組牆壁)
 async function getLocalQuestions(part) {
-    // 1. 先嘗試直接讀取 (如果環境允許)
     try {
         if (part === '5' && typeof Q_P5_T01 !== 'undefined') return Q_P5_T01;
         if (part === '6' && typeof Q_P6_T01 !== 'undefined') return Q_P6_T01;
         if (part === '7' && typeof Q_P7_T01 !== 'undefined') return Q_P7_T01;
-    } catch (e) {} // 忽略找不到的錯誤
+    } catch (e) {}
 
-    // 2. 主動去抓 questions.js 檔案並強制寫入全域變數
     try {
         const res = await fetch('./questions.js');
         if (!res.ok) throw new Error('無法讀取檔案');
         const text = await res.text();
-        
-        // 將 const 替換成 window. 變數，強行突破作用域限制
         const safeText = text.replace(/(?:const|let|var)\s+(Q_P[567]_[A-Z0-9_]+)\s*=/g, 'window.$1 =');
-        
         const script = document.createElement('script');
         script.textContent = safeText;
         document.head.appendChild(script);
-
-        // 給瀏覽器一點點時間消化
         await new Promise(r => setTimeout(r, 50));
-        
         if (part === '5') return window.Q_P5_T01;
         if (part === '6') return window.Q_P6_T01;
         if (part === '7') return window.Q_P7_T01;
@@ -59,10 +50,10 @@ async function getLocalQuestions(part) {
     }
 }
 
-// 開始閱讀特訓
 const btnStartReading = document.getElementById('btnStartReading');
 if (btnStartReading) {
     btnStartReading.addEventListener('click', async () => {
+        unlockAudioOnIOS(); // 解鎖語音通道
         const partSelect = document.getElementById('readingPartSelect').value;
         const sourceSelect = document.getElementById('readingSourceSelect').value; 
         const scoreSelect = document.querySelector('.reading-score-chip.active')?.dataset.score || '750';
@@ -87,7 +78,6 @@ if (btnStartReading) {
                     explanationSeed: q.explanationSeed
                 }));
             } else {
-                // 本地題庫模式
                 const localQ = await getLocalQuestions(partSelect);
                 if (!localQ) throw new Error("找不到題庫資料，請確認 questions.js 在專案根目錄。");
 
@@ -125,7 +115,6 @@ if (btnStartReading) {
                 }
             }
 
-            // 寫入系統狀態
             state.examState = {
                 questions: finalQuestions,
                 answers: {},
@@ -134,17 +123,14 @@ if (btnStartReading) {
                 topic: `閱讀特訓 Part ${partSelect}`
             };
 
-            // 切換畫面：隱藏設定區，呼叫介面切換並跳轉至學習分頁
             if (configView) configView.classList.add('hidden');
             setLearnRuntimeMode('exam');
             switchTab('learn'); 
             
-            // 渲染題目
             document.getElementById('examMeta').innerHTML = `<span class="exam-title">閱讀特訓 Part ${partSelect} (${sourceSelect === 'ai' ? 'AI 生成' : '本地題庫'})</span>`;
             const examContent = document.getElementById('examContent');
             renderExamQuestions(examContent, state.examState.questions, state.examState.answers);
 
-            // 設定交卷按鈕
             const examActions = document.getElementById('examActions');
             examActions.innerHTML = `<button class="generate-btn" style="background: #10b981;" id="btnSubmitReadingExam">交卷並看解析</button>`;
             
@@ -179,11 +165,10 @@ if (btnStartReading) {
                 
                 examActions.innerHTML = `<button class="generate-btn" id="btnExitReadingExam">結束特訓，回設定頁</button>`;
                 
-                // 修復卡住問題：重新綁定乾淨的退出邏輯
                 document.getElementById('btnExitReadingExam').addEventListener('click', () => {
                     examContent.innerHTML = '';
                     examActions.innerHTML = '';
-                    state.examState = { questions: [], answers: {}, result: null }; // 清空狀態
+                    state.examState = { questions: [], answers: {}, result: null }; 
                     
                     setLearnRuntimeMode('article'); 
                     switchTab('practice'); 
@@ -210,7 +195,6 @@ if (btnStartReading) {
     });
 }
 
-// 處理 Practice Tab 面板切換的擴充
 document.querySelectorAll('.practice-mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const mode = e.target.dataset.mode;
@@ -897,6 +881,7 @@ document.querySelectorAll('#speakingPresetGroup .topic-chip').forEach(chip => {
 });
 
 document.getElementById('btnStartSpeaking').onclick = async () => {
+    unlockAudioOnIOS(); // iOS 語音解鎖
     try {
         const custom = document.getElementById('speakingCustomTopic').value.trim();
         state.speakingState.customTopic = custom;
@@ -1110,6 +1095,7 @@ async function handleExplainWrongAnswers() {
 }
 
 EXAM_BTN.onclick = async () => {
+    unlockAudioOnIOS(); // iOS 語音解鎖
     if (!state.apiKey) return alert(t('alertSetApiKeyFirst'));
     const finishLoading = setButtonLoading(EXAM_BTN, t('loadingGeneratingQuestions'));
     try {
@@ -1145,6 +1131,10 @@ EXAM_BTN.onclick = async () => {
 EXAM_CONTENT.onclick = async (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
+    
+    // 不管點擊什麼，先解鎖 iOS 語音通道，防止靜音
+    unlockAudioOnIOS();
+
     const action = btn.dataset.action;
     const id = btn.dataset.id;
     if (action === 'review-listen') {
@@ -1199,6 +1189,7 @@ document.getElementById('btnExamBack').onclick = () => showExamConfigView();
 const GENERATE_BTN = document.getElementById('btnGenerate');
 
 GENERATE_BTN.onclick = async () => {
+    unlockAudioOnIOS(); // iOS 語音解鎖
     if (!state.apiKey) return alert(t('alertSetApiKeyFirst'));
     const finishLoading = setButtonLoading(GENERATE_BTN, t('loadingGenerating'));
     document.getElementById('learningArea').classList.add('hidden');
@@ -1220,8 +1211,11 @@ GENERATE_BTN.onclick = async () => {
 
         renderContent(contentData, voiceName);
         setLearnRuntimeMode('article');
+        
+        // 取得純文字並呼叫本機播放
         const audioBase64 = await fetchGeminiTTS(contentData.article, voiceName);
         setupAudio(audioBase64);
+        
         const articleRecord = await saveToHistory(contentData, audioBase64, voiceName, customTopic);
         markLearnRecord(articleRecord?.id ? { id: articleRecord.id, type: 'article', fromHistory: false } : null);
         
@@ -1243,7 +1237,6 @@ GENERATE_BTN.onclick = async () => {
     try {
         await DB.init();
         
-        // 🌟 呼叫完美回歸的初始化器
         initSpecialTraining();
 
         await renderDailyDashboard();

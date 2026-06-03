@@ -14,22 +14,31 @@ export function toLowerWord(word) {
 }
 
 function getRandomToeicVoice() {
-    if (!('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return null;
-    
-    const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
-    
-    const englishVoices = voices.filter(v => {
-        if (!v.lang.startsWith('en')) return false;
-        const nameLower = String(v.name).toLowerCase();
-        const uriLower = String(v.voiceURI || '').toLowerCase();
-        return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
-    });
-    
-    if (englishVoices.length > 0) {
-        return englishVoices[Math.floor(Math.random() * englishVoices.length)];
+    // 🌟 終極防護：檢查 getVoices 是否真的是一個 function，防止 iOS PWA 模式下崩潰
+    if (!('speechSynthesis' in window) || typeof window.speechSynthesis.getVoices !== 'function') {
+        return null; 
     }
+    
+    try {
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) return null;
+        
+        const jokeVoices = ['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'junior', 'pipe organ', 'princess', 'trinoids', 'whisper', 'zarvox', 'fred', 'ralph', 'superstar', 'jester', 'organ', 'kathy', 'novelty'];
+        
+        const englishVoices = voices.filter(v => {
+            if (!v.lang.startsWith('en')) return false;
+            const nameLower = String(v.name).toLowerCase();
+            const uriLower = String(v.voiceURI || '').toLowerCase();
+            return !jokeVoices.some(joke => nameLower.includes(joke) || uriLower.includes(joke));
+        });
+        
+        if (englishVoices.length > 0) {
+            return englishVoices[Math.floor(Math.random() * englishVoices.length)];
+        }
+    } catch (e) {
+        console.warn("Failed to get voices:", e);
+    }
+    
     return null;
 }
 
@@ -37,21 +46,25 @@ function getRandomToeicVoice() {
 export function speakText(text, lang = 'en-US') {
     if (!text || !('speechSynthesis' in window)) return;
     
-    window.speechSynthesis.cancel();
-    // 移除 HTML 標籤
-    const cleanText = text.replace(/<[^>]*>?/gm, '');
-    
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = lang;
-    
-    // 如果是英文，試著給一個好聽的口音
-    if (lang.startsWith('en')) {
-        const voice = getRandomToeicVoice();
-        if (voice) utterance.voice = voice;
+    try {
+        window.speechSynthesis.cancel();
+        // 移除 HTML 標籤
+        const cleanText = text.replace(/<[^>]*>?/gm, '');
+        
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = lang;
+        
+        // 如果是英文，試著給一個好聽的口音
+        if (lang.startsWith('en')) {
+            const voice = getRandomToeicVoice();
+            if (voice) utterance.voice = voice;
+        }
+        
+        // 語速稍微放慢適合學習
+        utterance.rate = 0.9;
+        
+        window.speechSynthesis.speak(utterance);
+    } catch (e) {
+        console.error("Speech Synthesis Failed:", e);
     }
-    
-    // 語速稍微放慢適合學習
-    utterance.rate = 0.9;
-    
-    window.speechSynthesis.speak(utterance);
 }

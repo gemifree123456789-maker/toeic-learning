@@ -82,7 +82,7 @@ export function playTextWithTTS(text, langCode = 'en-US', onEndCallback = null) 
     window.speechSynthesis.speak(utterance);
 }
 
-// iOS 語音解鎖機制
+// iOS 語音解鎖機制：必須在按鈕點擊事件的最開頭呼叫
 export function unlockAudioOnIOS() {
     if ('speechSynthesis' in window) {
         const u = new SpeechSynthesisUtterance('');
@@ -110,15 +110,16 @@ export function setupAudio(base64) {
     audioEl.pause();
     progressBar.style.width = '0%';
 
-    // 終極防護：精準判斷是否為純文字。Base64 不會包含空白，若包含即為文字。
-    const isText = base64.includes(' ') || !/^[A-Za-z0-9+/=]+$/.test(base64.replace(/\s/g, ''));
+    // 【終極防護】：改用字串長度精準判斷是否為純文字。
+    // PCM 轉出來的 Base64 長度動輒數萬起跳，而英文句子不可能大於 15000 字元。
+    // 這徹底解決了單字 (如 "apple") 被誤認為 Base64 導致 atob 崩潰的 Invalid string length 錯誤。
+    const isText = base64.length < 15000;
 
     if (isText) {
         setPlayerLoading(false);
         state.audioReady = true;
         playTextWithTTS(base64, 'en-US');
         
-        // 模擬音訊準備就緒，讓 UI 不會卡在載入中
         setTimeout(() => {
             const event = new Event('loadedmetadata');
             audioEl.dispatchEvent(event);
@@ -158,7 +159,7 @@ export function setupAudio(base64) {
 }
 
 export async function ensureAudioReady(timeoutMs = 8000) {
-    if (state.audioReady) return true; // 若是 TTS 模式會立刻返回 true
+    if (state.audioReady) return true;
     
     return new Promise((resolve) => {
         let done = false;
@@ -192,7 +193,6 @@ playBtn.onclick = () => {
     state.playUntilPct = null;
     state.playUntilSegmentIndex = null;
     
-    // 如果目前正在用 speechSynthesis 播放
     if (window.speechSynthesis && window.speechSynthesis.speaking) {
         if (window.speechSynthesis.paused) {
             window.speechSynthesis.resume();
