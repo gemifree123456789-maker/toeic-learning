@@ -13,7 +13,7 @@ let _filterLv0 = false;
 let _filterPinned = false; 
 let _isUpgrading = false; 
 
-// 🌟 全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
+// 🌟 新增：全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
 let _searchQuery = ''; 
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwviQPFD4mpuK1w-nOjJe2Oeo_WAL2le_xLevZLY1Z2hJK8UWpJUctjihTLKLNU21Wh/exec";
@@ -496,10 +496,11 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
+// 🌟 新增：監聽搜尋框的「即時輸入」事件 (Live Filter)
 document.addEventListener('input', (event) => {
     if (event.target && event.target.id === 'vocabSearchInput') {
-        _searchQuery = event.target.value.trim(); 
-        renderVocabTab(); 
+        _searchQuery = event.target.value.trim(); // 更新全域搜尋字串
+        renderVocabTab(); // 重新觸發畫面渲染
     }
 });
 
@@ -516,13 +517,7 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        // 🌟 強化版判定邏輯：
-        // 只要完全沒有 synonyms 屬性，或是沒有音標 (代表從未被 AI 解析過，試算表匯入的單字必中此條件)
-        let targets = words.filter(w => {
-            const noSynProp = typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined';
-            const noIpa = !w.ipa || w.ipa === '';
-            return noSynProp || noIpa;
-        });
+        let targets = words.filter(w => typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined');
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
@@ -689,6 +684,7 @@ export async function renderVocabTab() {
         });
     }
 
+    // 🌟 新增：即時搜尋過濾邏輯 (比對英文或中文)
     if (_searchQuery) {
         const q = _searchQuery.toLowerCase();
         displayWords = displayWords.filter(w => {
@@ -702,6 +698,7 @@ export async function renderVocabTab() {
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
+        // 如果是因為搜尋找不到，給予不同的提示
         if (_searchQuery) emptyMsg = '找不到包含此關鍵字的單字喔！';
         else if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
         
@@ -861,7 +858,10 @@ function handleGlobalSelection(e) {
 
     setTimeout(() => {
         const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) return;
+        if (!selection || selection.isCollapsed) {
+            aiFloatingBtn.style.display = 'none';
+            return;
+        }
         
         const selectedText = selection.toString().trim();
         const wordRegex = /^[a-zA-Z\-']{2,35}$/;
