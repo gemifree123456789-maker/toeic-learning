@@ -13,7 +13,7 @@ let _filterLv0 = false;
 let _filterPinned = false; 
 let _isUpgrading = false; 
 
-// 🌟 新增：全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
+// 🌟 全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
 let _searchQuery = ''; 
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwviQPFD4mpuK1w-nOjJe2Oeo_WAL2le_xLevZLY1Z2hJK8UWpJUctjihTLKLNU21Wh/exec";
@@ -496,11 +496,10 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🌟 新增：監聽搜尋框的「即時輸入」事件 (Live Filter)
 document.addEventListener('input', (event) => {
     if (event.target && event.target.id === 'vocabSearchInput') {
-        _searchQuery = event.target.value.trim(); // 更新全域搜尋字串
-        renderVocabTab(); // 重新觸發畫面渲染
+        _searchQuery = event.target.value.trim(); 
+        renderVocabTab(); 
     }
 });
 
@@ -517,13 +516,18 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        let targets = words.filter(w => typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined');
+        // 🌟 終極精準判定：只抓「完全沒有例句」或「從未有同義字屬性」的生肉單字，放過沒有音標的舊字！
+        let targets = words.filter(w => {
+            const noSynProp = typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined';
+            const noExample = !w.ex || String(w.ex).trim() === '';
+            return noSynProp || noExample;
+        });
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個尚未升級微標籤的舊單字。\n\n⚠️ 系統已啟動「極速清洗模式」：\n1. 過程中隨時可以再點擊按鈕「暫停」。\n2. 為了避免 1400 多字導致 Google 斷線，系統【不會自動備份】。\n\n確定要開始嗎？`;
+        const confirmMsg = `發現 ${targets.length} 個尚未升級微標籤的新單字。\n\n⚠️ 系統已啟動「極速清洗模式」：\n1. 過程中隨時可以再點擊按鈕「暫停」。\n2. 請在清洗完畢後手動備份以保證進度安全。\n\n確定要開始嗎？`;
         if (!confirm(confirmMsg)) return;
 
         _isUpgrading = true;
@@ -684,7 +688,6 @@ export async function renderVocabTab() {
         });
     }
 
-    // 🌟 新增：即時搜尋過濾邏輯 (比對英文或中文)
     if (_searchQuery) {
         const q = _searchQuery.toLowerCase();
         displayWords = displayWords.filter(w => {
@@ -698,7 +701,6 @@ export async function renderVocabTab() {
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
-        // 如果是因為搜尋找不到，給予不同的提示
         if (_searchQuery) emptyMsg = '找不到包含此關鍵字的單字喔！';
         else if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
         
