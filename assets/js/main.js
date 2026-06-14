@@ -1386,3 +1386,77 @@ document.addEventListener('DOMContentLoaded', () => {
         observer.observe(userArea, { attributes: true, attributeFilter: ['class'] });
     }
 });
+// ====== 🚀 增量升級單字邏輯 (防重複掃描) ======
+const btnUpgrade = document.getElementById('btnBatchUpgradeDeriv');
+if (btnUpgrade) {
+    // 使用 onclick 覆蓋先前的任何綁定
+    btnUpgrade.onclick = async () => {
+        if (!window.DB) return alert("資料庫尚未載入");
+        const allWords = await DB.getSavedWords();
+        
+        // 🎯 核心過濾條件：只挑出「缺少 def (定義)」或「缺少 ex_zh (例句翻譯)」的單字
+        // 這樣 1786 個已經清洗過、資料完整的舊單字就會被直接跳過
+        const wordsToUpgrade = allWords.filter(w => {
+            return !w.def || !w.ex_zh || w.def === ''; 
+        });
+
+        if (wordsToUpgrade.length === 0) {
+            alert("🎉 掃描完畢！目前所有單字都已經有完整資料，沒有需要升級的新單字。");
+            return;
+        }
+
+        const confirmUpgrade = confirm(`掃描完畢！發現 ${wordsToUpgrade.length} 個尚未填齊資料的新單字。\n是否立即使用 AI 進行批量擴充？\n(系統將自動跳過 1786 個舊單字，僅針對新單字消耗 API)`);
+        if (!confirmUpgrade) return;
+
+        btnUpgrade.disabled = true;
+        const originalText = btnUpgrade.innerHTML;
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < wordsToUpgrade.length; i++) {
+            const wordObj = wordsToUpgrade[i];
+            const wordStr = wordObj.en || wordObj.id;
+            
+            // 更新按鈕文字，顯示處理進度
+            btnUpgrade.innerHTML = `⏳ 升級中 (${i + 1}/${wordsToUpgrade.length})...`;
+
+            try {
+                // 強制呼叫 API 獲取完整資料 (設定 forceFetch = true 繞過快取)
+                const { fetchWordDetails } = await import('./apiGemini.js');
+                const aiData = await fetchWordDetails(wordStr, true);
+
+                // 將 AI 生成的豐滿資料，與單字原本的 SRS 複習進度合併
+                const updatedWord = {
+                    ...wordObj,
+                    pos: aiData.pos || wordObj.pos || '',
+                    ipa: aiData.ipa || wordObj.ipa || '',
+                    def: aiData.def || wordObj.def || '',
+                    ex: aiData.ex || wordObj.ex || '',
+                    ex_zh: aiData.ex_zh || wordObj.ex_zh || '',
+                    derivatives: aiData.derivatives || wordObj.derivatives || [],
+                    synonyms: aiData.synonyms || wordObj.synonyms || [],
+                    antonyms: aiData.antonyms || wordObj.antonyms || [],
+                };
+
+                await DB.addSavedWord(updatedWord);
+                successCount++;
+                
+                // 暫停 1.5 秒，避免觸發 Gemini API 每分鐘請求上限 (HTTP 429 Error)
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+            } catch (err) {
+                console.error(`升級 ${wordStr} 失敗:`, err);
+                failCount++;
+            }
+        }
+
+        alert(`✅ 升級完成！\n成功擴充：${successCount} 個\n失敗：${failCount} 個\n\n💡 溫馨提示：請記得前往「設定」點擊「☁️ 立即備份」，將這些新單字同步至雲端，以便手機端還原！`);
+        
+        btnUpgrade.disabled = false;
+        btnUpgrade.innerHTML = originalText;
+        
+        // 重新整理畫面以顯示最新資料
+        location.reload();
+    };
+}
