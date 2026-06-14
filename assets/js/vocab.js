@@ -635,6 +635,7 @@ export async function refreshSrsBanner(allWords) {
         card.onclick = () => { if (_startSrsReview) _startSrsReview(dueWords, allWords); };
         entryEl.appendChild(card);
     }
+}
 
     const lv5Words = allWords.filter(w => w.level >= SRS_INTERVALS.length - 1);
     if (lv5Words.length > 0) {
@@ -660,7 +661,7 @@ export async function renderVocabTab() {
         }
     }
 
-    const filterSelect = document.getElementById('posFilterSelect');
+   const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
     if (filterSelect && !document.getElementById('btnFilterLv0')) {
@@ -673,14 +674,17 @@ export async function renderVocabTab() {
         const btnPinned = document.createElement('button');
         btnPinned.id = 'btnFilterPinned';
         btnPinned.innerHTML = '📌 挑選';
-        btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnPinned.onclick = () => { _filterPinned = !_filterPinned; renderVocabTab(); };
         
-        filterSelect.parentNode.insertBefore(btnLv0, filterSelect);
-        filterSelect.parentNode.insertBefore(btnPinned, filterSelect);
-        filterSelect.parentNode.style.display = 'flex';
-        filterSelect.parentNode.style.alignItems = 'center';
-        filterSelect.parentNode.style.marginBottom = '20px';
+        // 🌟 修正點：建立專屬的 Flex 容器包裝這些過濾器，設定 flex-wrap 避免與搜尋列擠壓
+        const filterGroup = document.createElement('div');
+        filterGroup.style.cssText = 'display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; width: 100%; margin-top: 8px;';
+        
+        filterSelect.parentNode.insertBefore(filterGroup, filterSelect);
+        filterGroup.appendChild(btnLv0);
+        filterGroup.appendChild(btnPinned);
+        filterGroup.appendChild(filterSelect);
     }
 
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
