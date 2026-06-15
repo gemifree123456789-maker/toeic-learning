@@ -54,11 +54,31 @@ function playRobustEnglishSound(text) {
     window.speechSynthesis.speak(utterance);
 }
 
-function formatDerivText(text) {
+// 🌟 開放全域函數，供動態 HTML 按鈕呼叫發音
+window.playVocabAudio = function(text) {
+    playRobustEnglishSound(text);
+};
+
+// 🌟 核心修正：將純文字的衍生字升級為帶有發音按鈕的 HTML 結構
+function formatDerivHtml(text) {
     let tStr = String(text || '').trim();
     if (!tStr) return '';
-    if (tStr.includes('\n')) return tStr;
-    return tStr.replace(/\), ?/g, ')\n');
+    const lines = tStr.split(/(?:\n|,\s)/).map(s => s.trim()).filter(s => s);
+    let html = '';
+    lines.forEach(line => {
+        // 利用正則表達式抓取最前面的英文單字
+        const match = line.match(/^[a-zA-Z\-']+/);
+        const word = match ? match[0].replace(/'/g, "\\'") : '';
+        if (word) {
+            html += `<div style="display:flex; align-items:flex-start; margin-top:4px;">
+                        <span>${line}</span>
+                        <button class="mini-speaker" style="margin-left:6px; flex-shrink:0;" onclick="event.stopPropagation(); window.playVocabAudio('${word}')">${ICONS.speaker}</button>
+                     </div>`;
+        } else {
+            html += `<div style="margin-top:4px;">${line}</div>`;
+        }
+    });
+    return html;
 }
 
 function formatRelWordsHtml(synonyms, antonyms) {
@@ -72,14 +92,22 @@ function formatRelWordsHtml(synonyms, antonyms) {
     if (synStr) {
         const synList = synStr.split(',').map(s => s.trim()).filter(s => s);
         synList.forEach(s => {
-            html += `<span style="background-color: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #bbf7d0;">= ${s}</span>`;
+            const safeWord = s.replace(/'/g, "\\'");
+            html += `<span style="display:inline-flex; align-items:center; background-color: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #bbf7d0;">
+                        = ${s}
+                        <button class="mini-speaker" style="margin-left:4px; margin-top:-1px; flex-shrink:0;" onclick="event.stopPropagation(); window.playVocabAudio('${safeWord}')">${ICONS.speaker}</button>
+                     </span>`;
         });
     }
 
     if (antStr) {
         const antList = antStr.split(',').map(a => a.trim()).filter(a => a);
         antList.forEach(a => {
-            html += `<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #fecaca;">↔ ${a}</span>`;
+            const safeWord = a.replace(/'/g, "\\'");
+            html += `<span style="display:inline-flex; align-items:center; background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 500; border: 1px solid #fecaca;">
+                        ↔ ${a}
+                        <button class="mini-speaker" style="margin-left:4px; margin-top:-1px; flex-shrink:0;" onclick="event.stopPropagation(); window.playVocabAudio('${safeWord}')">${ICONS.speaker}</button>
+                     </span>`;
         });
     }
 
@@ -207,9 +235,10 @@ function showWordModal(word) {
                 document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${relHtml}</div>`);
             }
 
-            const derivText = formatDerivText(vocabItem.derivatives || vocabItem.deriv);
-            if (derivText) {
-                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>`);
+            // 🌟 將彈窗內的衍生字替換為帶按鈕的 formatDerivHtml
+            const derivHtmlContent = formatDerivHtml(vocabItem.derivatives || vocabItem.deriv);
+            if (derivHtmlContent) {
+                document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b>\n${derivHtmlContent}</div>`);
             }
 
             if (vocabItem.ex || vocabItem.exEn) {
@@ -255,9 +284,10 @@ function showWordModal(word) {
                         document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmRelWords" style="margin-top:8px;">${newRelHtml}</div>`);
                     }
 
-                    const derivGenText = formatDerivText(info.derivatives);
-                    if (derivGenText) {
-                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivGenText}</div>`);
+                    // 🌟 同步更新 AI 即時產生出來的衍生字區域
+                    const derivGenHtml = formatDerivHtml(info.derivatives);
+                    if (derivGenHtml) {
+                        document.getElementById('wmDef').insertAdjacentHTML('afterend', `<div id="wmDeriv" style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; margin-bottom:8px; line-height:1.5;">💡 <b>衍生字：</b>\n${derivGenHtml}</div>`);
                     }
 
                     document.getElementById('wmExText').innerText = info.ex;
@@ -404,9 +434,9 @@ function renderLookupResultCard() {
     
     const relHtml = formatRelWordsHtml(item.synonyms || item.syn, item.antonyms || item.ant);
 
-    const derivText = formatDerivText(item.derivatives || item.deriv);
-    const derivHtml = derivText 
-        ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` 
+    const derivHtmlContent = formatDerivHtml(item.derivatives || item.deriv);
+    const derivHtml = derivHtmlContent 
+        ? `<div style="font-size:13px; color:#4b5563; background:#f3f4f6; padding:8px; border-radius:6px; margin-top:8px; line-height:1.5;">💡 <b>衍生字：</b>\n${derivHtmlContent}</div>` 
         : '';
 
     card.innerHTML = `
@@ -422,7 +452,7 @@ function renderLookupResultCard() {
         <div class="saved-word-zh">${item.def || item.zh || ''}</div>
         ${relHtml}
         ${derivHtml}
-        ${item.ex ? `<div class="vocab-lookup-ex">${item.ex} <button class="mini-speaker" data-action="speak-ex">${ICONS.speaker}</button></div>` : ''}
+        ${item.ex ? `<div class="vocab-lookup-ex" style="display:flex; align-items:flex-start;"><span>${item.ex}</span> <button class="mini-speaker" data-action="speak-ex" style="margin-left:6px; flex-shrink:0;">${ICONS.speaker}</button></div>` : ''}
         ${item.ex_zh ? `<div class="vocab-ex-zh">${item.ex_zh}</div>` : ''}
         <div id="vocabLookupActionArea" class="wm-actions" style="margin-top:10px;"></div>
     `;
@@ -515,7 +545,6 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        // 找出可能需要升級的生肉單字
         let targets = words.filter(w => {
             const noSyn = !w.synonyms && !w.syn;
             const noEx = !w.ex || String(w.ex).trim() === '';
@@ -527,10 +556,8 @@ document.addEventListener('click', async (event) => {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        // 🌟 關鍵 1：依據建立時間「由新到舊」排序
         targets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
-        // 🌟 關鍵 2：讓使用者輸入要升級的數量，精準鎖定最新加入的單字
         let processCount = targets.length;
         if (targets.length > 20) {
             const userInput = prompt(
@@ -551,7 +578,6 @@ document.addEventListener('click', async (event) => {
             if (!confirm(`發現 ${targets.length} 個最新加入的單字需要 AI 升級。\n確定要開始嗎？`)) return;
         }
 
-        // 裁切陣列，只處理使用者指定的數量
         targets = targets.slice(0, processCount);
 
         _isUpgrading = true;
@@ -614,7 +640,6 @@ document.addEventListener('click', async (event) => {
     }
 });
 
-// 🌟 修正點 1：移除了 lv5Words 清除熟練單字按鈕的邏輯
 export async function refreshSrsBanner(allWords) {
     const entryEl = document.getElementById('srsReviewEntry');
     if (!entryEl) return;
@@ -650,7 +675,7 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-   if (filterSelect && !document.getElementById('btnFilterLv0')) {
+    if (filterSelect && !document.getElementById('btnFilterLv0')) {
         const btnLv0 = document.createElement('button');
         btnLv0.id = 'btnFilterLv0';
         btnLv0.innerHTML = '⭐ 待加強';
@@ -663,7 +688,6 @@ export async function renderVocabTab() {
         btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnPinned.onclick = () => { _filterPinned = !_filterPinned; renderVocabTab(); };
         
-        // 🌟 核心修正：加入 width: 100% 與 margin-top: 8px，強制桌機版斷行並製造上下呼吸空間
         const filterGroup = document.createElement('div');
         filterGroup.style.cssText = 'display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; width: 100%; margin-top: 8px;';
         
@@ -672,6 +696,7 @@ export async function renderVocabTab() {
         filterGroup.appendChild(btnPinned);
         filterGroup.appendChild(filterSelect);
     }
+
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
     if (btnFilterLv0) {
         if (_filterLv0) { btnFilterLv0.style.background = '#fef3c7'; btnFilterLv0.style.borderColor = '#fbbf24'; btnFilterLv0.style.color = '#b45309'; } 
@@ -740,12 +765,15 @@ export async function renderVocabTab() {
 
         const relHtml = formatRelWordsHtml(w.synonyms || w.syn, w.antonyms || w.ant);
 
-        const derivText = formatDerivText(w.deriv || w.derivatives);
-        const derivHtml = derivText ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4; white-space: pre-wrap;">💡 <b>衍生字：</b>\n${derivText}</div>` : '';
+        // 🌟 單字列表：升級衍生字為 HTML 結構，插入小喇叭
+        const derivHtmlContent = formatDerivHtml(w.deriv || w.derivatives);
+        const derivHtml = derivHtmlContent ? `<div style="font-size:12px; color:#4b5563; background:#f3f4f6; padding:6px; border-radius:4px; margin-bottom:8px; line-height:1.4;">💡 <b>衍生字：</b>\n${derivHtmlContent}</div>` : '';
         
+        // 🌟 單字列表：為例句插入專屬小喇叭，並設定 flex 防止排版擠壓
         const rawEx = w.ex || w.exEn || '';
         const rawExZh = w.ex_zh || w.exZh || '';
-        const exHtml = rawEx ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic;">${rawEx}</div>` : '';
+        const safeEx = rawEx.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const exHtml = rawEx ? `<div style="font-size:13px; color:#374151; margin-bottom:4px; font-style:italic; display:flex; align-items:flex-start;"><span>${rawEx}</span> <button class="mini-speaker" style="margin-left:6px; flex-shrink:0;" onclick="event.stopPropagation(); window.playVocabAudio('${safeEx}')">${ICONS.speaker}</button></div>` : '';
         const exZhHtml = rawExZh ? `<div style="font-size:12px; color:#6b7280;">${rawExZh}</div>` : '';
         
         const hasExtraInfo = relHtml || derivHtml || exHtml || exZhHtml;
