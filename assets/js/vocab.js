@@ -13,7 +13,6 @@ let _filterLv0 = false;
 let _filterPinned = false; 
 let _isUpgrading = false; 
 
-// 🌟 新增：全域搜尋狀態變數，用來記憶你當前打在搜尋框裡面的字
 let _searchQuery = ''; 
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwviQPFD4mpuK1w-nOjJe2Oeo_WAL2le_xLevZLY1Z2hJK8UWpJUctjihTLKLNU21Wh/exec";
@@ -496,11 +495,10 @@ document.addEventListener('change', (event) => {
     if (event.target && event.target.id === 'posFilterSelect') { renderVocabTab(); }
 });
 
-// 🌟 新增：監聽搜尋框的「即時輸入」事件 (Live Filter)
 document.addEventListener('input', (event) => {
     if (event.target && event.target.id === 'vocabSearchInput') {
-        _searchQuery = event.target.value.trim(); // 更新全域搜尋字串
-        renderVocabTab(); // 重新觸發畫面渲染
+        _searchQuery = event.target.value.trim(); 
+        renderVocabTab(); 
     }
 });
 
@@ -517,14 +515,44 @@ document.addEventListener('click', async (event) => {
         if (btn.disabled) return;
         let words = await DB.getSavedWords();
         
-        let targets = words.filter(w => typeof w.synonyms === 'undefined' && typeof w.syn === 'undefined');
+        // 找出可能需要升級的生肉單字
+        let targets = words.filter(w => {
+            const noSyn = !w.synonyms && !w.syn;
+            const noEx = !w.ex || String(w.ex).trim() === '';
+            const noIpa = !w.ipa || w.ipa === '(查無音標)' || w.ipa === '';
+            return noSyn || noEx || noIpa;
+        });
         
         if (targets.length === 0) {
             alert('🎉 太棒了！您的字典格式非常完美，不需再清洗！'); return;
         }
 
-        const confirmMsg = `發現 ${targets.length} 個尚未升級微標籤的舊單字。\n\n⚠️ 系統已啟動「極速清洗模式」：\n1. 過程中隨時可以再點擊按鈕「暫停」。\n2. 為了避免 1400 多字導致 Google 斷線，系統【不會自動備份】。\n\n確定要開始嗎？`;
-        if (!confirm(confirmMsg)) return;
+        // 🌟 關鍵 1：依據建立時間「由新到舊」排序
+        targets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        // 🌟 關鍵 2：讓使用者輸入要升級的數量，精準鎖定最新加入的單字
+        let processCount = targets.length;
+        if (targets.length > 20) {
+            const userInput = prompt(
+                `系統偵測到 ${targets.length} 個單字需要 AI 升級。\n\n` + 
+                `💡 為節省 API 額度，系統已將單字依「最新匯入時間」排序。\n` +
+                `請輸入本次要升級的「最新單字數量」：\n(例如您剛新增了 40 個字，請輸入 40)`, 
+                "30"
+            );
+            
+            if (userInput === null) return; 
+            processCount = parseInt(userInput, 10);
+            if (isNaN(processCount) || processCount <= 0) {
+                alert("輸入無效，已取消升級。");
+                return;
+            }
+            if (processCount > targets.length) processCount = targets.length;
+        } else {
+            if (!confirm(`發現 ${targets.length} 個最新加入的單字需要 AI 升級。\n確定要開始嗎？`)) return;
+        }
+
+        // 裁切陣列，只處理使用者指定的數量
+        targets = targets.slice(0, processCount);
 
         _isUpgrading = true;
         btn.disabled = false; 
@@ -532,12 +560,12 @@ document.addEventListener('click', async (event) => {
 
         for (let i = 0; i < targets.length; i++) {
             if (!_isUpgrading) {
-                alert(`🛑 已手動暫停清洗！\n本次成功升級了 ${successCount} 個單字。\n下次按升級會直接從進度接續。\n\n⚠️ 請務必前往「紀錄」頁面點擊【立即備份】！`);
+                alert(`🛑 已手動暫停清洗！\n本次成功升級了 ${successCount} 個單字。\n\n⚠️ 請務必前往「紀錄」頁面點擊【立即備份】！`);
                 break;
             }
 
             const w = targets[i];
-            btn.innerHTML = `⏳ 清洗中 (${i + 1}/${targets.length}) - 點擊可暫停`;
+            btn.innerHTML = `⏳ 升級中 (${i + 1}/${targets.length}) - 點擊可暫停`;
             
             try {
                 const targetWord = w.en || w.word;
@@ -551,12 +579,10 @@ document.addEventListener('click', async (event) => {
                 w.ex = info.ex || w.ex || w.exEn || '';
                 w.ex_zh = info.ex_zh || w.ex_zh || w.exZh || '';
                 w.deriv = info.derivatives || w.deriv || w.derivatives || ''; 
-                
                 w.synonyms = info.synonyms || '';
                 w.antonyms = info.antonyms || '';
                 
                 await DB.addSavedWord(w);
-                
                 successCount++;
                 await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -579,15 +605,16 @@ document.addEventListener('click', async (event) => {
         
         if (_isUpgrading) {
             _isUpgrading = false;
-            alert(`✅ 清洗任務徹底結束！\n共升級了 ${successCount} 個單字。\n\n⚠️ 請立刻前往「紀錄」頁面點擊【立即備份】將進度存上雲端！`);
+            alert(`✅ 升級任務結束！\n共升級了 ${successCount} 個新單字。\n\n⚠️ 請立刻前往「紀錄」頁面點擊【立即備份】將進度存上雲端！`);
         }
         
-        btn.innerHTML = `🚀 升級舊單字`;
+        btn.innerHTML = `🚀 升級最新單字`;
         btn.disabled = false;
         renderVocabTab();
     }
 });
 
+// 🌟 修正點 1：移除了 lv5Words 清除熟練單字按鈕的邏輯
 export async function refreshSrsBanner(allWords) {
     const entryEl = document.getElementById('srsReviewEntry');
     if (!entryEl) return;
@@ -609,20 +636,6 @@ export async function refreshSrsBanner(allWords) {
         card.onclick = () => { if (_startSrsReview) _startSrsReview(dueWords, allWords); };
         entryEl.appendChild(card);
     }
-
-    const lv5Words = allWords.filter(w => w.level >= SRS_INTERVALS.length - 1);
-    if (lv5Words.length > 0) {
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'review-entry-card';
-        clearBtn.style.background = 'var(--success)';
-        clearBtn.innerHTML = `<h3>${t('vocabClearMasteredTitle')}</h3><p>${t('vocabClearMasteredDesc', { count: lv5Words.length })}</p>`;
-        clearBtn.onclick = async () => {
-            if (!confirm(t('vocabClearMasteredConfirm', { count: lv5Words.length }))) return;
-            for (const w of lv5Words) { await removeWordFromNotebook(w.id); }
-            renderVocabTab();
-        };
-        entryEl.appendChild(clearBtn);
-    }
 }
 
 /* ====== Vocabulary Tab ====== */
@@ -641,20 +654,25 @@ export async function renderVocabTab() {
         const btnLv0 = document.createElement('button');
         btnLv0.id = 'btnFilterLv0';
         btnLv0.innerHTML = '⭐ 待加強';
-        btnLv0.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        // 將 margin-right 歸零，交由外層 gap 控制
+        btnLv0.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnLv0.onclick = () => { _filterLv0 = !_filterLv0; renderVocabTab(); };
         
         const btnPinned = document.createElement('button');
         btnPinned.id = 'btnFilterPinned';
         btnPinned.innerHTML = '📌 挑選';
-        btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 8px; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
+        // 將 margin-right 歸零，交由外層 gap 控制
+        btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnPinned.onclick = () => { _filterPinned = !_filterPinned; renderVocabTab(); };
         
-        filterSelect.parentNode.insertBefore(btnLv0, filterSelect);
-        filterSelect.parentNode.insertBefore(btnPinned, filterSelect);
-        filterSelect.parentNode.style.display = 'flex';
-        filterSelect.parentNode.style.alignItems = 'center';
-        filterSelect.parentNode.style.marginBottom = '20px';
+        // 🌟 修正點 2：新增 filterGroup 容器，解決與搜尋列擠壓重疊的問題
+        const filterGroup = document.createElement('div');
+        filterGroup.style.cssText = 'display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end;';
+        
+        filterSelect.parentNode.insertBefore(filterGroup, filterSelect);
+        filterGroup.appendChild(btnLv0);
+        filterGroup.appendChild(btnPinned);
+        filterGroup.appendChild(filterSelect);
     }
 
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
@@ -684,7 +702,6 @@ export async function renderVocabTab() {
         });
     }
 
-    // 🌟 新增：即時搜尋過濾邏輯 (比對英文或中文)
     if (_searchQuery) {
         const q = _searchQuery.toLowerCase();
         displayWords = displayWords.filter(w => {
@@ -698,7 +715,6 @@ export async function renderVocabTab() {
 
     if (displayWords.length === 0) {
         let emptyMsg = t('vocabEmpty');
-        // 如果是因為搜尋找不到，給予不同的提示
         if (_searchQuery) emptyMsg = '找不到包含此關鍵字的單字喔！';
         else if (filterValue !== 'all' || _filterLv0 || _filterPinned) emptyMsg = '沒有找到符合條件的單字';
         
