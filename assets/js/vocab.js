@@ -650,31 +650,28 @@ export async function renderVocabTab() {
     const filterSelect = document.getElementById('posFilterSelect');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
-    if (filterSelect && !document.getElementById('btnFilterLv0')) {
+   if (filterSelect && !document.getElementById('btnFilterLv0')) {
         const btnLv0 = document.createElement('button');
         btnLv0.id = 'btnFilterLv0';
         btnLv0.innerHTML = '⭐ 待加強';
-        // 將 margin-right 歸零，交由外層 gap 控制
         btnLv0.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnLv0.onclick = () => { _filterLv0 = !_filterLv0; renderVocabTab(); };
         
         const btnPinned = document.createElement('button');
         btnPinned.id = 'btnFilterPinned';
         btnPinned.innerHTML = '📌 挑選';
-        // 將 margin-right 歸零，交由外層 gap 控制
         btnPinned.style.cssText = 'background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #4b5563; cursor: pointer; margin-right: 0; font-weight: 500; transition: all 0.2s; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;';
         btnPinned.onclick = () => { _filterPinned = !_filterPinned; renderVocabTab(); };
         
-        // 🌟 修正點 2：新增 filterGroup 容器，解決與搜尋列擠壓重疊的問題
+        // 🌟 核心修正：加入 width: 100% 與 margin-top: 8px，強制桌機版斷行並製造上下呼吸空間
         const filterGroup = document.createElement('div');
-        filterGroup.style.cssText = 'display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end;';
+        filterGroup.style.cssText = 'display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; width: 100%; margin-top: 8px;';
         
         filterSelect.parentNode.insertBefore(filterGroup, filterSelect);
         filterGroup.appendChild(btnLv0);
         filterGroup.appendChild(btnPinned);
         filterGroup.appendChild(filterSelect);
     }
-
     const btnFilterLv0 = document.getElementById('btnFilterLv0');
     if (btnFilterLv0) {
         if (_filterLv0) { btnFilterLv0.style.background = '#fef3c7'; btnFilterLv0.style.borderColor = '#fbbf24'; btnFilterLv0.style.color = '#b45309'; } 
